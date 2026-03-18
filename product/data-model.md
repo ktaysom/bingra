@@ -7,6 +7,8 @@
 - mode (quick_play | streak)
 - status (lobby | live | finished)
 - created_at
+- winner_player_id (nullable)
+- completed_at (nullable timestamp)
 
 ## game_events
 - id

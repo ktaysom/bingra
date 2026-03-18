@@ -79,8 +79,28 @@ Choose the option that is:
 
 ---
 
+# Event resources
+Before making any changes, treat the following files as canonical sources of truth for Binga event behavior:
+
+- `lib/bingra/event-catalog.ts`
+- `lib/bingra/event-logic.ts`
+
+Requirements:
+1. Do not hardcode event names, point values, rarity, or team-scoping anywhere else in the app.
+2. Any host scoring UI must be generated from `event-catalog.ts` / `event-logic.ts`.
+3. Any card generation logic must use `event-catalog.ts` / `event-logic.ts`.
+4. Any event validation must use helpers from `event-logic.ts`.
+5. If an existing page or component currently hardcodes event buttons or labels, refactor it to consume these shared files instead of duplicating logic.
+6. Prefer importing and reusing helpers over creating new parallel event logic.
+
+First, inspect the current codebase and identify every place where event names, scoring controls, or card-generation assumptions are currently hardcoded. Then refactor those places to use the shared Bingra event files.
+
 ## Goal
 
 Every page should feel like it belongs to the same product.
 
 No page should look like it was designed differently than the others.
+
+Do not run git checkout, git restore, or any git command.
+Do not rewrite files unless I explicitly ask.
+Only diagnose and propose minimal patches.

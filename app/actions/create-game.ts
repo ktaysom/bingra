@@ -55,6 +55,7 @@ export async function createGameAction(
   }
 
   const supabase = createSupabaseAdminClient();
+  console.log("[createGameAction] SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
   const rpcPayload = {
     p_title: parsed.data.title,
@@ -69,16 +70,17 @@ export async function createGameAction(
     p_auth_user_id: null,
   };
 
-  console.log("rpc_create_game payload", rpcPayload);
+  console.log("[createGameAction] rpc_create_game payload", rpcPayload);
 
   let hostSlug: string | null = null;
 
   try {
     const { data, error } = await supabase.rpc("rpc_create_game", rpcPayload);
 
-    console.log("rpc_create_game response", { data, error });
+    console.log("[createGameAction] rpc_create_game response", { data, error });
 
     if (error) {
+      console.error("[createGameAction] insert error", error);
       throw error;
     }
 
@@ -92,11 +94,20 @@ export async function createGameAction(
     };
 
     hostSlug = resultRow.game_slug;
+    console.log("[createGameAction] resolved hostSlug", hostSlug);
+
+    const { data: verifyRow, error: verifyError } = await supabase
+      .from("games")
+      .select("id, slug, title, created_at")
+      .eq("slug", hostSlug)
+      .maybeSingle();
+
+    console.log("[createGameAction] immediate verify query", { verifyRow, verifyError });
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;
     }
-    console.error("createGameAction error", error);
+    console.error("[createGameAction] error", error);
     return { error: formatError(error) };
   }
 
@@ -104,5 +115,6 @@ export async function createGameAction(
     return { error: "Failed to resolve game host URL" };
   }
 
+  console.log("[createGameAction] redirecting to", `/g/${hostSlug}/host`);
   redirect(`/g/${hostSlug}/host`);
 }
