@@ -11,6 +11,7 @@
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.2",
     "@tailwindcss/postcss": "^4.2.1",
+    "brew": "^0.0.8",
     "next": "latest",
     "postcss": "^8.5.8",
     "react": "latest",

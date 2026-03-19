@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 
 import {
   chooseRandomEvents,
@@ -10,32 +10,46 @@ import {
 } from "../../../../lib/binga/event-logic";
 import type { GameEventType } from "../../../../lib/binga/event-catalog";
 import { mapPlayModeToGameMode, type PlayMode } from "../../../../lib/binga/types";
+import { useActionState } from "react";
+import { useRouter } from "next/navigation";
+import { generateCardAction } from "../../../actions/generate-card";
+type CardBuilderEvent = GameEventType & { marked?: boolean };
 
 type CardBuilderPanelProps = {
   mode: PlayMode;
+  playerId: string | null;
   initialRiskLevel: RiskLevel;
-  initialCardEvents: GameEventType[];
+  initialCardEvents: CardBuilderEvent[];
+  lockedCardEvents: CardBuilderEvent[];
 };
 
 const CARD_EVENT_COUNT = 9;
 
-function generateCardEvents(mode: PlayMode, riskLevel: RiskLevel): GameEventType[] {
+function generateCardEvents(mode: PlayMode, riskLevel: RiskLevel): CardBuilderEvent[] {
   return chooseRandomEvents(CARD_EVENT_COUNT, {
     mode: mapPlayModeToGameMode(mode),
     riskLevel,
     uniqueByEventId: true,
     includeGameScopedEvents: true,
-  });
+  }).map((event) => ({ ...event }));
 }
 
 export function CardBuilderPanel({
   mode,
+  playerId,
   initialRiskLevel,
   initialCardEvents,
+  lockedCardEvents,
 }: CardBuilderPanelProps) {
   const [riskLevel, setRiskLevel] = useState<RiskLevel>(initialRiskLevel);
-  const [cardEvents, setCardEvents] = useState<GameEventType[]>(initialCardEvents);
+  const [cardEvents, setCardEvents] = useState<CardBuilderEvent[]>(initialCardEvents);
   const [isLocked, setIsLocked] = useState(false);
+  const router = useRouter();
+
+  const [generateState, generateAction] = useActionState(generateCardAction, {});
+  const hasPersistedLockedCard =
+    lockedCardEvents.length > 0 && lockedCardEvents !== initialCardEvents;
+  const shouldRenderLocked = hasPersistedLockedCard || isLocked;
 
   const cardSummary = useMemo(() => summarizeCardPoints(cardEvents), [cardEvents]);
   const cardRiskLabel = useMemo(() => estimateCardRiskLabel(cardEvents), [cardEvents]);
@@ -53,11 +67,37 @@ export function CardBuilderPanel({
   };
 
   const handleAcceptCard = () => {
-    setIsLocked(true);
+    if (!playerId) return;
+
+    const selectedEventKeys = cardEvents.map((event) => event.id);
+    const acceptedEvents = cardEvents.map((event, index) => ({
+      eventKey: event.id,
+      eventLabel: event.label,
+      pointValue: event.basePoints,
+      orderIndex: index,
+    }));
+
+    startTransition(() => {
+      generateAction({
+        playerId,
+        targetCount: selectedEventKeys.length,
+        selectedEventKeys,
+        acceptedEvents,
+        selectionMode: "custom",
+      });
+    });
   };
+
+  useEffect(() => {
+    if (generateState.success) {
+      setIsLocked(true);
+      router.refresh();
+    }
+  }, [generateState.success, router]);
 
   const handleReorder = (index: number, direction: "up" | "down") => {
     if (mode !== "streak") return;
+
     setCardEvents((prev) => {
       const next = [...prev];
       const newIndex = direction === "up" ? index - 1 : index + 1;
@@ -69,7 +109,9 @@ export function CardBuilderPanel({
     });
   };
 
-  if (isLocked) {
+  if (shouldRenderLocked) {
+    const lockedCard = hasPersistedLockedCard ? lockedCardEvents : cardEvents;
+
     return (
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="space-y-3">
@@ -81,10 +123,20 @@ export function CardBuilderPanel({
         <div className="mt-6 space-y-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
           <p className="text-sm font-medium text-slate-600">Compact preview</p>
           <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-            {cardEvents.map((event) => (
-              <div key={event.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+            {lockedCard.map((event) => (
+              <div
+                key={event.id}
+                className={`rounded-lg border px-3 py-2 ${
+                  event.marked ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white"
+                }`}
+              >
                 <p className="font-medium">{event.label}</p>
                 <p className="text-xs text-slate-500">{event.basePoints} pts</p>
+                {event.marked && (
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                    Marked
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -128,9 +180,19 @@ export function CardBuilderPanel({
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Card preview</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             {cardEvents.map((event) => (
-              <div key={event.id} className="rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm">
+              <div
+                key={event.id}
+                className={`rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm transition ${
+                  event.marked ? "border-blue-400 bg-blue-50" : ""
+                }`}
+              >
                 <p className="text-sm font-semibold text-slate-900">{event.label}</p>
                 <p className="text-xs text-slate-500">{event.basePoints} pts</p>
+                {event.marked && (
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                    Marked
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -173,7 +235,7 @@ export function CardBuilderPanel({
           </div>
         )}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={handleGenerateAgain}
@@ -185,10 +247,14 @@ export function CardBuilderPanel({
             type="button"
             onClick={handleAcceptCard}
             className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            disabled={!playerId}
           >
             Accept card
           </button>
         </div>
+      {generateState.error && (
+        <p className="mt-3 text-xs text-red-600">{generateState.error}</p>
+      )}
       </div>
     </section>
   );

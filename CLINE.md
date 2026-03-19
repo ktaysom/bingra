@@ -104,3 +104,4 @@ No page should look like it was designed differently than the others.
 Do not run git checkout, git restore, or any git command.
 Do not rewrite files unless I explicitly ask.
 Only diagnose and propose minimal patches.
+Do not inspect git history unless I explicitly ask.

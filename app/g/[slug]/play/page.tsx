@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { CardBuilderPanel } from "./CardBuilderPanel";
 import { HostScoringPanel } from "./HostScoringPanel";
@@ -39,6 +40,17 @@ type RecentScoredEvent = {
   created_at: string | null;
 };
 
+type CardRow = {
+  id: string;
+  player_id: string;
+  card_cells: {
+    order_index: number;
+    event_key: string | null;
+    event_label: string | null;
+    point_value: number | null;
+  }[];
+};
+
 export const metadata: Metadata = {
   title: "Play Game",
 };
@@ -46,6 +58,8 @@ export const metadata: Metadata = {
 export default async function PlayPage(props: PlayPageProps) {
   const { slug } = await props.params;
   const supabase = createSupabaseAdminClient();
+  const cookieStore = await cookies();
+  const currentPlayerId = cookieStore.get("binga-player-id")?.value ?? null;
 
   const { data: game, error: gameError } = await supabase
     .from("games")
@@ -67,6 +81,20 @@ export default async function PlayPage(props: PlayPageProps) {
 
     players = data;
     playersError = error?.message ?? null;
+  }
+
+  let cardRow: CardRow | null = null;
+
+  if (game && currentPlayerId) {
+    const { data, error } = await supabase
+      .from("cards")
+      .select("id, player_id, card_cells(order_index, event_key, event_label, point_value)")
+      .eq("game_id", game.id)
+      .eq("player_id", currentPlayerId)
+      .limit(1)
+      .maybeSingle<CardRow>();
+
+    cardRow = data;
   }
 
   if (gameError || !game) {
@@ -133,6 +161,41 @@ export default async function PlayPage(props: PlayPageProps) {
     recentEventsError = String(error);
   }
 
+  const scoredEventKeys = new Set(
+    (recentScoredEvents ?? [])
+      .map((event) => event.event_key ?? "")
+      .filter((eventKey): eventKey is string => Boolean(eventKey)),
+  );
+
+  const catalogEvents = (cardRow?.card_cells ?? []).map((cell, index) => {
+    const eventKey = typeof cell.event_key === "string" ? cell.event_key : `cell-${index}`;
+    const catalogEvent = eventKey ? getEventById(eventKey) : undefined;
+    const fallbackBasePoints =
+      typeof cell.point_value === "number" ? cell.point_value : 0;
+    const fallbackLabel = cell.event_label ?? eventKey;
+    const event: typeof catalogEvent extends undefined ? never : typeof catalogEvent =
+      catalogEvent ?? {
+        id: eventKey,
+        label: fallbackLabel,
+        shortLabel: fallbackLabel,
+        description: "",
+        category: "scoring",
+        rarity: 3,
+        basePoints: fallbackBasePoints,
+        enabled: true,
+        allowedModes: [mapPlayModeToGameMode(game.mode)],
+        teamScope: "none",
+        teamRole: "none",
+      };
+
+    return {
+      ...event,
+      marked: eventKey ? scoredEventKeys.has(eventKey) : false,
+    };
+  });
+
+  const lockedCardEvents = catalogEvents.length > 0 ? catalogEvents : initialCardEvents;
+
   return (
     <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-10">
       <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -176,8 +239,10 @@ export default async function PlayPage(props: PlayPageProps) {
       <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr_1fr]">
         <CardBuilderPanel
           mode={game.mode}
+          playerId={currentPlayerId}
           initialRiskLevel={initialRiskLevel}
           initialCardEvents={initialCardEvents}
+          lockedCardEvents={lockedCardEvents}
         />
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

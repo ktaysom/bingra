@@ -15,11 +15,22 @@ ALTER TABLE public.games
 -- Track the player who won the game (nullable until the winner is recorded).
 ALTER TABLE public.games
   ADD COLUMN IF NOT EXISTS winner_player_id uuid;
-ALTER TABLE public.games
-  ADD CONSTRAINT IF NOT EXISTS games_winner_player_id_fkey
-  FOREIGN KEY (winner_player_id)
-  REFERENCES public.players (id)
-  ON DELETE SET NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'games_winner_player_id_fkey'
+  ) THEN
+    ALTER TABLE public.games
+      ADD CONSTRAINT games_winner_player_id_fkey
+      FOREIGN KEY (winner_player_id)
+      REFERENCES public.players (id)
+      ON DELETE SET NULL;
+  END IF;
+END
+$$;
 
 -- Record when a game actually completes.
 ALTER TABLE public.games

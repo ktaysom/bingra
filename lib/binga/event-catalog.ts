@@ -204,7 +204,7 @@ export const EVENT_CATALOG: GameEventType[] = [
   },
   {
     id: "MADE_FREE_THROW",
-    label: "Made Free Throw",
+    label: "Standard FT",
     shortLabel: "FT Made",
     description: "A standard made free throw.",
     category: "free-throw",
@@ -224,7 +224,7 @@ export const EVENT_CATALOG: GameEventType[] = [
   },
   {
     id: "TECHNICAL_FREE_THROW_MADE",
-    label: "Technical Free Throw Made",
+    label: "Technical FT",
     shortLabel: "Tech FT",
     description: "A made technical free throw.",
     category: "free-throw",
@@ -359,7 +359,7 @@ export const EVENT_CATALOG: GameEventType[] = [
   },
   {
     id: "BONUS_FREE_THROW_MADE",
-    label: "Bonus Free Throw Made",
+    label: "Bonus FT",
     shortLabel: "Bonus FT",
     description: "A made free throw during a one-and-one bonus situation.",
     category: "free-throw",
@@ -379,7 +379,7 @@ export const EVENT_CATALOG: GameEventType[] = [
   },
   {
     id: "DOUBLE_BONUS_FREE_THROW_MADE",
-    label: "Double Bonus Free Throw Made",
+    label: "Double Bonus FT",
     shortLabel: "DBL Bonus FT",
     description: "A made free throw during a double-bonus situation.",
     category: "free-throw",

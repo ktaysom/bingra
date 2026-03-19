@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { randomUUID } from "crypto";
@@ -84,6 +85,18 @@ export async function joinGameAction(
     if (!playerData) {
       throw new Error("Failed to create player record");
     }
+
+    const cookieOptions = {
+      name: "binga-player-id",
+      value: playerData.id,
+      path: `/g/${parsed.data.slug}`,
+      maxAge: 60 * 60 * 24 * 30,
+      httpOnly: true,
+      sameSite: "lax" as const,
+    };
+
+    const cookieStore = await cookies();
+    cookieStore.set(cookieOptions);
 
     redirect(`/g/${parsed.data.slug}/play`);
   } catch (error) {

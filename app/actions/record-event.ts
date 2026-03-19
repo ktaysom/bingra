@@ -131,20 +131,39 @@ export async function recordEventAction(
 
   const { data: cards, error: cardsError } = await supabase
     .from("cards")
-    .select("id, player_id, card_cells(order_index, event_key, marked_at)")
+    .select("id, player_id, card_cells(order_index, event_key)")
     .eq("game_id", game.id);
 
   if (cardsError) {
     return { error: formatError(cardsError), completedAt: new Date().toISOString() };
   }
 
+  const { data: scoredEvents, error: scoredEventsError } = await supabase
+    .from("scored_events")
+    .select("event_key")
+    .eq("game_id", game.id);
+
+  if (scoredEventsError) {
+    return { error: formatError(scoredEventsError), completedAt: new Date().toISOString() };
+  }
+
+  const satisfiedEventKeys = new Set(
+    (scoredEvents ?? [])
+      .map((event) => (typeof event.event_key === "string" ? event.event_key : null))
+      .filter((eventKey): eventKey is string => Boolean(eventKey)),
+  );
+
   const evaluated = (cards ?? [])
     .map((card) => {
-      const cellRows = (card.card_cells ?? []).map((cell: Record<string, unknown>, idx: number) => ({
-        eventKey: typeof cell.event_key === "string" ? cell.event_key : `cell-${idx}`,
-        orderIndex: typeof cell.order_index === "number" ? cell.order_index : idx,
-        marked: cell.marked_at != null,
-      } satisfies CardCell));
+      const cellRows = (card.card_cells ?? []).map((cell: Record<string, unknown>, idx: number) => {
+        const eventKey = typeof cell.event_key === "string" ? cell.event_key : `cell-${idx}`;
+
+        return {
+          eventKey,
+          orderIndex: typeof cell.order_index === "number" ? cell.order_index : idx,
+          marked: satisfiedEventKeys.has(eventKey),
+        } satisfies CardCell;
+      });
 
       return {
         playerId: card.player_id,
