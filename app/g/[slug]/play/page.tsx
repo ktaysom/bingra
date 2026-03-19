@@ -3,8 +3,16 @@ import { cookies } from "next/headers";
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { CardBuilderPanel } from "./CardBuilderPanel";
 import { HostScoringPanel } from "./HostScoringPanel";
+import { PlayRealtimeBridge } from "./PlayRealtimeBridge";
 import { getPlayModeLabel, mapPlayModeToGameMode } from "../../../../lib/binga/types";
 import { chooseRandomEvents, getEventById, type RiskLevel } from "../../../../lib/binga/event-logic";
+import {
+  calculateCardProgress,
+  calculateCompletedCellFlags,
+  type CompletionMode,
+  type RecordedEvent,
+  type CardCell as ProgressCardCell,
+} from "../../../../lib/binga/card-progress";
 
 type PlayPageProps = {
   params: Promise<{
@@ -18,23 +26,37 @@ type GameRecord = {
   title: string | null;
   status: "lobby" | "live" | "finished";
   mode: "quick_play" | "streak";
+  completion_mode: CompletionMode;
+  end_condition: "FIRST_COMPLETION" | "HOST_DECLARED";
 };
 
 type PlayerRecord = {
   id: string;
   display_name: string;
   role: "host" | "scorer" | "player";
+  created_at: string | null;
 };
 
 type LeaderboardEntry = {
   id: string;
   name: string;
   points: number;
+  is_complete: boolean;
+  is_one_away: boolean;
+  completed_cells_count: number;
+  join_order: number;
+};
+
+type LiveCompletionRow = {
+  id: string;
+  player_id: string;
+  completed_at_event_id: string;
+  created_at: string;
 };
 
 type RecentScoredEvent = {
   id: string;
-  event_key: string;
+  event_key: string | null;
   event_label: string | null;
   team_key: string | null;
   created_at: string | null;
@@ -47,6 +69,7 @@ type CardRow = {
     order_index: number;
     event_key: string | null;
     event_label: string | null;
+    team_key: string | null;
     point_value: number | null;
   }[];
 };
@@ -63,7 +86,7 @@ export default async function PlayPage(props: PlayPageProps) {
 
   const { data: game, error: gameError } = await supabase
     .from("games")
-    .select("id, slug, title, status, mode")
+    .select("id, slug, title, status, mode, completion_mode, end_condition")
     .eq("slug", slug)
     .maybeSingle<GameRecord>();
 
@@ -73,28 +96,28 @@ export default async function PlayPage(props: PlayPageProps) {
   if (game) {
     const { data, error } = await supabase
       .from("players")
-      .select("id, display_name, role")
+      .select("id, display_name, role, created_at")
       .eq("game_id", game.id)
-      .order("role", { ascending: true })
-      .order("display_name", { ascending: true })
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .returns<PlayerRecord[]>();
 
     players = data;
     playersError = error?.message ?? null;
   }
 
-  let cardRow: CardRow | null = null;
+  let cardsForGame: CardRow[] = [];
 
-  if (game && currentPlayerId) {
+  if (game) {
     const { data, error } = await supabase
       .from("cards")
-      .select("id, player_id, card_cells(order_index, event_key, event_label, point_value)")
+      .select("id, player_id, card_cells(order_index, event_key, event_label, team_key, point_value)")
       .eq("game_id", game.id)
-      .eq("player_id", currentPlayerId)
-      .limit(1)
-      .maybeSingle<CardRow>();
+      .returns<CardRow[]>();
 
-    cardRow = data;
+    if (!error && data) {
+      cardsForGame = data;
+    }
   }
 
   if (gameError || !game) {
@@ -128,23 +151,7 @@ export default async function PlayPage(props: PlayPageProps) {
     { id: "3", actor: "System", action: "synced game clock", timestamp: "12m ago" },
   ];
 
-  const mockLeaderboard: LeaderboardEntry[] = [
-    { id: "mock-1", name: "Jordan Alvarez", points: 52 },
-    { id: "mock-2", name: "Maya Coleman", points: 47 },
-    { id: "mock-3", name: "Riley Chen", points: 38 },
-    { id: "mock-4", name: "Dev Patel", points: 30 },
-  ];
-
-  const leaderboardEntries: LeaderboardEntry[] =
-    playersError || !players || players.length === 0
-      ? mockLeaderboard
-      : players.map((player, index) => ({
-          id: player.id,
-          name: player.display_name,
-          points: Math.max(12, 48 - index * 4),
-        }));
-
-  let recentScoredEvents: RecentScoredEvent[] | null = null;
+  let allScoredEvents: RecentScoredEvent[] = [];
   let recentEventsError: string | null = null;
 
   try {
@@ -152,22 +159,93 @@ export default async function PlayPage(props: PlayPageProps) {
       .from("scored_events")
       .select("id, event_key, event_label, team_key, created_at")
       .eq("game_id", game.id)
-      .order("created_at", { ascending: false })
-      .limit(10);
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
 
-    recentScoredEvents = (data as RecentScoredEvent[] | null) ?? null;
+    allScoredEvents = (data as RecentScoredEvent[] | null) ?? [];
     recentEventsError = error?.message ?? null;
   } catch (error) {
     recentEventsError = String(error);
   }
 
-  const scoredEventKeys = new Set(
-    (recentScoredEvents ?? [])
-      .map((event) => event.event_key ?? "")
-      .filter((eventKey): eventKey is string => Boolean(eventKey)),
+  let liveCompletions: LiveCompletionRow[] = [];
+  let liveCompletionsError: string | null = null;
+
+  try {
+    const { data, error } = await supabase
+      .from("game_completions")
+      .select("id, player_id, completed_at_event_id, created_at")
+      .eq("game_id", game.id)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+
+    liveCompletions = (data as LiveCompletionRow[] | null) ?? [];
+    liveCompletionsError = error?.message ?? null;
+  } catch (error) {
+    liveCompletionsError = String(error);
+  }
+
+  const completionMode = game.completion_mode;
+  const recordedEvents: RecordedEvent[] = allScoredEvents.map((event) => ({
+    event_key: event.event_key,
+    team_key: event.team_key,
+  }));
+  const cardsByPlayerId = new Map(cardsForGame.map((card) => [card.player_id, card]));
+  const playersById = new Map((players ?? []).map((player) => [player.id, player]));
+
+  const leaderboardEntries: LeaderboardEntry[] = (players ?? [])
+    .map((player, index) => {
+      const card = cardsByPlayerId.get(player.id);
+      const progressCells: ProgressCardCell[] = (card?.card_cells ?? []).map((cell) => ({
+        event_key: cell.event_key,
+        team_key: cell.team_key,
+        order_index: cell.order_index,
+        point_value: cell.point_value,
+      }));
+      const progress = calculateCardProgress(recordedEvents, progressCells, completionMode);
+
+      return {
+        id: player.id,
+        name: player.display_name,
+        points: progress.score,
+        is_complete: progress.is_complete,
+        is_one_away: progress.is_one_away,
+        completed_cells_count: progress.completed_cells_count,
+        join_order: index,
+      };
+    })
+    .sort((a, b) => {
+      if (a.is_complete !== b.is_complete) {
+        return a.is_complete ? -1 : 1;
+      }
+
+      if (a.points !== b.points) {
+        return b.points - a.points;
+      }
+
+      return a.join_order - b.join_order;
+    });
+
+  const currentPlayerCard = currentPlayerId
+    ? cardsByPlayerId.get(currentPlayerId) ?? null
+    : null;
+
+  const currentPlayerProgressCells: ProgressCardCell[] = (currentPlayerCard?.card_cells ?? []).map(
+    (cell) => ({
+      event_key: cell.event_key,
+      team_key: cell.team_key,
+      order_index: cell.order_index,
+      point_value: cell.point_value,
+    }),
   );
 
-  const catalogEvents = (cardRow?.card_cells ?? []).map((cell, index) => {
+  const currentPlayerCompletedFlags = calculateCompletedCellFlags(
+    recordedEvents,
+    currentPlayerProgressCells,
+    completionMode,
+  );
+
+  const catalogEvents = (currentPlayerCard?.card_cells ?? []).map((cell, index) => {
     const eventKey = typeof cell.event_key === "string" ? cell.event_key : `cell-${index}`;
     const catalogEvent = eventKey ? getEventById(eventKey) : undefined;
     const fallbackBasePoints =
@@ -190,14 +268,34 @@ export default async function PlayPage(props: PlayPageProps) {
 
     return {
       ...event,
-      marked: eventKey ? scoredEventKeys.has(eventKey) : false,
+      marked: currentPlayerCompletedFlags[index] ?? false,
     };
   });
 
   const lockedCardEvents = catalogEvents.length > 0 ? catalogEvents : initialCardEvents;
+  const recentScoredEvents = allScoredEvents.slice(-10).reverse();
+
+  const scoredEventOrder = new Map(allScoredEvents.map((event, index) => [event.id, index]));
+
+  const firstCompletionEventId = liveCompletions.reduce<string | null>((winner, completion) => {
+    if (!winner) {
+      return completion.completed_at_event_id;
+    }
+
+    const currentOrder = scoredEventOrder.get(completion.completed_at_event_id) ?? Number.MAX_SAFE_INTEGER;
+    const winningOrder = scoredEventOrder.get(winner) ?? Number.MAX_SAFE_INTEGER;
+
+    return currentOrder < winningOrder ? completion.completed_at_event_id : winner;
+  }, null);
+
+  const tiedFirstCompleters = firstCompletionEventId
+    ? liveCompletions.filter((completion) => completion.completed_at_event_id === firstCompletionEventId)
+    : [];
 
   return (
     <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-10">
+      <PlayRealtimeBridge gameId={game.id} />
+
       <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -258,6 +356,38 @@ export default async function PlayPage(props: PlayPageProps) {
             </span>
           </div>
           <div className="mt-4 space-y-3">
+            {tiedFirstCompleters.length > 0 && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  Live first completers
+                </p>
+                <p className="mt-1 text-sm text-emerald-900">
+                  {tiedFirstCompleters
+                    .map((entry) => playersById.get(entry.player_id)?.display_name ?? "Unknown player")
+                    .join(", ")}
+                </p>
+              </div>
+            )}
+
+            {!tiedFirstCompleters.length && liveCompletions.length > 0 && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  Live completions
+                </p>
+                <p className="mt-1 text-sm text-emerald-900">
+                  {liveCompletions
+                    .map((entry) => playersById.get(entry.player_id)?.display_name ?? "Unknown player")
+                    .join(", ")}
+                </p>
+              </div>
+            )}
+
+            {liveCompletionsError && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                Unable to load live completion data yet.
+              </div>
+            )}
+
             {activityFeed.map((activity) => (
               <div
                 key={activity.id}
@@ -295,7 +425,13 @@ export default async function PlayPage(props: PlayPageProps) {
                   </p>
                   <p className="text-xs text-slate-500">{entry.points} pts</p>
                 </div>
-                <span className="text-xs font-medium text-slate-500">Locked in</span>
+                <span className="text-xs font-medium text-slate-500">
+                  {entry.is_complete
+                    ? "Complete"
+                    : entry.is_one_away
+                      ? "One away"
+                      : `${entry.completed_cells_count} done`}
+                </span>
               </div>
             ))}
           </div>

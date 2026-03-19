@@ -91,6 +91,64 @@ export default function CreatePage() {
                 </select>
               </div>
 
+              <section className="rounded-[1.75rem] border border-[#ddd2c7] bg-white/95 p-5">
+                <p className="text-sm font-semibold uppercase tracking-[0.12em] text-[#8a7d71]">
+                  Game Mode
+                </p>
+
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[#3a332e]">Completion mode</p>
+                    <div className="mt-2 space-y-2 text-sm text-[#3a332e]">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="completion_mode"
+                          value="BLACKOUT"
+                          defaultChecked
+                          className="h-4 w-4 border-[#b9aea2] text-[#6f6257] focus:ring-[#cdbfb2]"
+                        />
+                        <span>Blackout (any order)</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="completion_mode"
+                          value="STREAK"
+                          className="h-4 w-4 border-[#b9aea2] text-[#6f6257] focus:ring-[#cdbfb2]"
+                        />
+                        <span>Streak (in order)</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold text-[#3a332e]">End condition</p>
+                    <div className="mt-2 space-y-2 text-sm text-[#3a332e]">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="end_condition"
+                          value="FIRST_COMPLETION"
+                          defaultChecked
+                          className="h-4 w-4 border-[#b9aea2] text-[#6f6257] focus:ring-[#cdbfb2]"
+                        />
+                        <span>First to complete</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="end_condition"
+                          value="HOST_DECLARED"
+                          className="h-4 w-4 border-[#b9aea2] text-[#6f6257] focus:ring-[#cdbfb2]"
+                        />
+                        <span>Host ends game</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
               <label className="flex h-16 items-center justify-between rounded-[1.75rem] border border-[#ddd2c7] bg-white/95 px-6">
                 <span className="text-lg font-medium text-[#3a332e]">
                   Allow custom cards

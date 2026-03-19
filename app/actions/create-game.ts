@@ -13,6 +13,8 @@ const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
   hostDisplayName: z.string().min(1, "Host display name is required"),
   mode: z.enum(["quick_play", "streak"]),
+  completion_mode: z.enum(["BLACKOUT", "STREAK"]),
+  end_condition: z.enum(["FIRST_COMPLETION", "HOST_DECLARED"]),
   visibility: z.enum(["private", "public"]),
   allowCustomCards: z.boolean(),
 });
@@ -36,6 +38,8 @@ export async function createGameAction(
   const rawTitle = formData.get("title");
   const rawHostDisplayName = formData.get("hostDisplayName");
   const rawMode = formData.get("mode") ?? "quick_play";
+  const rawCompletionMode = formData.get("completion_mode") ?? "BLACKOUT";
+  const rawEndCondition = formData.get("end_condition") ?? "FIRST_COMPLETION";
   const rawVisibility = formData.get("visibility") ?? "private";
   const allowCustomCardsInput = formData.get("allowCustomCards");
 
@@ -46,6 +50,10 @@ export async function createGameAction(
         ? rawHostDisplayName.trim()
         : "Host",
     mode: typeof rawMode === "string" ? rawMode : "quick_play",
+    completion_mode:
+      typeof rawCompletionMode === "string" ? rawCompletionMode : "BLACKOUT",
+    end_condition:
+      typeof rawEndCondition === "string" ? rawEndCondition : "FIRST_COMPLETION",
     visibility: typeof rawVisibility === "string" ? rawVisibility : "private",
     allowCustomCards: allowCustomCardsInput ? true : false,
   });
@@ -103,6 +111,27 @@ export async function createGameAction(
       .maybeSingle();
 
     console.log("[createGameAction] immediate verify query", { verifyRow, verifyError });
+
+    if (verifyError) {
+      throw verifyError;
+    }
+
+    if (!verifyRow?.id) {
+      throw new Error("Unable to resolve game configuration target");
+    }
+
+    const { error: configUpdateError } = await supabase
+      .from("games")
+      .update({
+        completion_mode: parsed.data.completion_mode,
+        end_condition: parsed.data.end_condition,
+      })
+      .eq("id", verifyRow.id)
+      .limit(1);
+
+    if (configUpdateError) {
+      throw configUpdateError;
+    }
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;
