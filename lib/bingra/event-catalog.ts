@@ -7,7 +7,8 @@ export type EventCategory =
   | "violation"
   | "free-throw"
   | "hustle"
-  | "rare";
+  | "rare"
+  | "misc";
 
 export type TeamScope = "none" | "team";
 
@@ -17,7 +18,7 @@ export type TeamRole = "offense" | "defense" | "either" | "none";
  * Lightweight scorer UI taxonomy.
  * Keep this small and basketball-first for now.
  */
-export type ScorerParentCategory = "change-of-possession" | "score";
+export type ScorerParentCategory = "change-of-possession" | "score" | "misc";
 
 export type ScorerSubtypeGroup = "free-throw" | "none";
 
@@ -110,6 +111,42 @@ export const EVENT_CATALOG: GameEventType[] = [
     scorerParentCategory: "score",
     scorerSubtypeGroup: "none",
     scorerOrder: 90,
+  },
+  {
+    id: "TIMEOUT TAKEN",
+    label: "Timeout taken",
+    shortLabel: "Timeout",
+    description: "A timeout taken",
+    category: "misc",
+    rarity: 2,
+    basePoints: 30,
+    enabled: true,
+    allowedModes: ["classic", "streak"],
+    teamScope: "team",
+    teamRole: "offense",
+    tags: [],
+    scorerEnabled: true,
+    scorerParentCategory: "misc",
+    scorerSubtypeGroup: "none",
+    scorerOrder: 91,
+  },
+    {
+    id: "OUT_OF_BOUNDS",
+    label: "Out of bounds",
+    shortLabel: "OOB",
+    description: "Turnover due to ball or player out of bounds",
+    category: "turnover",
+    rarity: 3,
+    basePoints: 50,
+    enabled: true,
+    allowedModes: ["classic", "streak"],
+    teamScope: "team",
+    teamRole: "offense",
+    tags: [],
+    scorerEnabled: true,
+    scorerParentCategory: "change-of-possession",
+    scorerSubtypeGroup: "none",
+    scorerOrder: 91,
   },
   {
     id: "CHARGE_TAKEN",
@@ -376,25 +413,5 @@ export const EVENT_CATALOG: GameEventType[] = [
     scorerParentCategory: "score",
     scorerSubtypeGroup: "free-throw",
     scorerOrder: 71,
-  },
-  {
-    id: "DOUBLE_BONUS_FREE_THROW_MADE",
-    label: "Double Bonus FT",
-    shortLabel: "DBL Bonus FT",
-    description: "A made free throw during a double-bonus situation.",
-    category: "free-throw",
-    rarity: 3,
-    basePoints: 32,
-    enabled: true,
-    allowedModes: ["classic", "streak"],
-    teamScope: "team",
-    teamRole: "offense",
-    tags: ["free-throw", "double-bonus"],
-    scoringNotes:
-      "Use when the made free throw occurred in a double-bonus situation.",
-    scorerEnabled: true,
-    scorerParentCategory: "score",
-    scorerSubtypeGroup: "free-throw",
-    scorerOrder: 72,
-  },
+  }
 ];

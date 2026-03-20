@@ -1,316 +1,279 @@
-const ADJECTIVES = [
+export type GameNameStyle = "mixed" | "fun" | "competitive" | "basketball" | "chaos";
+
+const adjectives = [
   "Clutch",
   "Rapid",
-  "Savage",
+  "Wild",
   "Prime",
   "Elite",
   "Turbo",
-  "Wild",
+  "Savage",
   "Electric",
-  "Chaos",
-  "Pressure",
-  "Bounce",
-  "Deep",
-  "Pure",
   "Locked",
+  "Frozen",
+  "Hot",
+  "Maximum",
   "Final",
   "Crunch",
-  "Overtime",
   "Street",
   "Midnight",
-  "Fastbreak",
+  "Unreal",
+  "Epic",
+  "Bold",
+  "Fearless",
+  "Fire",
+  "Flash",
+  "Neon",
+  "Golden",
+  "Shadow",
+  "Victory",
+  "Rogue",
+  "Skyline",
+  "Velocity",
+  "Relentless",
+  "Iron",
+  "Heavy",
+  "Sharp",
+  "Clean",
+  "Ice",
+  "Storm",
+  "Thunder",
+  "Rocket",
+  "Supreme",
+  "Alpha",
+  "Next",
   "Full Court",
   "Half Court",
+  "Deep Range",
+  "Fastbreak",
   "High Stakes",
-  "Cold Blooded",
-  "Heat Check",
-  "Next Level",
-  "Maximum",
-  "Zero Chill",
-  "All In",
-  "Game Day",
-  "Bucket",
-  "Swish",
-  "Net",
-  "Rim",
-  "Backboard",
-  "Jump Ball",
-  "Crossover",
-  "Baseline",
-  "Transition",
-  "Playoff",
-  "Underdog",
-  "Champion",
-  "Victory",
-  "Battle",
-  "Arena",
-  "Hustle",
-  "Relentless",
-  "Skyline",
-  "Shadow",
-  "Concrete",
-  "Golden",
-  "Fierce",
-  "Untamed",
-  "Charged",
-  "Fearless",
-  "Dynamic",
-  "Explosive",
-  "Unreal",
-  "Supreme",
-  "Flash",
-  "Frenzy",
-  "Thunder",
-  "Velocity",
-  "Rally",
-  "Momentum",
-  "Drive",
-  "Launch",
-  "Snap",
-  "Rise",
-  "Storm",
-  "Fire",
-  "Ice",
-  "Blaze",
-  "Rush",
-  "Phantom",
-  "Alpha",
-  "Top Seed",
-  "Sudden Death",
   "Last Shot",
-  "Triple Threat",
-  "No Mercy",
-  "Money Time",
-  "Winner's",
-  "Legacy",
-  "Rival",
-  "Hardwood",
-  "Paint",
-  "Blacktop",
-  "Downtown",
-  "Breakaway",
-  "Skyhook",
-  "Bank Shot",
-  "Dagger",
-  "Buzzer",
-  "Poster",
-  "And-One",
-  "Shot Clock",
-  "Full Send",
-  "Red Zone",
-  "Blue Flame",
-];
+  "Game Day",
+  "Pressure",
+  "Overtime",
+] as const;
 
-const NOUNS = [
-  "Bingra",
+const basketballWords = [
   "Buckets",
-  "Ball",
   "Hoops",
-  "Battle",
-  "Showdown",
-  "Shootout",
-  "Challenge",
-  "Grind",
-  "Arena",
+  "Swish",
+  "Splash",
+  "Dimes",
+  "Boards",
+  "Rim",
+  "Net",
+  "Glass",
+  "Handles",
+  "Break",
+  "Fastbreak",
+  "Jumper",
+  "Three",
+  "Arc",
+  "Paint",
+  "Layup",
+  "Fadeaway",
+  "Crossover",
+  "Shot",
+  "Buzzer",
+  "Backboard",
+  "Bounce",
+  "Tipoff",
+  "Possession",
+  "And-One",
+  "Heat Check",
+  "Poster",
+  "Rebound",
+  "Steal",
+] as const;
+
+const competitionWords = [
   "Clash",
+  "Showdown",
+  "Battle",
   "Rush",
+  "Grind",
+  "Challenge",
   "Quest",
-  "Zone",
+  "Storm",
   "Attack",
   "Streak",
   "Series",
   "Match",
-  "Drive",
-  "Shot",
-  "Break",
-  "Fever",
-  "Storm",
-  "Madness",
-  "Mayhem",
-  "Heat",
-  "Thunder",
-  "Fury",
-  "Frenzy",
-  "Burst",
-  "Bounce",
-  "Splash",
-  "Swish",
-  "Bang",
-  "Boom",
-  "Arc",
-  "Net",
-  "Rim",
-  "Glass",
-  "Board",
-  "Dime",
-  "Handles",
-  "Takeover",
-  "Dynasty",
-  "Kings",
-  "Legends",
-  "Titans",
-  "Warriors",
-  "Raiders",
-  "Squad",
-  "Crew",
-  "Mob",
   "Mode",
   "Run",
-  "Race",
-  "Circuit",
-  "Cup",
   "League",
   "Trial",
+  "Circuit",
+  "Frenzy",
   "Gauntlet",
-  "Barrage",
-  "Battlefield",
-  "Burst",
-  "Blitz",
-  "Jam",
-  "Session",
-  "Summit",
-  "Collision",
-  "Contest",
-  "Carnage",
-  "Firestorm",
-  "Show",
-  "Spectacle",
-  "Rise",
-  "Grudge",
-  "Quest",
-  "Peak",
-  "Pulse",
-  "Rally",
-  "Strike",
-  "Charge",
-  "Wave",
-  "Spin",
-  "Snap",
-  "Edge",
-  "Point",
-  "Possession",
-  "Tipoff",
-  "Drill",
-  "Duel",
-  "Hustle",
-  "Dash",
-  "Jump",
-  "Flight",
-  "Breakout",
+  "Race",
+  "Faceoff",
+  "Arena",
+  "Cup",
+  "Brawl",
+  "Throwdown",
+  "Takeover",
+  "Pressure",
   "Finale",
-  "Victory",
-  "Crown",
-];
+  "Contest",
+  "Derby",
+] as const;
 
-const SPECIAL_NAMES = [
-  "Nothing But Net",
-  "Winner Stays",
-  "Game On",
-  "Buckets Only",
-  "Ball Don't Lie",
-  "Heat Check",
-  "Crunch Time",
-  "Last Shot",
-  "Clutch Mode",
-  "Full Court Press",
-  "Fastbreak Fever",
-  "Swish City",
-  "Rim Rocker",
-  "Bucket Blitz",
-  "Overtime Chaos",
-  "Paint Battle",
-  "Dime Drop",
-  "Buzzer Beat",
-  "Net Gain",
-  "Jump Ball Jam",
-  "Hardwood Havoc",
-  "Court Chaos",
-  "Bracket Buster",
-  "And-One Energy",
-  "Bingra Blitz",
-  "Deep Range",
-  "Final Possession",
-  "Battle Tested",
-  "Shot Caller",
-  "Splash Zone",
-  "Arc Attack",
-  "Money Time",
-  "No Mercy",
-  "Playoff Pulse",
-  "Rally Point",
-  "Top Seed",
-  "Blacktop Battle",
-  "Glass Cleaners",
-  "Handle Season",
-  "Poster Time",
-];
+const bringaWords = [
+  "Bingra",
+  "Bang",
+  "Boom",
+  "Cookout",
+  "Bucketfest",
+  "Shotstorm",
+  "Winwave",
+  "Hoopla",
+  "Ballblast",
+  "Netfest",
+  "Rimrush",
+  "Swishfest",
+  "Playstorm",
+  "Scoreline",
+  "Fireball",
+  "Hype",
+  "Showtime",
+  "Runup",
+  "Glowup",
+] as const;
 
-function randomItem<T>(items: readonly T[]): T {
-  return items[Math.floor(Math.random() * items.length)];
+const funWords = [
+  "Chaos",
+  "Madness",
+  "Vibes",
+  "Party",
+  "Fever",
+  "Energy",
+  "Mayhem",
+  "Hustle",
+  "Thunder",
+  "Lightning",
+  "Wave",
+  "Pulse",
+  "Buzz",
+  "Freeze",
+  "Flare",
+  "Blaze",
+  "Spark",
+  "Noise",
+  "Motion",
+  "Juice",
+] as const;
+
+const templatesByStyle: Record<GameNameStyle, Array<(rng: () => number) => string>> = {
+  mixed: [
+    (rng) => `${pick(adjectives, rng)} ${pick(basketballWords, rng)}`,
+    (rng) => `${pick(adjectives, rng)} ${pick(competitionWords, rng)}`,
+    (rng) => `${pick(bringaWords, rng)} ${pick(competitionWords, rng)}`,
+    (rng) => `${pick(basketballWords, rng)} ${pick(competitionWords, rng)}`,
+    (rng) => `${pick(adjectives, rng)} ${pick(funWords, rng)}`,
+    (rng) => `${pick(adjectives, rng)} ${pick(bringaWords, rng)}`,
+  ],
+  fun: [
+    (rng) => `${pick(bringaWords, rng)} ${pick(funWords, rng)}`,
+    (rng) => `${pick(funWords, rng)} ${pick(basketballWords, rng)}`,
+    (rng) => `${pick(adjectives, rng)} ${pick(bringaWords, rng)}`,
+    (rng) => `${pick(bringaWords, rng)} ${pick(competitionWords, rng)}`,
+  ],
+  competitive: [
+    (rng) => `${pick(adjectives, rng)} ${pick(competitionWords, rng)}`,
+    (rng) => `${pick(basketballWords, rng)} ${pick(competitionWords, rng)}`,
+    (rng) => `${pick(adjectives, rng)} ${pick(basketballWords, rng)}`,
+  ],
+  basketball: [
+    (rng) => `${pick(adjectives, rng)} ${pick(basketballWords, rng)}`,
+    (rng) => `${pick(basketballWords, rng)} ${pick(competitionWords, rng)}`,
+    (rng) => `${pick(adjectives, rng)} ${pick(competitionWords, rng)}`,
+  ],
+  chaos: [
+    (rng) => `${pick(funWords, rng)} ${pick(competitionWords, rng)}`,
+    (rng) => `${pick(adjectives, rng)} ${pick(funWords, rng)}`,
+    (rng) => `${pick(bringaWords, rng)} ${pick(funWords, rng)}`,
+    (rng) => `${pick(adjectives, rng)} ${pick(competitionWords, rng)}`,
+  ],
+};
+
+export interface GenerateGameNameOptions {
+  style?: GameNameStyle;
+  usedNames?: Iterable<string>;
+  maxAttempts?: number;
+  fallbackPrefix?: string;
 }
 
-function maybeAddSuffix(name: string): string {
-  const roll = Math.random();
+export function generateGameName(options: GenerateGameNameOptions = {}): string {
+  const {
+    style = "mixed",
+    usedNames,
+    maxAttempts = 30,
+    fallbackPrefix = "Game",
+  } = options;
 
-  if (roll < 0.08) {
-    return `${name} ${Math.floor(Math.random() * 90) + 10}`;
-  }
-
-  if (roll < 0.12) {
-    return `${name} XL`;
-  }
-
-  return name;
-}
-
-function titleCase(input: string): string {
-  return input
-    .split(" ")
-    .filter(Boolean)
-    .map((word) => {
-      if (word.toUpperCase() === word) return word;
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-    })
-    .join(" ");
-}
-
-export function generateGameName(): string {
-  const roll = Math.random();
-
-  let name: string;
-
-  if (roll < 0.18) {
-    name = randomItem(SPECIAL_NAMES);
-  } else if (roll < 0.72) {
-    name = `${randomItem(ADJECTIVES)} ${randomItem(NOUNS)}`;
-  } else {
-    const first = randomItem(ADJECTIVES);
-    const second = randomItem(NOUNS);
-
-    if (first === second) {
-      name = `${first} Clash`;
-    } else {
-      name = `${second} ${first}`;
-    }
-  }
-
-  return titleCase(maybeAddSuffix(name));
-}
-
-export function generateUniqueGameName(
-  existingNames: Iterable<string>,
-  maxAttempts = 25,
-): string {
   const used = new Set(
-    Array.from(existingNames, (name) => name.trim().toLowerCase()),
+    Array.from(usedNames ?? []).map((name) => normalizeName(name)),
   );
 
-  for (let i = 0; i < maxAttempts; i += 1) {
-    const candidate = generateGameName();
-    if (!used.has(candidate.trim().toLowerCase())) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const template = pick(templatesByStyle[style], Math.random);
+    const candidate = cleanName(template(Math.random));
+
+    if (!used.has(normalizeName(candidate))) {
       return candidate;
     }
   }
 
-  return `${generateGameName()} ${Math.floor(Math.random() * 900) + 100}`;
+  return `${fallbackPrefix} ${randomNumber(100, 999)}`;
+}
+
+export function generateGameNames(
+  count: number,
+  options: Omit<GenerateGameNameOptions, "usedNames"> & {
+    usedNames?: Iterable<string>;
+    unique?: boolean;
+  } = {},
+): string[] {
+  const { unique = true, usedNames, ...rest } = options;
+  const results: string[] = [];
+  const seen = new Set(Array.from(usedNames ?? []).map((n) => normalizeName(n)));
+
+  for (let i = 0; i < count; i++) {
+    const name = generateGameName({
+      ...rest,
+      usedNames: unique ? [...seen] : usedNames,
+    });
+
+    results.push(name);
+
+    if (unique) {
+      seen.add(normalizeName(name));
+    }
+  }
+
+  return results;
+}
+
+export function getRandomPrefillName(currentName?: string): string {
+  return generateGameName({
+    style: "mixed",
+    usedNames: currentName ? [currentName] : undefined,
+  });
+}
+
+function pick<T>(items: readonly T[], rng: () => number): T {
+  return items[Math.floor(rng() * items.length)];
+}
+
+function randomNumber(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function cleanName(name: string): string {
+  return name.replace(/\s+/g, " ").trim();
 }

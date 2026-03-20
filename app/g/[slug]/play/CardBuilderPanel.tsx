@@ -162,6 +162,7 @@ export function CardBuilderPanel({
   initialCardEvents,
   lockedCardEvents,
 }: CardBuilderPanelProps) {
+  const [isHydrated, setIsHydrated] = useState(false);
   const [riskLevel, setRiskLevel] = useState<RiskLevel>(initialRiskLevel);
   const [cardEvents, setCardEvents] = useState<CardBuilderEvent[]>(() =>
     initialCardEvents.map((event) => {
@@ -180,7 +181,7 @@ export function CardBuilderPanel({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const router = useRouter();
 
-  const [generateState, generateAction] = useActionState(generateCardAction, {});
+  const [generateState, generateAction, isSubmitting] = useActionState(generateCardAction, {});
   const hasPersistedLockedCard =
     lockedCardEvents.length > 0 && lockedCardEvents !== initialCardEvents;
   const shouldRenderLocked = hasPersistedLockedCard || isLocked;
@@ -280,7 +281,27 @@ export function CardBuilderPanel({
   };
 
   const handleAcceptCard = () => {
-    if (!playerId || !isCardReadyToAccept) return;
+    console.info("[CardBuilderPanel] Accept card clicked", {
+      playerId,
+      isCardReadyToAccept,
+      isHydrated,
+      isSubmitting,
+      cardEventsCount: cardEvents.length,
+      eventsPerCard,
+    });
+
+    if (!isHydrated || isSubmitting || !playerId || !isCardReadyToAccept) {
+      console.info("[CardBuilderPanel] Accept card blocked", {
+        reason: !isHydrated
+          ? "not_hydrated"
+          : isSubmitting
+            ? "submission_pending"
+            : !playerId
+              ? "missing_player_id"
+              : "card_not_ready",
+      });
+      return;
+    }
 
     const selectedEventKeys = cardEvents.map((event) => event.id);
     const acceptedEvents = cardEvents.map((event, index) => ({
@@ -293,6 +314,12 @@ export function CardBuilderPanel({
       teamKey: event.cardTeamKey ?? null,
       orderIndex: index,
     }));
+
+    console.info("[CardBuilderPanel] dispatching generateCardAction", {
+      playerId,
+      selectedEventKeys,
+      acceptedEventsCount: acceptedEvents.length,
+    });
 
     startTransition(() => {
       generateAction({
@@ -329,11 +356,30 @@ export function CardBuilderPanel({
   };
 
   useEffect(() => {
+    setIsHydrated(true);
+    console.info("[CardBuilderPanel] mount", {
+      mode,
+      playerId,
+      eventsPerCard,
+      initialCardEventsCount: initialCardEvents.length,
+    });
+  }, [eventsPerCard, initialCardEvents.length, mode, playerId]);
+
+  useEffect(() => {
     if (generateState.success) {
       setIsLocked(true);
       router.refresh();
     }
   }, [generateState.success, router]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    console.info("[CardBuilderPanel] submission state", {
+      isSubmitting,
+      success: generateState.success,
+      error: generateState.error,
+    });
+  }, [generateState.error, generateState.success, isHydrated, isSubmitting]);
 
   const handleReorder = (index: number, direction: "up" | "down") => {
     if (mode !== "streak") return;
@@ -697,9 +743,9 @@ export function CardBuilderPanel({
             type="button"
             onClick={handleAcceptCard}
             className="rounded-2xl bg-[#2f6df6] px-5 py-2 text-sm font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2f6df6]"
-            disabled={!playerId || !isCardReadyToAccept}
+            disabled={!isHydrated || isSubmitting || !playerId || !isCardReadyToAccept}
           >
-            Accept card
+            {isSubmitting ? "Accepting..." : "Accept card"}
           </button>
         </div>
       {!isCardReadyToAccept && (

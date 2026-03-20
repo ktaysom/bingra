@@ -1,19 +1,13 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createGameAction, CreateGameFormState } from "../actions/create-game";
+import { generateGameName } from "../../lib/bingra/game-name-generator";
 
 const initialState: CreateGameFormState = {};
 
-const DEFAULT_ROOM_NAMES = [
-  "Friday Night Full-Court",
-  "No-Look Bingra",
-  "Fourth Quarter Frenzy",
-  "Paint Battle",
-  "Fastbreak Run",
-  "Rim Rattle",
-];
+const DEFAULT_TITLE = "Game On";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -88,10 +82,11 @@ function ChoiceCard({
 export default function CreatePage() {
   const [state, formAction] = useActionState(createGameAction, initialState);
 
-  const [title, setTitle] = useState(() => {
-    const daySeed = Math.floor(Date.now() / 86_400_000);
-    return DEFAULT_ROOM_NAMES[daySeed % DEFAULT_ROOM_NAMES.length];
-  });
+  const [title, setTitle] = useState(DEFAULT_TITLE);
+
+  useEffect(() => {
+    setTitle((current) => (current === DEFAULT_TITLE ? generateGameName() : current));
+  }, []);
 
   const [teamScope, setTeamScope] = useState<"both_teams" | "team_a_only" | "team_b_only">(
     "both_teams",
