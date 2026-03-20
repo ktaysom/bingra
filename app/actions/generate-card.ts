@@ -21,6 +21,7 @@ const inputSchema = z.object({
         eventKey: z.string().min(1),
         eventLabel: z.string().min(1),
         pointValue: z.number(),
+        teamKey: z.union([z.literal("A"), z.literal("B"), z.null()]).optional(),
         orderIndex: z.number().int().nonnegative().optional(),
       }),
     )
@@ -134,6 +135,7 @@ export async function generateCardAction(
       card_id: cardId,
       event_key: event.eventKey,
       event_label: event.eventLabel,
+      team_key: event.teamKey ?? null,
       point_value: event.pointValue,
       order_index: event.orderIndex ?? index,
       is_lock: parsed.data.lockEventKey

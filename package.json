@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:play-logic": "node --experimental-strip-types --test scripts/play-card-progress.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",

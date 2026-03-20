@@ -13,6 +13,12 @@ type GameRecord = {
   slug: string;
   title: string | null;
   status: "lobby" | "live" | "finished";
+  team_a_name: string;
+  team_b_name: string;
+  team_scope: "both_teams" | "team_a_only" | "team_b_only";
+  events_per_card: number;
+  completion_mode: "BLACKOUT" | "STREAK";
+  end_condition: "FIRST_COMPLETION" | "HOST_DECLARED";
 };
 
 type PlayerRecord = {
@@ -31,7 +37,9 @@ export default async function HostPage(props: HostPageProps) {
 
   const { data: game, error: gameError } = await supabase
     .from("games")
-    .select("id, slug, title, status")
+    .select(
+      "id, slug, title, status, team_a_name, team_b_name, team_scope, events_per_card, completion_mode, end_condition",
+    )
     .eq("slug", slug)
     .maybeSingle<GameRecord>();
 
@@ -100,6 +108,48 @@ export default async function HostPage(props: HostPageProps) {
             <div className="text-sm text-slate-500">
               <p className="font-mono text-xs uppercase">#{game.id}</p>
               <p className="text-sm text-slate-600">Status: {game.status === "lobby" ? "Waiting for players" : game.status}</p>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">Setup summary</h3>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Room</p>
+                <p className="mt-1 text-sm text-slate-800">{game.title ?? "Untitled game"}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Teams</p>
+                <p className="mt-1 text-sm text-slate-800">{game.team_a_name} vs {game.team_b_name}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team scope</p>
+                <p className="mt-1 text-sm text-slate-800">
+                  {game.team_scope === "both_teams"
+                    ? "Both teams"
+                    : game.team_scope === "team_a_only"
+                      ? `${game.team_a_name} only`
+                      : `${game.team_b_name} only`}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Card completion</p>
+                <p className="mt-1 text-sm text-slate-800">
+                  {game.completion_mode === "STREAK" ? "Streak" : "Blackout"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">End condition</p>
+                <p className="mt-1 text-sm text-slate-800">
+                  {game.end_condition === "FIRST_COMPLETION" ? "First to complete" : "Host ends game"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Events per card</p>
+                <p className="mt-1 text-sm text-slate-800">{game.events_per_card}</p>
+              </div>
             </div>
           </div>
 

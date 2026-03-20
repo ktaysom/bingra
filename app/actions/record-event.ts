@@ -70,13 +70,14 @@ export async function recordEventAction(
 
   const { data: game, error: gameError } = await supabase
     .from("games")
-    .select("id, status, completion_mode, end_condition")
+    .select("id, status, completion_mode, end_condition, team_scope")
     .eq("slug", parsed.data.slug)
     .maybeSingle<{
       id: string;
       status: string;
       completion_mode: CompletionMode;
       end_condition: "FIRST_COMPLETION" | "HOST_DECLARED";
+      team_scope: "both_teams" | "team_a_only" | "team_b_only";
     }>();
 
   if (gameError) {

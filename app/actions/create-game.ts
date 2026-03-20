@@ -15,6 +15,12 @@ const formSchema = z.object({
   mode: z.enum(["quick_play", "streak"]),
   completion_mode: z.enum(["BLACKOUT", "STREAK"]),
   end_condition: z.enum(["FIRST_COMPLETION", "HOST_DECLARED"]),
+  teamScope: z.enum(["both_teams", "team_a_only", "team_b_only"]),
+  teamAName: z.string().trim().min(1, "Team A name is required"),
+  teamBName: z.string().trim().min(1, "Team B name is required"),
+  eventsPerCard: z.coerce.number().int().refine((value) => [6, 8, 10, 12].includes(value), {
+    message: "Events per card must be one of 6, 8, 10, or 12",
+  }),
   visibility: z.enum(["private", "public"]),
   allowCustomCards: z.boolean(),
 });
@@ -40,6 +46,10 @@ export async function createGameAction(
   const rawMode = formData.get("mode") ?? "quick_play";
   const rawCompletionMode = formData.get("completion_mode") ?? "BLACKOUT";
   const rawEndCondition = formData.get("end_condition") ?? "FIRST_COMPLETION";
+  const rawTeamScope = formData.get("teamScope") ?? "both_teams";
+  const rawTeamAName = formData.get("teamAName") ?? "Team A";
+  const rawTeamBName = formData.get("teamBName") ?? "Team B";
+  const rawEventsPerCard = formData.get("eventsPerCard") ?? "8";
   const rawVisibility = formData.get("visibility") ?? "private";
   const allowCustomCardsInput = formData.get("allowCustomCards");
 
@@ -54,6 +64,10 @@ export async function createGameAction(
       typeof rawCompletionMode === "string" ? rawCompletionMode : "BLACKOUT",
     end_condition:
       typeof rawEndCondition === "string" ? rawEndCondition : "FIRST_COMPLETION",
+    teamScope: typeof rawTeamScope === "string" ? rawTeamScope : "both_teams",
+    teamAName: typeof rawTeamAName === "string" ? rawTeamAName : "Team A",
+    teamBName: typeof rawTeamBName === "string" ? rawTeamBName : "Team B",
+    eventsPerCard: typeof rawEventsPerCard === "string" ? Number(rawEventsPerCard) : 8,
     visibility: typeof rawVisibility === "string" ? rawVisibility : "private",
     allowCustomCards: allowCustomCardsInput ? true : false,
   });
@@ -125,6 +139,10 @@ export async function createGameAction(
       .update({
         completion_mode: parsed.data.completion_mode,
         end_condition: parsed.data.end_condition,
+        team_a_name: parsed.data.teamAName,
+        team_b_name: parsed.data.teamBName,
+        team_scope: parsed.data.teamScope,
+        events_per_card: parsed.data.eventsPerCard,
       })
       .eq("id", verifyRow.id)
       .limit(1);

@@ -5,7 +5,12 @@ import { CardBuilderPanel } from "./CardBuilderPanel";
 import { HostScoringPanel } from "./HostScoringPanel";
 import { PlayRealtimeBridge } from "./PlayRealtimeBridge";
 import { getPlayModeLabel, mapPlayModeToGameMode } from "../../../../lib/binga/types";
-import { chooseRandomEvents, getEventById, type RiskLevel } from "../../../../lib/binga/event-logic";
+import {
+  chooseRandomEvents,
+  getEventById,
+  type TeamKey,
+  type RiskLevel,
+} from "../../../../lib/binga/event-logic";
 import {
   calculateCardProgress,
   calculateCompletedCellFlags,
@@ -26,6 +31,10 @@ type GameRecord = {
   title: string | null;
   status: "lobby" | "live" | "finished";
   mode: "quick_play" | "streak";
+  team_a_name: string;
+  team_b_name: string;
+  team_scope: "both_teams" | "team_a_only" | "team_b_only";
+  events_per_card: number;
   completion_mode: CompletionMode;
   end_condition: "FIRST_COMPLETION" | "HOST_DECLARED";
 };
@@ -86,7 +95,9 @@ export default async function PlayPage(props: PlayPageProps) {
 
   const { data: game, error: gameError } = await supabase
     .from("games")
-    .select("id, slug, title, status, mode, completion_mode, end_condition")
+    .select(
+      "id, slug, title, status, mode, team_a_name, team_b_name, team_scope, events_per_card, completion_mode, end_condition",
+    )
     .eq("slug", slug)
     .maybeSingle<GameRecord>();
 
@@ -134,13 +145,33 @@ export default async function PlayPage(props: PlayPageProps) {
   }
 
   const playerCount = players?.length ?? 0;
-  const modeLabel = getPlayModeLabel(game.mode);
+  const playMode = game.completion_mode === "STREAK" ? "streak" : "quick_play";
+  const modeLabel = getPlayModeLabel(playMode);
   const initialRiskLevel: RiskLevel = 3;
-  const initialCardEvents = chooseRandomEvents(9, {
-    mode: mapPlayModeToGameMode(game.mode),
+  const teamNames: Record<TeamKey, string> = { A: game.team_a_name, B: game.team_b_name };
+  const initialCardEvents = chooseRandomEvents(game.events_per_card, {
+    mode: mapPlayModeToGameMode(playMode),
     riskLevel: initialRiskLevel,
     uniqueByEventId: true,
-    includeGameScopedEvents: true,
+    includeGameScopedEvents: game.team_scope === "both_teams",
+  }).map((event, index) => {
+    const teamKey: TeamKey | null =
+      event.teamScope === "team"
+        ? game.team_scope === "team_a_only"
+          ? "A"
+          : game.team_scope === "team_b_only"
+            ? "B"
+            : index % 2 === 0
+              ? "A"
+              : "B"
+        : null;
+
+    return {
+      ...event,
+      label: teamKey ? `${teamNames[teamKey]}: ${event.label}` : event.label,
+      shortLabel: teamKey ? `${teamNames[teamKey]}: ${event.shortLabel}` : event.shortLabel,
+      cardTeamKey: teamKey,
+    };
   });
 
   const isGameFinished = game.status === "finished";
@@ -251,6 +282,8 @@ export default async function PlayPage(props: PlayPageProps) {
     const fallbackBasePoints =
       typeof cell.point_value === "number" ? cell.point_value : 0;
     const fallbackLabel = cell.event_label ?? eventKey;
+    const persistedTeamKey: TeamKey | null =
+      cell.team_key === "A" || cell.team_key === "B" ? cell.team_key : null;
     const event: typeof catalogEvent extends undefined ? never : typeof catalogEvent =
       catalogEvent ?? {
         id: eventKey,
@@ -266,8 +299,21 @@ export default async function PlayPage(props: PlayPageProps) {
         teamRole: "none",
       };
 
+    const resolvedLabel =
+      persistedTeamKey && event.teamScope === "team"
+        ? `${teamNames[persistedTeamKey]}: ${event.label}`
+        : event.label;
+
+    const resolvedShortLabel =
+      persistedTeamKey && event.teamScope === "team"
+        ? `${teamNames[persistedTeamKey]}: ${event.shortLabel}`
+        : event.shortLabel;
+
     return {
       ...event,
+      label: resolvedLabel,
+      shortLabel: resolvedShortLabel,
+      cardTeamKey: persistedTeamKey,
       marked: currentPlayerCompletedFlags[index] ?? false,
     };
   });
@@ -336,8 +382,12 @@ export default async function PlayPage(props: PlayPageProps) {
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr_1fr]">
         <CardBuilderPanel
-          mode={game.mode}
+          mode={playMode}
           playerId={currentPlayerId}
+          eventsPerCard={game.events_per_card}
+          teamScope={game.team_scope}
+          endCondition={game.end_condition}
+          teamNames={teamNames}
           initialRiskLevel={initialRiskLevel}
           initialCardEvents={initialCardEvents}
           lockedCardEvents={lockedCardEvents}
@@ -443,7 +493,12 @@ export default async function PlayPage(props: PlayPageProps) {
         </section>
       </div>
 
-      <HostScoringPanel slug={slug} isFinished={isGameFinished} />
+      <HostScoringPanel
+        slug={slug}
+        isFinished={isGameFinished}
+        teamScope={game.team_scope}
+        teamNames={teamNames}
+      />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
@@ -471,7 +526,7 @@ export default async function PlayPage(props: PlayPageProps) {
   <p className="font-medium text-slate-900">{label}</p>
   {event.team_key && (
     <p className="text-xs uppercase tracking-wide text-slate-400">
-      Team {event.team_key}
+      {event.team_key === "A" ? game.team_a_name : event.team_key === "B" ? game.team_b_name : `Team ${event.team_key}`}
     </p>
   )}
 </div>

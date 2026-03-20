@@ -25,6 +25,11 @@ import {
 type HostScoringPanelProps = {
   slug: string;
   isFinished?: boolean;
+  teamScope?: "both_teams" | "team_a_only" | "team_b_only";
+  teamNames?: {
+    A: string;
+    B: string;
+  };
 };
 
 type RecentEvent = {
@@ -40,7 +45,12 @@ type Stage = "parent" | "event" | "subtype" | "team";
 const initialRecordState: RecordEventFormState = {};
 const initialDeleteState: DeleteScoredEventFormState = {};
 
-export function HostScoringPanel({ slug, isFinished = false }: HostScoringPanelProps) {
+export function HostScoringPanel({
+  slug,
+  isFinished = false,
+  teamScope = "both_teams",
+  teamNames = { A: "Team A", B: "Team B" },
+}: HostScoringPanelProps) {
   const router = useRouter();
 
   const [recordState, recordAction] = useActionState(recordEventAction, initialRecordState);
@@ -177,6 +187,21 @@ export function HostScoringPanel({ slug, isFinished = false }: HostScoringPanelP
     setSelectedSubtypeGroup(null);
 
     if (resolved.requiresTeam) {
+      if (teamScope === "both_teams") {
+        setStage("team");
+        return;
+      }
+
+      if (teamScope === "team_a_only") {
+        submitEvent(resolved.id, resolved.label, "A");
+        return;
+      }
+
+      if (teamScope === "team_b_only") {
+        submitEvent(resolved.id, resolved.label, "B");
+        return;
+      }
+
       setStage("team");
       return;
     }
@@ -191,6 +216,21 @@ export function HostScoringPanel({ slug, isFinished = false }: HostScoringPanelP
     setSelectedSubtypeId(resolved.id);
 
     if (resolved.requiresTeam) {
+      if (teamScope === "both_teams") {
+        setStage("team");
+        return;
+      }
+
+      if (teamScope === "team_a_only") {
+        submitEvent(resolved.id, resolved.label, "A");
+        return;
+      }
+
+      if (teamScope === "team_b_only") {
+        submitEvent(resolved.id, resolved.label, "B");
+        return;
+      }
+
       setStage("team");
       return;
     }
@@ -253,6 +293,11 @@ export function HostScoringPanel({ slug, isFinished = false }: HostScoringPanelP
             Host scoring
           </p>
           <h2 className="text-xl font-semibold text-slate-900">{getTitle()}</h2>
+          {teamScope !== "both_teams" && (
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              Scoring for: {teamScope === "team_a_only" ? teamNames.A : teamNames.B}
+            </p>
+          )}
         </div>
 
         {showBackButton && (
@@ -333,7 +378,7 @@ export function HostScoringPanel({ slug, isFinished = false }: HostScoringPanelP
                     onClick={() => handleTeamSelect(team)}
                     className="min-h-20 rounded-2xl border border-blue-500 bg-blue-500 px-4 py-5 text-center text-base font-semibold text-white transition hover:bg-blue-600"
                   >
-                    Team {team}
+                    {teamNames[team]}
                   </button>
                 ))}
               </div>
@@ -366,7 +411,7 @@ export function HostScoringPanel({ slug, isFinished = false }: HostScoringPanelP
                     <p className="truncate font-medium text-slate-900">{label}</p>
                     {entry.team ? (
                       <p className="text-xs uppercase tracking-wide text-slate-400">
-                        Team {entry.team}
+                        {entry.team === "A" ? teamNames.A : teamNames.B}
                       </p>
                     ) : null}
                   </div>

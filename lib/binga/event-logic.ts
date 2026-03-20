@@ -292,9 +292,16 @@ export function getHostEventGroups(
 export function isEventAllowedForTeam(
   event: GameEventType,
   team: TeamSelection,
+  options?: {
+    allowTeamWildcardForTeamScoped?: boolean;
+  },
 ): boolean {
   if (event.teamScope === "none") {
     return team === null;
+  }
+
+  if (options?.allowTeamWildcardForTeamScoped && team === null) {
+    return true;
   }
 
   return team === "A" || team === "B";
@@ -303,6 +310,7 @@ export function isEventAllowedForTeam(
 export function validateRecordedEvent(input: {
   eventId: string;
   team?: TeamSelection;
+  allowTeamWildcardForTeamScoped?: boolean;
 }): { valid: true; event: GameEventType } | { valid: false; reason: string } {
   const event = getEventById(input.eventId);
 
@@ -315,7 +323,11 @@ export function validateRecordedEvent(input: {
 
   const team = input.team ?? null;
 
-  if (!isEventAllowedForTeam(event, team)) {
+  if (
+    !isEventAllowedForTeam(event, team, {
+      allowTeamWildcardForTeamScoped: input.allowTeamWildcardForTeamScoped,
+    })
+  ) {
     return {
       valid: false,
       reason: `Event ${input.eventId} has invalid team assignment`,
