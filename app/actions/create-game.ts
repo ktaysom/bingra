@@ -1,5 +1,7 @@
 "use server";
 
+import { randomUUID } from "crypto";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { z } from "zod";
@@ -18,9 +20,7 @@ const formSchema = z.object({
   teamScope: z.enum(["both_teams", "team_a_only", "team_b_only"]),
   teamAName: z.string().trim().min(1, "Team A name is required"),
   teamBName: z.string().trim().min(1, "Team B name is required"),
-  eventsPerCard: z.coerce.number().int().refine((value) => [6, 8, 10, 12].includes(value), {
-    message: "Events per card must be one of 6, 8, 10, or 12",
-  }),
+  eventsPerCard: z.coerce.number().int().min(3).max(15),
   visibility: z.enum(["private", "public"]),
   allowCustomCards: z.boolean(),
 });
@@ -41,6 +41,7 @@ export async function createGameAction(
   _prevState: CreateGameFormState,
   formData: FormData
 ): Promise<CreateGameFormState> {
+  const actionStartedAt = Date.now();
   const rawTitle = formData.get("title");
   const rawHostDisplayName = formData.get("hostDisplayName");
   const rawMode = formData.get("mode") ?? "quick_play";
@@ -52,6 +53,13 @@ export async function createGameAction(
   const rawEventsPerCard = formData.get("eventsPerCard") ?? "8";
   const rawVisibility = formData.get("visibility") ?? "private";
   const allowCustomCardsInput = formData.get("allowCustomCards");
+
+  console.info("[createGameAction][perf] action start", {
+    startedAt: new Date(actionStartedAt).toISOString(),
+    hasTitle: typeof rawTitle === "string" ? rawTitle.trim().length > 0 : false,
+  });
+
+  try {
 
   const parsed = formSchema.safeParse({
     title: typeof rawTitle === "string" ? rawTitle.trim() : "",
@@ -72,96 +80,187 @@ export async function createGameAction(
     allowCustomCards: allowCustomCardsInput ? true : false,
   });
 
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid form submission" };
-  }
-
-  const supabase = createSupabaseAdminClient();
-  console.log("[createGameAction] SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
-
-  const rpcPayload = {
-    p_title: parsed.data.title,
-    p_sport: "basketball" as const,
-    p_mode: parsed.data.mode,
-    p_host_display_name: parsed.data.hostDisplayName,
-    p_allow_custom_cards: parsed.data.allowCustomCards,
-    p_visibility: parsed.data.visibility,
-    p_event_keys: null,
-    p_event_labels: null,
-    p_event_points: null,
-    p_auth_user_id: null,
-  };
-
-  console.log("[createGameAction] rpc_create_game payload", rpcPayload);
-
-  let hostSlug: string | null = null;
-
-  try {
-    const { data, error } = await supabase.rpc("rpc_create_game", rpcPayload);
-
-    console.log("[createGameAction] rpc_create_game response", { data, error });
-
-    if (error) {
-      console.error("[createGameAction] insert error", error);
-      throw error;
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message ?? "Invalid form submission" };
     }
 
-    const rows = Array.isArray(data) ? data : data ? [data] : [];
-    if (!rows.length) {
-      throw new Error("rpc_create_game returned no rows");
-    }
+    const supabase = createSupabaseAdminClient();
+    console.log("[createGameAction] SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
-    const resultRow = rows[0] as {
-      game_slug: string;
+    const rpcPayload = {
+      p_title: parsed.data.title,
+      p_sport: "basketball" as const,
+      p_mode: parsed.data.mode,
+      p_host_display_name: parsed.data.hostDisplayName,
+      p_allow_custom_cards: parsed.data.allowCustomCards,
+      p_visibility: parsed.data.visibility,
+      p_event_keys: null,
+      p_event_labels: null,
+      p_event_points: null,
+      p_auth_user_id: null,
     };
 
-    hostSlug = resultRow.game_slug;
-    console.log("[createGameAction] resolved hostSlug", hostSlug);
+    console.log("[createGameAction] rpc_create_game payload", rpcPayload);
 
-    const { data: verifyRow, error: verifyError } = await supabase
-      .from("games")
-      .select("id, slug, title, created_at")
-      .eq("slug", hostSlug)
-      .maybeSingle();
+    let hostSlug: string | null = null;
+    let hostPlayerId: string | null = null;
 
-    console.log("[createGameAction] immediate verify query", { verifyRow, verifyError });
+    try {
+      const rpcStartedAt = Date.now();
+      console.info("[createGameAction][perf] rpc_create_game start");
+      const { data, error } = await supabase.rpc("rpc_create_game", rpcPayload);
+      console.info("[createGameAction][perf] rpc_create_game end", {
+        durationMs: Date.now() - rpcStartedAt,
+      });
 
-    if (verifyError) {
-      throw verifyError;
+      console.log("[createGameAction] rpc_create_game response", { data, error });
+
+      if (error) {
+        console.error("[createGameAction] insert error", error);
+        throw error;
+      }
+
+      const rows = Array.isArray(data) ? data : data ? [data] : [];
+      if (!rows.length) {
+        throw new Error("rpc_create_game returned no rows");
+      }
+
+      const resultRow = rows[0] as {
+        game_slug: string;
+      };
+
+      hostSlug = resultRow.game_slug;
+      console.log("[createGameAction] resolved hostSlug", hostSlug);
+
+      const verifyGameStartedAt = Date.now();
+      console.info("[createGameAction][perf] games verify query start", { hostSlug });
+      const { data: verifyRow, error: verifyError } = await supabase
+        .from("games")
+        .select("id, slug, title, created_at")
+        .eq("slug", hostSlug)
+        .maybeSingle();
+      console.info("[createGameAction][perf] games verify query end", {
+        durationMs: Date.now() - verifyGameStartedAt,
+      });
+
+      console.log("[createGameAction] immediate verify query", { verifyRow, verifyError });
+
+      if (verifyError) {
+        throw verifyError;
+      }
+
+      if (!verifyRow?.id) {
+        throw new Error("Unable to resolve game configuration target");
+      }
+
+      const configUpdateStartedAt = Date.now();
+      console.info("[createGameAction][perf] games config update start", {
+        gameId: verifyRow.id,
+      });
+      const { error: configUpdateError } = await supabase
+        .from("games")
+        .update({
+          completion_mode: parsed.data.completion_mode,
+          end_condition: parsed.data.end_condition,
+          team_a_name: parsed.data.teamAName,
+          team_b_name: parsed.data.teamBName,
+          team_scope: parsed.data.teamScope,
+          events_per_card: parsed.data.eventsPerCard,
+        })
+        .eq("id", verifyRow.id)
+        .limit(1);
+      console.info("[createGameAction][perf] games config update end", {
+        durationMs: Date.now() - configUpdateStartedAt,
+      });
+
+      if (configUpdateError) {
+        throw configUpdateError;
+      }
+
+      const hostPlayerLookupStartedAt = Date.now();
+      console.info("[createGameAction][perf] host player check start", {
+        gameId: verifyRow.id,
+      });
+      const { data: existingHostPlayer, error: hostPlayerLookupError } = await supabase
+        .from("players")
+        .select("id")
+        .eq("game_id", verifyRow.id)
+        .eq("role", "host")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+      console.info("[createGameAction][perf] host player check end", {
+        durationMs: Date.now() - hostPlayerLookupStartedAt,
+        foundExistingHost: Boolean(existingHostPlayer?.id),
+      });
+
+      if (hostPlayerLookupError) {
+        throw hostPlayerLookupError;
+      }
+
+      if (existingHostPlayer?.id) {
+        hostPlayerId = existingHostPlayer.id;
+      } else {
+        const hostPlayerCreateStartedAt = Date.now();
+        console.info("[createGameAction][perf] host player create start", {
+          gameId: verifyRow.id,
+        });
+        const { data: insertedHostPlayer, error: insertHostPlayerError } = await supabase
+          .from("players")
+          .insert({
+            game_id: verifyRow.id,
+            display_name: parsed.data.hostDisplayName,
+            role: "host",
+            join_token: randomUUID(),
+          })
+          .select("id")
+          .maybeSingle<{ id: string }>();
+        console.info("[createGameAction][perf] host player create end", {
+          durationMs: Date.now() - hostPlayerCreateStartedAt,
+          insertedHostPlayerId: insertedHostPlayer?.id ?? null,
+        });
+
+        if (insertHostPlayerError) {
+          throw insertHostPlayerError;
+        }
+
+        hostPlayerId = insertedHostPlayer?.id ?? null;
+      }
+    } catch (error) {
+      if (isRedirectError(error)) {
+        throw error;
+      }
+      console.error("[createGameAction] error", error);
+      return { error: formatError(error) };
     }
 
-    if (!verifyRow?.id) {
-      throw new Error("Unable to resolve game configuration target");
+    if (!hostSlug) {
+      return { error: "Failed to resolve game host URL" };
     }
 
-    const { error: configUpdateError } = await supabase
-      .from("games")
-      .update({
-        completion_mode: parsed.data.completion_mode,
-        end_condition: parsed.data.end_condition,
-        team_a_name: parsed.data.teamAName,
-        team_b_name: parsed.data.teamBName,
-        team_scope: parsed.data.teamScope,
-        events_per_card: parsed.data.eventsPerCard,
-      })
-      .eq("id", verifyRow.id)
-      .limit(1);
+    if (!hostPlayerId) {
+      return { error: "Failed to initialize host player session" };
+    }
 
-    if (configUpdateError) {
-      throw configUpdateError;
-    }
-  } catch (error) {
-    if (isRedirectError(error)) {
-      throw error;
-    }
-    console.error("[createGameAction] error", error);
-    return { error: formatError(error) };
+    console.info("[createGameAction][perf] cookie set + redirect", {
+      hostSlug,
+      hasHostPlayerId: Boolean(hostPlayerId),
+    });
+    const cookieStore = await cookies();
+    cookieStore.set({
+      name: "bingra-player-id",
+      value: hostPlayerId,
+      path: `/g/${hostSlug}`,
+      maxAge: 60 * 60 * 24 * 30,
+      httpOnly: true,
+      sameSite: "lax",
+    });
+
+    console.log("[createGameAction] redirecting to", `/g/${hostSlug}/play`);
+    redirect(`/g/${hostSlug}/play`);
+  } finally {
+    console.info("[createGameAction][perf] total action duration", {
+      durationMs: Date.now() - actionStartedAt,
+    });
   }
-
-  if (!hostSlug) {
-    return { error: "Failed to resolve game host URL" };
-  }
-
-  console.log("[createGameAction] redirecting to", `/g/${hostSlug}/play`);
-  redirect(`/g/${hostSlug}/play`);
 }

@@ -12,6 +12,7 @@ import {
   type CardCell as ProgressCardCell,
   type RecordedEvent,
 } from "../../lib/bingra/card-progress";
+import { finalizeGameAndSetWinner } from "../../lib/bingra/finalize-game";
 
 export type RecordEventFormState = {
   error?: string;
@@ -48,9 +49,23 @@ export async function recordEventAction(
   _prevState: RecordEventFormState,
   formData: FormData
 ): Promise<RecordEventFormState> {
+  const actionStartedAt = Date.now();
   const rawSlug = formData.get("slug");
   const rawEventKey = formData.get("eventKey");
   const rawTeam = formData.get("team");
+
+  console.info("[recordEventAction][perf] action start", {
+    startedAt: new Date(actionStartedAt).toISOString(),
+    slug: typeof rawSlug === "string" ? rawSlug.trim() : "",
+    eventKey: typeof rawEventKey === "string" ? rawEventKey.trim() : "",
+    team: rawTeam === "A" || rawTeam === "B" ? rawTeam : null,
+  });
+
+  const logTotalDuration = () => {
+    console.info("[recordEventAction][perf] total action duration", {
+      durationMs: Date.now() - actionStartedAt,
+    });
+  };
 
   const parsed = recordEventSchema.safeParse({
     slug: typeof rawSlug === "string" ? rawSlug.trim() : "",
@@ -60,6 +75,7 @@ export async function recordEventAction(
   });
 
   if (!parsed.success) {
+    logTotalDuration();
     return {
       error: parsed.error.issues[0]?.message ?? "Invalid submission",
       completedAt: new Date().toISOString(),
@@ -68,6 +84,10 @@ export async function recordEventAction(
 
   const supabase = createSupabaseAdminClient();
 
+  const gameLookupStartedAt = Date.now();
+  console.info("[recordEventAction][perf] game lookup start", {
+    slug: parsed.data.slug,
+  });
   const { data: game, error: gameError } = await supabase
     .from("games")
     .select("id, status, completion_mode, end_condition, team_scope")
@@ -79,12 +99,18 @@ export async function recordEventAction(
       end_condition: "FIRST_COMPLETION" | "HOST_DECLARED";
       team_scope: "both_teams" | "team_a_only" | "team_b_only";
     }>();
+  console.info("[recordEventAction][perf] game lookup end", {
+    durationMs: Date.now() - gameLookupStartedAt,
+    foundGame: Boolean(game?.id),
+  });
 
   if (gameError) {
+    logTotalDuration();
     return { error: formatError(gameError), completedAt: new Date().toISOString() };
   }
 
   if (!game) {
+    logTotalDuration();
     return { error: "Game not found", completedAt: new Date().toISOString() };
   }
 
@@ -95,6 +121,7 @@ export async function recordEventAction(
         ? "Game has not started yet"
         : "Game already completed";
 
+    logTotalDuration();
     return {
       error: blockedReason,
       blocked: true,
@@ -110,6 +137,7 @@ export async function recordEventAction(
 
   if (!validation.valid) {
     const reason = (validation as { valid: false; reason: string }).reason;
+    logTotalDuration();
     return { error: reason, completedAt: new Date().toISOString() };
   }
 
@@ -124,14 +152,24 @@ export async function recordEventAction(
     insertPayload.team_key = parsed.data.team;
   }
 
+  const scoredEventInsertStartedAt = Date.now();
+  console.info("[recordEventAction][perf] scored_events insert start", {
+    gameId: game.id,
+    eventKey: validation.event.id,
+  });
   const { data: inserted, error: insertError } = await supabase
     .from("scored_events")
     .insert(insertPayload)
     .select("id")
     .maybeSingle();
+  console.info("[recordEventAction][perf] scored_events insert end", {
+    durationMs: Date.now() - scoredEventInsertStartedAt,
+    insertedEventId: inserted?.id ?? null,
+  });
 
   if (insertError) {
     const schemaHint = insertError.code === "PGRST204" ? " (schema mismatch: column missing)" : "";
+    logTotalDuration();
     return {
       error: formatError(insertError) + schemaHint,
       completedAt: new Date().toISOString(),
@@ -139,20 +177,28 @@ export async function recordEventAction(
   }
 
   if (!inserted) {
+    logTotalDuration();
     return {
       error: "Failed to record scored event",
       completedAt: new Date().toISOString(),
     };
   }
 
+  const scoredEventsReadStartedAt = Date.now();
+  console.info("[recordEventAction][perf] scored_events read start", { gameId: game.id });
   const { data: scoredEventsAfter, error: scoredEventsAfterError } = await supabase
     .from("scored_events")
     .select("id, event_key, team_key, created_at")
     .eq("game_id", game.id)
     .order("created_at", { ascending: true })
     .order("id", { ascending: true });
+  console.info("[recordEventAction][perf] scored_events read end", {
+    durationMs: Date.now() - scoredEventsReadStartedAt,
+    rowCount: scoredEventsAfter?.length ?? 0,
+  });
 
   if (scoredEventsAfterError) {
+    logTotalDuration();
     return { error: formatError(scoredEventsAfterError), completedAt: new Date().toISOString() };
   }
 
@@ -171,15 +217,23 @@ export async function recordEventAction(
       team_key: event.team_key,
     }));
 
+  const cardsReadStartedAt = Date.now();
+  console.info("[recordEventAction][perf] cards read start", { gameId: game.id });
   const { data: cards, error: cardsError } = await supabase
     .from("cards")
     .select("id, player_id, card_cells(order_index, event_key, team_key, point_value)")
     .eq("game_id", game.id);
+  console.info("[recordEventAction][perf] cards read end", {
+    durationMs: Date.now() - cardsReadStartedAt,
+    cardCount: cards?.length ?? 0,
+  });
 
   if (cardsError) {
+    logTotalDuration();
     return { error: formatError(cardsError), completedAt: new Date().toISOString() };
   }
 
+  const scoreRecomputeStartedAt = Date.now();
   const completionTransitions: Array<{ game_id: string; player_id: string; completed_at_event_id: string }> =
     [];
 
@@ -215,14 +269,27 @@ export async function recordEventAction(
       });
     }
   }
+  console.info("[recordEventAction][perf] score recompute end", {
+    durationMs: Date.now() - scoreRecomputeStartedAt,
+    completionTransitions: completionTransitions.length,
+  });
 
   if (completionTransitions.length > 0) {
+    const existingCompletionsReadStartedAt = Date.now();
+    console.info("[recordEventAction][perf] completion lookup start", {
+      gameId: game.id,
+    });
     const { data: existingCompletions, error: existingCompletionsError } = await supabase
       .from("game_completions")
       .select("player_id")
       .eq("game_id", game.id);
+    console.info("[recordEventAction][perf] completion lookup end", {
+      durationMs: Date.now() - existingCompletionsReadStartedAt,
+      existingCount: existingCompletions?.length ?? 0,
+    });
 
     if (existingCompletionsError) {
+      logTotalDuration();
       return { error: formatError(existingCompletionsError), completedAt: new Date().toISOString() };
     }
 
@@ -237,11 +304,19 @@ export async function recordEventAction(
     );
 
     if (rowsToInsert.length > 0) {
+      const completionInsertStartedAt = Date.now();
+      console.info("[recordEventAction][perf] completion insert start", {
+        rowsToInsert: rowsToInsert.length,
+      });
       const { error: completionInsertError } = await supabase
         .from("game_completions")
         .insert(rowsToInsert);
+      console.info("[recordEventAction][perf] completion insert end", {
+        durationMs: Date.now() - completionInsertStartedAt,
+      });
 
       if (completionInsertError && completionInsertError.code !== "23505") {
+        logTotalDuration();
         return { error: formatError(completionInsertError), completedAt: new Date().toISOString() };
       }
     }
@@ -250,22 +325,34 @@ export async function recordEventAction(
   const currentTime = new Date().toISOString();
 
   if (game.end_condition === "FIRST_COMPLETION" && completionTransitions.length > 0) {
-    const { error: updateError } = await supabase
-      .from("games")
-      .update({
-        status: "finished",
-        completed_at: currentTime,
-      })
-      .eq("id", game.id)
-      .neq("status", "finished");
-
-    if (updateError) {
+    const finalizeStartedAt = Date.now();
+    console.info("[recordEventAction][perf] finalization/winner start", {
+      gameId: game.id,
+      completionMode: game.completion_mode,
+    });
+    try {
+      await finalizeGameAndSetWinner({
+        supabase,
+        gameId: game.id,
+        completionMode: game.completion_mode,
+        completedAt: currentTime,
+      });
+      console.info("[recordEventAction][perf] finalization/winner end", {
+        durationMs: Date.now() - finalizeStartedAt,
+      });
+    } catch (error) {
+      console.info("[recordEventAction][perf] finalization/winner end", {
+        durationMs: Date.now() - finalizeStartedAt,
+        failed: true,
+      });
+      logTotalDuration();
       return {
-        error: formatError(updateError),
+        error: formatError(error),
         completedAt: new Date().toISOString(),
       };
     }
 
+    logTotalDuration();
     return {
       success: true,
       recordedEventId: inserted.id,
@@ -273,6 +360,7 @@ export async function recordEventAction(
     };
   }
 
+  logTotalDuration();
   return {
     success: true,
     recordedEventId: inserted.id,

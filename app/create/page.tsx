@@ -215,9 +215,6 @@ export default function CreatePage() {
     return Array.from({ length: eventsPerCard }, (_, index) => previewPool[index % previewPool.length]);
   }, [eventsPerCard, previewPool]);
 
-  const previewColumns =
-    eventsPerCard <= 7 ? "grid-cols-2" : eventsPerCard <= 10 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-3";
-
   return (
     <main className="min-h-screen text-[#2f2925]">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-8 sm:px-6 md:py-10">
@@ -388,7 +385,7 @@ export default function CreatePage() {
   <SectionHeader
     eyebrow="Card rules"
     title="How do players win?"
-    description="Choose how players complete their cards, when the Bingra ends, and how many events each card includes."
+    description="Choose how players earn points, when Bingra can end the game, and how many events each card includes."
   />
 
   <div className="space-y-6">
@@ -417,20 +414,20 @@ export default function CreatePage() {
     <div>
       <p className="text-sm font-semibold text-[#3a332e]">When the game ends</p>
       <p className="mt-1 text-sm text-[#6b6159]">
-        Choose whether the room ends immediately when someone finishes or stays open through the full game.
+        Bingra means a full completed card and doubles that player's points. Choose whether the game should auto-end on first Bingra, or only end when the host ends it manually.
       </p>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <ChoiceCard
           selected={endCondition === "first_to_complete"}
-          title="First completion wins"
-          description="End the game as soon as a player finishes their card."
+          title="End on first Bingra"
+          description="Game ends automatically when the first Bingra happens; host can still end the game manually at any time while live."
           onClick={() => setEndCondition("first_to_complete")}
         />
         <ChoiceCard
           selected={endCondition === "host_ends"}
-          title="Full game counts"
-          description="Keep Bingra open until the observed game is over."
+          title="Host ends game"
+          description="Keep playing until the host ends the game manually."
           onClick={() => setEndCondition("host_ends")}
         />
       </div>
@@ -449,8 +446,8 @@ export default function CreatePage() {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-11">
-        {[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((value) => {
+      <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-7">
+        {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((value) => {
           const active = value === eventsPerCard;
 
           return (
@@ -501,11 +498,11 @@ export default function CreatePage() {
                     </div>
                   </div>
 
-                  <div className={`mt-4 grid gap-3 ${previewColumns}`}>
+                  <div className="mt-4 space-y-2">
                     {previewCardEvents.map((item, index) => (
                       <div
                         key={`${item}-${index}`}
-                        className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm"
+                        className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
                       >
                         <div className="flex items-start gap-3">
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#d8ccc0] bg-white text-[11px] font-bold text-[#6f6257]">

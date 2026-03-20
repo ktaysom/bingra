@@ -13,6 +13,7 @@ export function PlayRealtimeBridge({ gameId }: PlayRealtimeBridgeProps) {
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
+    const channelName = `play-live-${gameId}`;
 
     console.info("[PlayRealtimeBridge] mount", { gameId });
 
@@ -25,7 +26,10 @@ export function PlayRealtimeBridge({ gameId }: PlayRealtimeBridgeProps) {
       new?: unknown;
       old?: unknown;
     }) => {
-      console.info("[PlayRealtimeBridge] realtime event", payload);
+      console.info("[PlayRealtimeBridge] realtime event", {
+        gameId,
+        ...payload,
+      });
 
       if (refreshTimer) {
         clearTimeout(refreshTimer);
@@ -42,8 +46,13 @@ export function PlayRealtimeBridge({ gameId }: PlayRealtimeBridgeProps) {
       }, 75);
     };
 
+    console.info("[PlayRealtimeBridge] subscription create", {
+      gameId,
+      channel: channelName,
+    });
+
     const channel = supabase
-      .channel(`play-live-${gameId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -119,7 +128,7 @@ export function PlayRealtimeBridge({ gameId }: PlayRealtimeBridgeProps) {
       .subscribe((status) => {
         console.info("[PlayRealtimeBridge] subscription status", {
           gameId,
-          channel: `play-live-${gameId}`,
+          channel: channelName,
           status,
         });
       });
@@ -129,6 +138,10 @@ export function PlayRealtimeBridge({ gameId }: PlayRealtimeBridgeProps) {
       if (refreshTimer) {
         clearTimeout(refreshTimer);
       }
+      console.info("[PlayRealtimeBridge] subscription cleanup", {
+        gameId,
+        channel: channelName,
+      });
       supabase.removeChannel(channel);
     };
   }, [gameId, router]);

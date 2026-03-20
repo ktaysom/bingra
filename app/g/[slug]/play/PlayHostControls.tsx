@@ -123,7 +123,9 @@ export function EndGameControl({ slug }: EndGameControlProps) {
   return (
     <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm sm:p-6">
       <p className="font-semibold">Ending the game cannot be undone.</p>
-      <p className="mt-1 text-xs text-amber-800">Are you sure you want to end it now?</p>
+      <p className="mt-1 text-xs text-amber-800">
+        Are you sure you want to end it now? Winner will be based on highest final score (Bingra doubles points), not who got first Bingra.
+      </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"

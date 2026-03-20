@@ -127,7 +127,7 @@ export function HostScoringPanel({
   const isScoringLocked = isFinished || Boolean(recordState.blocked);
   const lockReason =
     recordState.blockedReason ??
-    (isFinished ? "Scoring is locked because this game is complete." : undefined);
+    (isFinished ? "Scoring is locked because this game has ended." : undefined);
 
   function submitEvent(eventId: string, label: string, team?: "A" | "B" | null) {
     if (isScoringLocked) return;
@@ -388,7 +388,7 @@ export function HostScoringPanel({
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-5 text-sm text-amber-900">
             <p className="font-semibold">Scoring locked</p>
             <p className="mt-1 text-xs text-amber-800">
-              {lockReason ?? "This game is complete. New scoring submissions are blocked."}
+              {lockReason ?? "This game has ended. New scoring submissions are blocked."}
             </p>
           </div>
         )}

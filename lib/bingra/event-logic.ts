@@ -80,6 +80,9 @@ const SCORER_PARENT_EVENT_LABELS: Record<
     { id: "DUNK", label: "Dunk" },
     { id: "THREE_POINTER_MADE", label: "3-pointer made" },
   ],
+  misc: [
+    {id: "TIMEOUT_CALLED", label: "Timeout called" },
+  ]
 };
 
 export function getEnabledEvents(): GameEventType[] {

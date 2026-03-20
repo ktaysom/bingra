@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
+import { recomputeGameCompletions } from "../../lib/bingra/recompute-game-completions";
 
 export type DeleteScoredEventFormState = {
   success?: boolean;
@@ -51,9 +52,9 @@ export async function deleteScoredEventAction(
 
   const { data: game, error: gameError } = await supabase
     .from("games")
-    .select("id")
+    .select("id, status, completion_mode")
     .eq("slug", parsed.data.slug)
-    .maybeSingle<{ id: string }>();
+    .maybeSingle<{ id: string; status: "lobby" | "live" | "finished"; completion_mode: "BLACKOUT" | "STREAK" }>();
 
   if (gameError) {
     return { error: formatError(gameError), completedAt: new Date().toISOString() };
@@ -62,6 +63,13 @@ export async function deleteScoredEventAction(
   if (!game) {
     return {
       error: "Game not found",
+      completedAt: new Date().toISOString(),
+    };
+  }
+
+  if (game.status === "finished") {
+    return {
+      error: "Finished games cannot be corrected. Create a new game for adjusted scoring.",
       completedAt: new Date().toISOString(),
     };
   }
@@ -95,6 +103,19 @@ export async function deleteScoredEventAction(
   if (deleteError) {
     return {
       error: formatError(deleteError),
+      completedAt: new Date().toISOString(),
+    };
+  }
+
+  try {
+    await recomputeGameCompletions({
+      supabase,
+      gameId: game.id,
+      completionMode: game.completion_mode,
+    });
+  } catch (error) {
+    return {
+      error: formatError(error),
       completedAt: new Date().toISOString(),
     };
   }

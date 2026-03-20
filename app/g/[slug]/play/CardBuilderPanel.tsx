@@ -476,7 +476,7 @@ export function CardBuilderPanel({
           ) : (
             <>
               <p className="text-sm font-medium text-slate-600">Compact preview</p>
-              <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+              <div className="space-y-2 text-sm text-slate-700">
                 {lockedCard.map((event, index) => (
                   (() => {
                     const tone = getIdentityTone(event.cardTeamKey ?? null);
@@ -515,7 +515,10 @@ export function CardBuilderPanel({
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Card Builder</p>
         <h2 className="text-2xl font-semibold text-slate-900">Build card</h2>
         <p className="text-xs text-slate-600">
-          {mode === "streak" ? "Streak order" : "Blackout"} • Risk {riskLevel}/5 • {Math.round(cardSummary.totalBasePoints)} pts • {endCondition === "FIRST_COMPLETION" ? "first complete wins" : "host ends: highest completed-card points"}
+          {mode === "streak" ? "Streak order" : "Blackout"} • Risk {riskLevel}/5 • {Math.round(cardSummary.totalBasePoints)} raw pts • {endCondition === "FIRST_COMPLETION" ? "auto-ends on first Bingra (host can also end manually)" : "host ends game"}
+        </p>
+        <p className="text-xs text-slate-500">
+          Bingra = full card completion and applies a 2x multiplier to total raw points at game end.
         </p>
       </div>
 
@@ -751,6 +754,11 @@ export function CardBuilderPanel({
       {!isCardReadyToAccept && (
         <p className="mt-2 text-xs text-amber-700">
           Add {missingEventsCount} more event{missingEventsCount === 1 ? "" : "s"} before accepting.
+        </p>
+      )}
+      {!playerId && isHydrated && (
+        <p className="mt-2 text-xs text-amber-700" role="alert">
+          You need to join this game before you can accept a card.
         </p>
       )}
       {generateState.error && (
