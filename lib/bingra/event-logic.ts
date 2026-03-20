@@ -60,29 +60,8 @@ const SCORER_PARENT_OPTIONS: ScorerParentOption[] = [
   { id: "score", label: "Score" },
 ];
 
-const SCORER_PARENT_EVENT_LABELS: Record<
-  ScorerParentCategory,
-  Array<{ id: string; label: string; subtypeGroup?: ScorerSubtypeGroup }>
-> = {
-  "change-of-possession": [
-    { id: "STEAL", label: "Steal" },
-    { id: "CHARGE_TAKEN", label: "Charge" },
-    { id: "JUMP_BALL_CALL", label: "Jump ball" },
-    { id: "TRAVEL", label: "Travel" },
-    { id: "DOUBLE_DRIBBLE", label: "Double dribble" },
-    { id: "ILLEGAL_SCREEN", label: "Illegal screen" },
-    { id: "THREE_SECOND_CALL", label: "3-second call" },
-    { id: "FIVE_SECOND_CALL", label: "5-second call" },
-    { id: "OVER_AND_BACK", label: "Over and back" },
-  ],
-  score: [
-    { id: "FREE_THROW_FLOW", label: "Made free throw", subtypeGroup: "free-throw" },
-    { id: "DUNK", label: "Dunk" },
-    { id: "THREE_POINTER_MADE", label: "3-pointer made" },
-  ],
-  misc: [
-    {id: "TIMEOUT_CALLED", label: "Timeout called" },
-  ]
+const SCORER_SUBTYPE_FLOW_LABELS: Partial<Record<ScorerSubtypeGroup, string>> = {
+  "free-throw": "Made free throw",
 };
 
 export function getEnabledEvents(): GameEventType[] {
@@ -451,18 +430,50 @@ export function getScorerEventsForParent(
     (event) => event.scorerParentCategory === parent,
   );
 
-  const availableEventIds = new Set(parentEvents.map((event) => event.id));
-  const hasFreeThrowFlow = parentEvents.some(
-    (event) => event.scorerSubtypeGroup === "free-throw",
-  );
+  const directEventOptions = parentEvents
+    .filter((event) => (event.scorerSubtypeGroup ?? "none") === "none")
+    .map((event) => ({
+      id: event.id,
+      label: event.label,
+      subtypeGroup: event.scorerSubtypeGroup,
+      order: event.scorerOrder ?? 999,
+    }));
 
-  return SCORER_PARENT_EVENT_LABELS[parent].filter((option) => {
-    if (option.id === "FREE_THROW_FLOW") {
-      return hasFreeThrowFlow;
-    }
+  const subtypeFlowOptions = Object.entries(
+    parentEvents.reduce<Partial<Record<ScorerSubtypeGroup, number>>>((acc, event) => {
+      const subgroup = event.scorerSubtypeGroup ?? "none";
 
-    return availableEventIds.has(option.id);
-  });
+      if (subgroup === "none") {
+        return acc;
+      }
+
+      const order = event.scorerOrder ?? 999;
+      const existing = acc[subgroup];
+
+      if (existing === undefined || order < existing) {
+        acc[subgroup] = order;
+      }
+
+      return acc;
+    }, {}),
+  )
+    .filter(([subgroup]) => subgroup !== "none")
+    .map(([subgroup, order]) => ({
+      id: `${subgroup.toUpperCase().replace(/-/g, "_")}_FLOW`,
+      label: SCORER_SUBTYPE_FLOW_LABELS[subgroup as ScorerSubtypeGroup] ?? subgroup,
+      subtypeGroup: subgroup as ScorerSubtypeGroup,
+      order: order ?? 999,
+    }));
+
+  return [...directEventOptions, ...subtypeFlowOptions]
+    .sort((a, b) => {
+      if (a.order !== b.order) {
+        return a.order - b.order;
+      }
+
+      return a.label.localeCompare(b.label);
+    })
+    .map(({ id, label, subtypeGroup }) => ({ id, label, subtypeGroup }));
 }
 
 export function getScorerSubtypeOptions(
