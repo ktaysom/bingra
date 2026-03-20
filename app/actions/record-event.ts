@@ -88,12 +88,17 @@ export async function recordEventAction(
     return { error: "Game not found", completedAt: new Date().toISOString() };
   }
 
-  if (game.status === "finished") {
+  if (game.status !== "live") {
     const blockedAt = new Date().toISOString();
+    const blockedReason =
+      game.status === "lobby"
+        ? "Game has not started yet"
+        : "Game already completed";
+
     return {
-      error: "Game already completed",
+      error: blockedReason,
       blocked: true,
-      blockedReason: "Game already completed",
+      blockedReason,
       completedAt: blockedAt,
     };
   }

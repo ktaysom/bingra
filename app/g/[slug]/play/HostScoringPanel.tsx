@@ -286,7 +286,7 @@ export function HostScoringPanel({
   const showBackButton = !isScoringLocked && stage !== "parent";
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+    <section className="rounded-2xl bg-white/90 p-4 shadow-sm sm:p-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -304,7 +304,7 @@ export function HostScoringPanel({
           <button
             type="button"
             onClick={handleBack}
-            className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700"
+            className="rounded-2xl bg-white/90 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm"
           >
             Back
           </button>
@@ -331,7 +331,7 @@ export function HostScoringPanel({
                     key={option.id}
                     type="button"
                     onClick={() => handleParentSelect(option.id)}
-                    className="min-h-20 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-left text-base font-semibold text-slate-900 transition hover:border-blue-500 hover:bg-blue-50"
+                    className="min-h-20 rounded-2xl bg-white/90 px-4 py-5 text-left text-base font-semibold text-slate-900 shadow-sm transition-all duration-150 hover:scale-[1.02]"
                   >
                     {option.label}
                   </button>
@@ -346,7 +346,7 @@ export function HostScoringPanel({
                     key={option.id}
                     type="button"
                     onClick={() => handleEventSelect(option)}
-                    className="min-h-16 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left text-base font-medium text-slate-900 transition hover:border-blue-500 hover:bg-blue-50"
+                    className="min-h-16 rounded-2xl bg-white/90 px-4 py-4 text-left text-base font-medium text-slate-900 shadow-sm transition-all duration-150 hover:scale-[1.02]"
                   >
                     {option.label}
                   </button>
@@ -361,7 +361,7 @@ export function HostScoringPanel({
                     key={option.id}
                     type="button"
                     onClick={() => handleSubtypeSelect(option.id)}
-                    className="min-h-16 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left text-base font-medium text-slate-900 transition hover:border-blue-500 hover:bg-blue-50"
+                    className="min-h-16 rounded-2xl bg-white/90 px-4 py-4 text-left text-base font-medium text-slate-900 shadow-sm transition-all duration-150 hover:scale-[1.02]"
                   >
                     {option.label}
                   </button>
@@ -376,7 +376,7 @@ export function HostScoringPanel({
                     key={team}
                     type="button"
                     onClick={() => handleTeamSelect(team)}
-                    className="min-h-20 rounded-2xl border border-blue-500 bg-blue-500 px-4 py-5 text-center text-base font-semibold text-white transition hover:bg-blue-600"
+                    className="min-h-20 rounded-2xl bg-[#2f6df6] px-4 py-5 text-center text-base font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda]"
                   >
                     {teamNames[team]}
                   </button>
@@ -394,7 +394,7 @@ export function HostScoringPanel({
         )}
 
       {recentEvents.length > 0 && (
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+        <div className="mt-6 rounded-2xl bg-white/90 p-4 text-xs text-slate-600 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent</p>
           <ul className="mt-3 space-y-2">
             {recentEvents.map((entry, index) => {
@@ -405,7 +405,7 @@ export function HostScoringPanel({
               return (
                 <li
                   key={`${entry.recordedEventId ?? entry.eventKey ?? entry.label}-${index}`}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
                 >
                   <div className="min-w-0">
                     <p className="truncate font-medium text-slate-900">{label}</p>
@@ -422,7 +422,7 @@ export function HostScoringPanel({
                       <button
                         type="button"
                         onClick={() => undoRecent(entry.recordedEventId)}
-                        className="rounded-full border border-red-300 px-3 py-1 text-xs font-medium text-red-600"
+                        className="rounded-2xl bg-white/90 px-3 py-1 text-xs font-medium text-red-600 shadow-sm"
                       >
                         Undo
                       </button>

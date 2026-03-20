@@ -59,18 +59,18 @@ function stripTeamPrefix(label: string, teamName: string | null): string {
 function getIdentityTone(teamKey: TeamKey | null): { container: string } {
   if (teamKey === "A") {
     return {
-      container: "border border-blue-200 border-l-4 border-l-blue-400 bg-white",
+      container: "border border-blue-200 border-l-4 border-l-blue-400 bg-white/90 shadow-sm",
     };
   }
 
   if (teamKey === "B") {
     return {
-      container: "border border-emerald-200 border-l-4 border-l-emerald-400 bg-white",
+      container: "border border-emerald-200 border-l-4 border-l-emerald-400 bg-white/90 shadow-sm",
     };
   }
 
   return {
-    container: "border border-slate-200 border-l-4 border-l-slate-300 bg-white",
+    container: "border border-slate-200 border-l-4 border-l-slate-300 bg-white/90 shadow-sm",
   };
 }
 
@@ -387,48 +387,84 @@ export function CardBuilderPanel({
     const lockedCard = hasPersistedLockedCard ? lockedCardEvents : cardEvents;
 
     return (
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Card Builder</p>
           <h2 className="text-2xl font-semibold text-slate-900">Your card is locked</h2>
           <p className="text-sm text-slate-500">Waiting for the host to start the game.</p>
         </div>
 
-        <div className="mt-6 space-y-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-medium text-slate-600">Compact preview</p>
-          <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-            {lockedCard.map((event, index) => (
-              (() => {
-                const tone = getIdentityTone(event.cardTeamKey ?? null);
-                const teamName = event.cardTeamKey ? teamNames[event.cardTeamKey] : null;
+        <div className="mt-6 space-y-4 rounded-2xl bg-white/90 p-4 shadow-sm">
+          {mode === "streak" ? (
+            <>
+              <p className="text-sm font-medium text-slate-600">Streak order</p>
+              <div className="rounded-2xl bg-white/90 shadow-sm">
+                <ul className="divide-y divide-slate-200">
+                  {lockedCard.map((event, index) => {
+                    const tone = getIdentityTone(event.cardTeamKey ?? null);
+                    const teamName = event.cardTeamKey ? teamNames[event.cardTeamKey] : null;
 
-                return (
-              <div
-                key={`${event.id}-${event.cardTeamKey ?? "NONE"}-${index}`}
-                className={`rounded-lg px-3 py-2 ${tone.container} ${
-                  event.marked ? "ring-1 ring-blue-300" : ""
-                }`}
-              >
-                <p className="font-medium text-slate-900">{stripTeamPrefix(event.label, teamName)}</p>
-                {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
-                <p className="text-xs text-slate-500">{event.basePoints} pts</p>
-                {event.marked && (
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
-                    Marked
-                  </p>
-                )}
+                    return (
+                      <li
+                        key={`${event.id}-${event.cardTeamKey ?? "NONE"}-${index}`}
+                        className={`flex items-center justify-between gap-3 px-4 py-3 text-sm text-slate-700 ${tone.container} ${
+                          event.marked ? "ring-1 ring-blue-300" : ""
+                        }`}
+                      >
+                        <div>
+                          <p className="font-medium text-slate-900">
+                            {index + 1}. {stripTeamPrefix(event.label, teamName)}
+                          </p>
+                          {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
+                          <p className="text-xs text-slate-500">{event.basePoints} pts</p>
+                        </div>
+                        {event.marked && (
+                          <p className="text-xs font-semibold text-blue-600">Complete</p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-                );
-              })()
-            ))}
-          </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-slate-600">Compact preview</p>
+              <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+                {lockedCard.map((event, index) => (
+                  (() => {
+                    const tone = getIdentityTone(event.cardTeamKey ?? null);
+                    const teamName = event.cardTeamKey ? teamNames[event.cardTeamKey] : null;
+
+                    return (
+                  <div
+                    key={`${event.id}-${event.cardTeamKey ?? "NONE"}-${index}`}
+                    className={`rounded-lg px-3 py-2 ${tone.container} ${
+                      event.marked ? "ring-1 ring-blue-300" : ""
+                    }`}
+                  >
+                    <p className="font-medium text-slate-900">{stripTeamPrefix(event.label, teamName)}</p>
+                    {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
+                    <p className="text-xs text-slate-500">{event.basePoints} pts</p>
+                    {event.marked && (
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                        Complete
+                      </p>
+                    )}
+                  </div>
+                    );
+                  })()
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </section>
     );
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
       <div className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Card Builder</p>
         <h2 className="text-2xl font-semibold text-slate-900">Build card</h2>
@@ -438,7 +474,7 @@ export function CardBuilderPanel({
       </div>
 
       <div className="mt-6 space-y-4">
-        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-2xl bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Risk level</p>
             <p className="text-lg font-semibold text-slate-900">{riskLevel} / 5</p>
@@ -462,10 +498,10 @@ export function CardBuilderPanel({
 
         {mode === "streak" ? (
           <div>
-            <div className="mt-3 rounded-2xl border border-slate-200 bg-white/70">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <div className="mt-3 rounded-2xl bg-white/90 shadow-sm">
+            <div className="flex items-center justify-between px-4 py-3">
               <p className="text-sm font-semibold text-slate-900">Streak order</p>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Drag handle to reorder</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Drag to reorder</p>
             </div>
             <ul className="divide-y divide-slate-200">
               {cardEvents.map((event, index) => (
@@ -492,7 +528,7 @@ export function CardBuilderPanel({
                     <button
                       type="button"
                       onClick={() => handleRemoveEvent(index)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-300 bg-white text-sm font-semibold text-red-600"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/90 text-sm font-semibold text-red-600 shadow-sm"
                       aria-label={`Remove ${event.label}`}
                     >
                       ×
@@ -508,7 +544,7 @@ export function CardBuilderPanel({
         ) : (
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Card events</p>
-            <div className="mx-auto mt-3 max-w-2xl rounded-2xl border border-slate-200 bg-white/70">
+            <div className="mx-auto mt-3 max-w-2xl rounded-2xl bg-white/90 shadow-sm">
               <ul className="divide-y divide-slate-200">
                 {cardEvents.map((event, index) => {
                   const tone = getIdentityTone(event.cardTeamKey ?? null);
@@ -527,7 +563,7 @@ export function CardBuilderPanel({
                       <button
                         type="button"
                         onClick={() => handleRemoveEvent(index)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-300 bg-white text-sm font-semibold text-red-600"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/90 text-sm font-semibold text-red-600 shadow-sm"
                         aria-label={`Remove ${event.label}`}
                       >
                         ×
@@ -540,7 +576,7 @@ export function CardBuilderPanel({
           </div>
         )}
 
-        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <section className="rounded-2xl bg-white/90 p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Add events</p>
@@ -558,13 +594,13 @@ export function CardBuilderPanel({
           <button
             type="button"
             onClick={() => setIsAddSheetOpen((prev) => !prev)}
-            className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+            className="mt-3 w-full rounded-2xl bg-white/90 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm"
           >
             {isAddSheetOpen ? "Hide add events" : "Browse add events"}
           </button>
 
           {isAddSheetOpen && (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+            <div className="mt-3 rounded-2xl bg-white/90 p-3 shadow-sm">
               <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
                 {([
                   { key: "all", label: "All" },
@@ -591,10 +627,10 @@ export function CardBuilderPanel({
 
                         toggleFilter(chip.key);
                       }}
-                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      className={`shrink-0 rounded-2xl px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
                         selected
-                          ? "border-slate-700 bg-slate-700 text-white"
-                          : "border-slate-300 bg-white text-slate-700"
+                          ? "bg-[#2f6df6] text-white"
+                          : "bg-white/90 text-slate-700 shadow-sm"
                       }`}
                     >
                       {chip.label}
@@ -629,7 +665,7 @@ export function CardBuilderPanel({
                               type="button"
                               onClick={() => handleAddEvent(event)}
                               disabled={disabled}
-                              className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                              className="rounded-2xl bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm disabled:opacity-50"
                             >
                               {alreadyOnCard ? "Added" : "Add"}
                             </button>
@@ -640,7 +676,7 @@ export function CardBuilderPanel({
                   </div>
                 ))}
                 {Object.keys(addableGroups).length === 0 && (
-                  <p className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
+                  <p className="rounded-2xl bg-white/90 px-3 py-3 text-xs text-slate-500 shadow-sm">
                     No events match this filter right now.
                   </p>
                 )}
@@ -653,14 +689,14 @@ export function CardBuilderPanel({
           <button
             type="button"
             onClick={handleGenerateAgain}
-            className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            className="rounded-2xl bg-white/90 px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-150 hover:scale-[1.02]"
           >
             Generate again
           </button>
           <button
             type="button"
             onClick={handleAcceptCard}
-            className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="rounded-2xl bg-[#2f6df6] px-5 py-2 text-sm font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2f6df6]"
             disabled={!playerId || !isCardReadyToAccept}
           >
             Accept card

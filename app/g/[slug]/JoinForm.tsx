@@ -21,7 +21,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex h-14 w-full items-center justify-center rounded-2xl bg-blue-600 px-6 text-base font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-400"
+      className="inline-flex h-14 w-full items-center justify-center rounded-2xl bg-[#2f6df6] px-6 text-base font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda] disabled:cursor-not-allowed disabled:opacity-60"
     >
       {pending ? "Joining..." : "Join game"}
     </button>

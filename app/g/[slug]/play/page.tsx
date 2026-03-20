@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { CardBuilderPanel } from "./CardBuilderPanel";
 import { HostScoringPanel } from "./HostScoringPanel";
 import { PlayRealtimeBridge } from "./PlayRealtimeBridge";
+import { EndGameControl, GameStatusActionButton, ShareGameControl } from "./PlayHostControls";
 import { getPlayModeLabel, mapPlayModeToGameMode } from "../../../../lib/bingra/types";
 import {
   chooseRandomEvents,
@@ -133,8 +134,8 @@ export default async function PlayPage(props: PlayPageProps) {
 
   if (gameError || !game) {
     return (
-      <main className="mx-auto flex min-h-[60vh] w-full max-w-4xl flex-col gap-6 px-6 py-12">
-        <section className="rounded-2xl border border-neutral-200 bg-white p-6 text-center shadow-sm">
+      <main className="mx-auto flex min-h-[60vh] w-full max-w-6xl flex-col gap-6 px-4 py-12 sm:px-6">
+        <section className="rounded-2xl bg-white/90 p-6 text-center shadow-md">
           <h1 className="text-2xl font-semibold text-slate-900">Game not found</h1>
           <p className="mt-2 text-sm text-slate-500">
             We couldn&apos;t find a game with slug /g/{slug}.
@@ -174,7 +175,10 @@ export default async function PlayPage(props: PlayPageProps) {
     };
   });
 
+  const isLobby = game.status === "lobby";
+  const isLive = game.status === "live";
   const isGameFinished = game.status === "finished";
+  const lifecycleLabel = isLobby ? "Waiting for host" : isLive ? "Live" : "Ended";
 
   const activityFeed = [
     { id: "1", actor: "Host", action: "queued the matchup", timestamp: "2m ago" },
@@ -339,7 +343,7 @@ export default async function PlayPage(props: PlayPageProps) {
     : [];
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-10">
+    <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6">
       <PlayRealtimeBridge gameId={game.id} />
 
       <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -352,7 +356,7 @@ export default async function PlayPage(props: PlayPageProps) {
         </div>
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">
-            {game.status === "lobby" ? "Waiting for host" : game.status}
+            {lifecycleLabel}
           </span>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
             {playerCount} players
@@ -360,7 +364,9 @@ export default async function PlayPage(props: PlayPageProps) {
         </div>
       </header>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <ShareGameControl slug={slug} title={game.title ?? "Untitled game"} />
+
+      <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -371,10 +377,10 @@ export default async function PlayPage(props: PlayPageProps) {
             </h2>
             <p className="font-mono text-xs uppercase text-slate-500">#{game.id}</p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <div className="rounded-2xl bg-white/90 px-4 py-3 text-sm text-slate-600 shadow-sm">
             <p className="font-semibold text-slate-900">{modeLabel}</p>
             <p className="text-xs text-slate-500">
-              Status: {game.status === "lobby" ? "Waiting for host" : game.status}
+              Status: {lifecycleLabel}
             </p>
           </div>
         </div>
@@ -393,7 +399,7 @@ export default async function PlayPage(props: PlayPageProps) {
           lockedCardEvents={lockedCardEvents}
         />
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -407,7 +413,7 @@ export default async function PlayPage(props: PlayPageProps) {
           </div>
           <div className="mt-4 space-y-3">
             {tiedFirstCompleters.length > 0 && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                   Live first completers
                 </p>
@@ -420,7 +426,7 @@ export default async function PlayPage(props: PlayPageProps) {
             )}
 
             {!tiedFirstCompleters.length && liveCompletions.length > 0 && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                   Live completions
                 </p>
@@ -433,7 +439,7 @@ export default async function PlayPage(props: PlayPageProps) {
             )}
 
             {liveCompletionsError && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              <div className="rounded-2xl bg-white/90 px-4 py-3 text-xs text-amber-800 shadow-sm">
                 Unable to load live completion data yet.
               </div>
             )}
@@ -441,7 +447,7 @@ export default async function PlayPage(props: PlayPageProps) {
             {activityFeed.map((activity) => (
               <div
                 key={activity.id}
-                className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3"
+                className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
               >
                 <div className="flex items-center justify-between text-sm">
                   <p className="font-semibold text-slate-900">{activity.actor}</p>
@@ -453,7 +459,7 @@ export default async function PlayPage(props: PlayPageProps) {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -467,7 +473,7 @@ export default async function PlayPage(props: PlayPageProps) {
             {leaderboardEntries.map((entry, index) => (
               <div
                 key={entry.id}
-                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3"
+                className="flex items-center justify-between rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
               >
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
@@ -493,14 +499,53 @@ export default async function PlayPage(props: PlayPageProps) {
         </section>
       </div>
 
-      <HostScoringPanel
-        slug={slug}
-        isFinished={isGameFinished}
-        teamScope={game.team_scope}
-        teamNames={teamNames}
-      />
+      <section className="rounded-2xl bg-white/90 p-4 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Game lifecycle
+            </p>
+            <h2 className="text-xl font-semibold text-slate-900">
+              {isLobby ? "Lobby" : isLive ? "Live" : "Ended"}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {isLobby
+                ? "Start the game to unlock event recording."
+                : isLive
+                  ? "Scoring is enabled. End the game when play is complete."
+                  : "This game has ended. Scoring is disabled."}
+            </p>
+          </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          {isLobby && <GameStatusActionButton slug={slug} intent="start">Start game</GameStatusActionButton>}
+          {isLive && <EndGameControl slug={slug} />}
+        </div>
+      </section>
+
+      {isLive ? (
+        <HostScoringPanel
+          slug={slug}
+          isFinished={isGameFinished}
+          teamScope={game.team_scope}
+          teamNames={teamNames}
+        />
+      ) : isLobby ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm sm:p-6">
+          <p className="font-semibold">Record event is locked</p>
+          <p className="mt-1 text-xs text-amber-800">
+            Click <span className="font-semibold">Start game</span> above to enable scoring controls.
+          </p>
+        </section>
+      ) : (
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 shadow-sm sm:p-6">
+          <p className="font-semibold text-slate-900">Game ended</p>
+          <p className="mt-1 text-xs text-slate-600">
+            Scoring is disabled because this game is complete.
+          </p>
+        </section>
+      )}
+
+      <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -520,7 +565,7 @@ export default async function PlayPage(props: PlayPageProps) {
               return (
                 <div
                   key={event.id}
-                  className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2"
+                  className="flex items-center justify-between rounded-2xl bg-white/90 px-4 py-2 shadow-sm"
                 >
                  <div className="space-y-0.5">
   <p className="font-medium text-slate-900">{label}</p>

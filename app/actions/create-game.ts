@@ -162,6 +162,6 @@ export async function createGameAction(
     return { error: "Failed to resolve game host URL" };
   }
 
-  console.log("[createGameAction] redirecting to", `/g/${hostSlug}/host`);
-  redirect(`/g/${hostSlug}/host`);
+  console.log("[createGameAction] redirecting to", `/g/${hostSlug}/play`);
+  redirect(`/g/${hostSlug}/play`);
 }

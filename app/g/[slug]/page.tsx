@@ -33,8 +33,8 @@ export default async function JoinGamePage(props: JoinPageProps) {
 
   if (showError) {
     return (
-      <main className="mx-auto flex min-h-[70vh] w-full max-w-3xl flex-col items-center justify-center gap-4 px-6 text-center">
-        <div className="rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
+      <main className="mx-auto flex min-h-[70vh] w-full max-w-6xl flex-col items-center justify-center gap-6 px-4 text-center sm:px-6">
+        <div className="rounded-2xl bg-white/90 p-8 shadow-md">
           <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Join game</p>
           <h1 className="mt-3 text-3xl font-semibold text-neutral-900">We couldn&apos;t find that room</h1>
           <p className="mt-2 text-neutral-600">Double-check the link or ask the host to resend the invite.</p>
@@ -44,8 +44,8 @@ export default async function JoinGamePage(props: JoinPageProps) {
   }
 
   return (
-    <main className="mx-auto flex min-h-[70vh] w-full max-w-3xl flex-col justify-center px-6 py-12">
-      <section className="rounded-3xl border border-slate-200 bg-white/95 p-8 shadow-sm">
+    <main className="mx-auto flex min-h-[70vh] w-full max-w-6xl flex-col justify-center px-4 py-12 sm:px-6">
+      <section className="mx-auto w-full max-w-3xl rounded-2xl bg-white/90 p-8 shadow-md">
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Join game</p>
           <h1 className="text-4xl font-semibold text-slate-900">{game.title ?? "Untitled game"}</h1>
