@@ -12,13 +12,16 @@ import {
   type RiskLevel,
 } from "../../../../lib/bingra/event-logic";
 import {
-  calculateCardProgress,
   calculateCompletedCellFlags,
   type CompletionMode,
   type RecordedEvent,
   type CardCell as ProgressCardCell,
 } from "../../../../lib/bingra/card-progress";
 import { buildGameScores } from "../../../../lib/bingra/game-results";
+import {
+  buildActivityFeedItems,
+  type ActivityFeedItem,
+} from "../../../../lib/bingra/activity-feed";
 
 type GameRecord = {
   id: string;
@@ -68,44 +71,6 @@ type RecentScoredEvent = {
   team_key: string | null;
   created_at: string | null;
 };
-
-type ActivityFeedItem =
-  | {
-      id: string;
-      type: "player_joined";
-      createdAt: string;
-      playerName: string;
-    }
-  | {
-      id: string;
-      type: "event_recorded";
-      createdAt: string;
-      eventName: string;
-      points: number;
-      playerNames: string[];
-    }
-  | {
-      id: string;
-      type: "winner_declared";
-      createdAt: string;
-      playerName: string;
-    }
-  | {
-      id: string;
-      type: "game_ended";
-      createdAt: string;
-    }
-  | {
-      id: string;
-      type: "final_scores";
-      createdAt: string;
-      standings: Array<{
-        playerName: string;
-        finalScore: number;
-        rawPoints: number;
-        bingra: boolean;
-      }>;
-    };
 
 type CardRow = {
   id: string;
@@ -359,113 +324,26 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     ]),
   );
 
-  const eventFeedItems: ActivityFeedItem[] = [];
-  const recordedEventsProgress: RecordedEvent[] = [];
-
-  for (const event of allScoredEvents) {
-    if (!event.created_at) {
-      continue;
-    }
-
-    const nextRecordedEvents = [
-      ...recordedEventsProgress,
-      {
-        event_key: event.event_key,
-        team_key: event.team_key,
-      },
-    ];
-
-    const playerNames: string[] = [];
-    let pointsAwarded = 0;
-
-    for (const player of players ?? []) {
-      const cardCells = playerCardsForScoring.get(player.id) ?? [];
-      const before = calculateCardProgress(recordedEventsProgress, cardCells, completionMode);
-      const after = calculateCardProgress(nextRecordedEvents, cardCells, completionMode);
-      const delta = after.score - before.score;
-
-      if (delta > 0) {
-        playerNames.push(player.display_name);
-        pointsAwarded += delta;
-      }
-    }
-
-    const eventBaseLabel = event.event_key ? getEventById(event.event_key)?.label : null;
-    const teamLabel =
-      event.team_key === "A"
-        ? game.team_a_name
-        : event.team_key === "B"
-          ? game.team_b_name
-          : null;
-    const resolvedEventName = [teamLabel, eventBaseLabel ?? event.event_label ?? event.event_key ?? "Event"]
-      .filter(Boolean)
-      .join(": ");
-
-    eventFeedItems.push({
-      id: `event-${event.id}`,
-      type: "event_recorded",
-      createdAt: event.created_at,
-      eventName: resolvedEventName,
-      points: pointsAwarded,
-      playerNames,
-    });
-
-    recordedEventsProgress.push({
-      event_key: event.event_key,
-      team_key: event.team_key,
-    });
-  }
-
-  const playerJoinedFeedItems: ActivityFeedItem[] = (players ?? [])
-    .filter((player) => Boolean(player.created_at))
-    .map((player) => ({
-      id: `player-${player.id}`,
-      type: "player_joined",
-      createdAt: player.created_at as string,
-      playerName: player.display_name,
-    }));
-
-  const gameLifecycleFeedItems: ActivityFeedItem[] = [];
-
-  if (game.status === "finished" && game.completed_at) {
-    if (winnerName) {
-      gameLifecycleFeedItems.push({
-        id: `winner-${game.id}`,
-        type: "winner_declared",
-        createdAt: game.completed_at,
-        playerName: winnerName,
-      });
-    }
-
-    gameLifecycleFeedItems.push({
-      id: `ended-${game.id}`,
-      type: "game_ended",
-      createdAt: game.completed_at,
-    });
-
-    gameLifecycleFeedItems.push({
-      id: `final-scores-${game.id}`,
-      type: "final_scores",
-      createdAt: game.completed_at,
-      standings: leaderboardEntries.map((entry) => ({
-        playerName: entry.name,
-        finalScore: entry.final_score,
-        rawPoints: entry.raw_points,
-        bingra: entry.has_bingra,
-      })),
-    });
-  }
-
-  const activityFeedItems: ActivityFeedItem[] = [
-    ...playerJoinedFeedItems,
-    ...eventFeedItems,
-    ...gameLifecycleFeedItems,
-  ].sort((a, b) => {
-    if (a.createdAt === b.createdAt) {
-      return b.id.localeCompare(a.id);
-    }
-
-    return b.createdAt.localeCompare(a.createdAt);
+  const activityFeedItems: ActivityFeedItem[] = buildActivityFeedItems({
+    players: (players ?? []).map((player) => ({
+      id: player.id,
+      display_name: player.display_name,
+      created_at: player.created_at,
+    })),
+    events: allScoredEvents,
+    playerCardsByPlayerId: playerCardsForScoring,
+    completionMode,
+    teamNames,
+    gameId: game.id,
+    gameStatus: game.status,
+    completedAt: game.completed_at,
+    winnerName,
+    leaderboardEntries: leaderboardEntries.map((entry) => ({
+      name: entry.name,
+      final_score: entry.final_score,
+      raw_points: entry.raw_points,
+      has_bingra: entry.has_bingra,
+    })),
   });
 
   const formatActivityTimestamp = (iso: string) =>
@@ -475,6 +353,66 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       hour: "numeric",
       minute: "2-digit",
     }).format(new Date(iso));
+
+  const getFeedItemContainerClass = (activity: ActivityFeedItem) => {
+    const base = "rounded-2xl border shadow-sm";
+
+    if (activity.emphasis === "major") {
+      if (activity.tone === "positive") {
+        return `${base} border-emerald-300 bg-emerald-50/80 px-5 py-4`;
+      }
+
+      return `${base} border-violet-300 bg-violet-50/80 px-5 py-4`;
+    }
+
+    if (activity.emphasis === "highlight") {
+      if (activity.tone === "positive") {
+        return `${base} border-blue-300 bg-blue-50/70 px-4.5 py-3.5`;
+      }
+
+      return `${base} border-slate-300 bg-slate-50/80 px-4.5 py-3.5`;
+    }
+
+    if (activity.type === "event_recorded") {
+      if (activity.rarity === 5) {
+        return `${base} border-fuchsia-300 bg-fuchsia-50/60 px-4 py-3`;
+      }
+
+      if (activity.rarity === 4) {
+        return `${base} border-violet-300 bg-violet-50/60 px-4 py-3`;
+      }
+
+      if (activity.rarity === 3) {
+        return `${base} border-blue-200 bg-blue-50/40 px-4 py-3`;
+      }
+    }
+
+    return `${base} border-slate-200 bg-white/90 px-4 py-3`;
+  };
+
+  const getFeedHeadlineClass = (activity: ActivityFeedItem) => {
+    if (activity.emphasis === "major") {
+      return "font-semibold text-slate-950";
+    }
+
+    if (activity.emphasis === "highlight") {
+      return "font-semibold text-slate-900";
+    }
+
+    return "font-semibold text-slate-900";
+  };
+
+  const getRarityBadgeClass = (rarity: 1 | 2 | 3 | 4 | 5) => {
+    if (rarity === 5) {
+      return "rounded-full border border-fuchsia-300 bg-fuchsia-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fuchsia-700";
+    }
+
+    if (rarity === 4) {
+      return "rounded-full border border-violet-300 bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700";
+    }
+
+    return "rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700";
+  };
 
   return (
     <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6">
@@ -571,44 +509,92 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
             {activityFeedItems.map((activity) => (
               <div
                 key={activity.id}
-                className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
+                className={getFeedItemContainerClass(activity)}
               >
                 <div className="flex items-start justify-between gap-3 text-sm">
                   <div className="min-w-0 space-y-1">
                     {activity.type === "player_joined" && (
                       <>
-                        <p className="font-semibold text-slate-900">{activity.playerName} joined</p>
+                        <p className={getFeedHeadlineClass(activity)}>
+                          {activity.headline ?? `${activity.playerName} joined`}
+                        </p>
                       </>
                     )}
 
                     {activity.type === "event_recorded" && (
                       <>
-                        <p className="font-semibold text-slate-900">
-                          {activity.eventName} recorded · {activity.points} pts
+                        <p className={getFeedHeadlineClass(activity)}>
+                          {activity.headline ?? `${activity.eventName} recorded · ${activity.points} pts`}
                         </p>
-                        <p className="text-xs text-slate-500">
-                          {activity.playerNames.length > 0
-                            ? `Points awarded to ${activity.playerNames.join(", ")}`
-                            : "No points awarded"}
+                        {(activity.scoreText || activity.detail) && (
+                          <p className="text-xs text-slate-500">
+                            {activity.scoreText ??
+                              (activity.playerNames.length > 0
+                                ? `Points awarded to ${activity.playerNames.join(", ")}`
+                                : "No points awarded")}
+                            {activity.scoreText && activity.detail ? ` · ${activity.detail}` : !activity.scoreText ? activity.detail : ""}
+                          </p>
+                        )}
+                      </>
+                    )}
+
+                    {activity.type === "progress_milestone" && (
+                      <>
+                        <p className={getFeedHeadlineClass(activity)}>
+                          {activity.headline ?? `🎯 ${activity.playerName} is 1 away from Bingra`}
                         </p>
+                        {activity.detail && (
+                          <p className="text-xs text-slate-500">{activity.detail}</p>
+                        )}
+                      </>
+                    )}
+
+                    {activity.type === "bingra_completed" && (
+                      <>
+                        <p className={getFeedHeadlineClass(activity)}>
+                          {activity.headline ?? `💥 ${activity.playerName} completed Bingra`}
+                        </p>
+                        {activity.detail && (
+                          <p className="text-xs text-slate-500">{activity.detail}</p>
+                        )}
+                      </>
+                    )}
+
+                    {activity.type === "momentum" && (
+                      <>
+                        <p className={getFeedHeadlineClass(activity)}>
+                          {activity.headline ??
+                            (activity.streakCount === 3
+                              ? `⚡ ${activity.playerName} is rolling`
+                              : `🔥 ${activity.playerName} is on a streak`)}
+                        </p>
+                        {activity.detail && (
+                          <p className="text-xs text-slate-500">{activity.detail}</p>
+                        )}
                       </>
                     )}
 
                     {activity.type === "winner_declared" && (
                       <>
-                        <p className="font-semibold text-slate-900">{activity.playerName} declared winner</p>
+                        <p className={getFeedHeadlineClass(activity)}>
+                          {activity.headline ?? `${activity.playerName} declared winner`}
+                        </p>
                       </>
                     )}
 
                     {activity.type === "game_ended" && (
                       <>
-                        <p className="font-semibold text-slate-900">Game ended</p>
+                        <p className={getFeedHeadlineClass(activity)}>
+                          {activity.headline ?? "Game ended"}
+                        </p>
                       </>
                     )}
 
                     {activity.type === "final_scores" && (
                       <>
-                        <p className="font-semibold text-slate-900">Final scores posted</p>
+                        <p className={getFeedHeadlineClass(activity)}>
+                          {activity.headline ?? "Final scores posted"}
+                        </p>
                         <ol className="mt-1 space-y-0.5 text-xs text-slate-500">
                           {activity.standings.map((standing, index) => (
                             <li key={`${activity.id}-${standing.playerName}`}>
@@ -620,9 +606,14 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
                     )}
                   </div>
 
-                  <span className="shrink-0 text-xs text-slate-500">
-                    {formatActivityTimestamp(activity.createdAt)}
-                  </span>
+                  <div className="shrink-0 text-right">
+                    {activity.type === "event_recorded" && activity.rarity && activity.rarity >= 3 && (
+                      <span className={getRarityBadgeClass(activity.rarity)}>
+                        Rare {activity.rarity}
+                      </span>
+                    )}
+                    <p className="mt-1 text-xs text-slate-500">{formatActivityTimestamp(activity.createdAt)}</p>
+                  </div>
                 </div>
               </div>
             ))}
