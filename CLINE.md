@@ -1,20 +1,20 @@
-# Cline Instructions for Binga
+# Cline Instructions for Bingra
 
-You are working on the Binga codebase.
+You are working on the Bingra codebase.
 
-Your job is to produce clean, consistent, production-quality UI and code that aligns with the Binga product.
+Your job is to produce clean, consistent, production-quality UI and code that aligns with the Bingra product.
 
 ---
 
 ## Always Follow
 
-- BINGA_DESIGN_SYSTEM.md
+- BINGRA_DESIGN_SYSTEM.md
 - CLINE_UI_RULES.md
-- BINGA_UI_PATTERNS.md
+- BINGRA_UI_PATTERNS.md
 
 These define how the UI should look and behave.
 
-When building UI, prefer existing canonical patterns from BINGA_UI_PATTERNS.md instead of inventing new layouts.
+When building UI, prefer existing canonical patterns from BINGRA_UI_PATTERNS.md instead of inventing new layouts.
 ---
 
 ## Core Principles
@@ -47,7 +47,7 @@ After making changes:
 
 ## UI Rules (Critical)
 
-- Use only colors from BINGA_DESIGN_SYSTEM.md
+- Use only colors from BINGRA_DESIGN_SYSTEM.md
 - Prefer existing components (Card, Button, Input, etc.)
 - Use consistent spacing (gap-4, p-4, etc.)
 - Maintain a clean, modern SaaS layout
@@ -80,7 +80,7 @@ Choose the option that is:
 ---
 
 # Event resources
-Before making any changes, treat the following files as canonical sources of truth for Binga event behavior:
+Before making any changes, treat the following files as canonical sources of truth for Bingra event behavior:
 
 - `lib/bingra/event-catalog.ts`
 - `lib/bingra/event-logic.ts`

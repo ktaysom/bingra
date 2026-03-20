@@ -52,7 +52,7 @@ export async function generateCardAction(
   }
 
   const cookieStore = await cookies();
-  const cookiePlayerId = cookieStore.get("binga-player-id")?.value ?? null;
+  const cookiePlayerId = cookieStore.get("bingra-player-id")?.value ?? null;
 
   if (!cookiePlayerId) {
     return { error: "Missing player session" };

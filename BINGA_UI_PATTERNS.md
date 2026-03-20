@@ -1,7 +1,7 @@
-# Binga UI Patterns
+# Bingra UI Patterns
 
 ## Purpose
-This document defines the canonical UI patterns for Binga.
+This document defines the canonical UI patterns for Bingra.
 
 When building new pages or updating existing pages, Cline should prefer these patterns over inventing new layouts.
 
@@ -12,7 +12,7 @@ These patterns exist to improve:
 - product cohesion
 
 All patterns must also follow:
-- `BINGA_DESIGN_SYSTEM.md`
+- `BINGRA_DESIGN_SYSTEM.md`
 - `CLINE_UI_RULES.md`
 
 ---

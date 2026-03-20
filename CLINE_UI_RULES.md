@@ -1,9 +1,9 @@
-# Cline UI Rules for Binga
+# Cline UI Rules for Bingra
 
 ## Purpose
-These rules tell Cline how to design and implement UI for Binga.
+These rules tell Cline how to design and implement UI for Bingra.
 
-Cline must follow `BINGA_DESIGN_SYSTEM.md` for all visual decisions.
+Cline must follow `BINGRA_DESIGN_SYSTEM.md` for all visual decisions.
 
 The goal is visual consistency across the app. Cline should not invent a new design language from page to page.
 
@@ -11,8 +11,8 @@ The goal is visual consistency across the app. Cline should not invent a new des
 
 ## Primary Rule
 
-When generating or editing UI for Binga:
-- follow `BINGA_DESIGN_SYSTEM.md`
+When generating or editing UI for Bingra:
+- follow `BINGRA_DESIGN_SYSTEM.md`
 - preserve visual consistency with existing high-quality pages
 - prefer simple, reusable patterns over one-off styling
 
@@ -26,7 +26,7 @@ If a styling decision is unclear, choose the option that is:
 
 ## Color Rules
 
-Cline must only use colors that align with the Binga design system.
+Cline must only use colors that align with the Bingra design system.
 
 ### Allowed Color Behavior
 Use:
@@ -119,7 +119,7 @@ Typography should support clarity first.
 
 ## Dark Mode Rules
 
-Binga is dark-mode first.
+Bingra is dark-mode first.
 
 When generating new UI:
 - default to dark surfaces
@@ -148,7 +148,7 @@ Cline should keep interactions polished but restrained.
 - distracting movement
 - excessive hover styling
 
-Binga should feel calm and fast, not flashy.
+Bingra should feel calm and fast, not flashy.
 
 ---
 
@@ -160,7 +160,7 @@ When editing an existing page:
 - do not restyle unrelated parts of the page
 
 When creating a new page:
-- base it on the closest existing Binga pattern
+- base it on the closest existing Bingra pattern
 - use the same card, spacing, header, and action conventions
 - make it feel like it already belongs in the app
 
@@ -187,7 +187,7 @@ Forms should feel guided and uncluttered.
 
 ## Tables and Data Views
 
-Binga will likely have many schedules, standings, divisions, and admin tables. These should be clean and functional.
+Bingra will likely have many schedules, standings, divisions, and admin tables. These should be clean and functional.
 
 ### Prefer
 - clear headers
@@ -241,7 +241,7 @@ That means:
 - fewer decorative effects
 - fewer one-off layout ideas
 
-Good Binga UI should look intentional, not experimental.
+Good Bingra UI should look intentional, not experimental.
 
 ---
 
@@ -262,8 +262,8 @@ Cline must not:
 ## Decision Rule When Unsure
 
 If uncertain about a styling choice, Cline should choose the option that is:
-1. more consistent with `BINGA_DESIGN_SYSTEM.md`
-2. more consistent with existing Binga UI
+1. more consistent with `BINGRA_DESIGN_SYSTEM.md`
+2. more consistent with existing Bingra UI
 3. simpler
 4. more readable
 5. more restrained
@@ -278,6 +278,6 @@ When making UI changes, Cline should be able to explain them in terms of:
 - hierarchy
 - spacing
 - component reuse
-- alignment with the Binga design system
+- alignment with the Bingra design system
 
 If it cannot explain the choice clearly, it should probably not introduce that styling change.

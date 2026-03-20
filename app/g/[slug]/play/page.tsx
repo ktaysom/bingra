@@ -4,20 +4,20 @@ import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { CardBuilderPanel } from "./CardBuilderPanel";
 import { HostScoringPanel } from "./HostScoringPanel";
 import { PlayRealtimeBridge } from "./PlayRealtimeBridge";
-import { getPlayModeLabel, mapPlayModeToGameMode } from "../../../../lib/binga/types";
+import { getPlayModeLabel, mapPlayModeToGameMode } from "../../../../lib/bingra/types";
 import {
   chooseRandomEvents,
   getEventById,
   type TeamKey,
   type RiskLevel,
-} from "../../../../lib/binga/event-logic";
+} from "../../../../lib/bingra/event-logic";
 import {
   calculateCardProgress,
   calculateCompletedCellFlags,
   type CompletionMode,
   type RecordedEvent,
   type CardCell as ProgressCardCell,
-} from "../../../../lib/binga/card-progress";
+} from "../../../../lib/bingra/card-progress";
 
 type PlayPageProps = {
   params: Promise<{
@@ -91,7 +91,7 @@ export default async function PlayPage(props: PlayPageProps) {
   const { slug } = await props.params;
   const supabase = createSupabaseAdminClient();
   const cookieStore = await cookies();
-  const currentPlayerId = cookieStore.get("binga-player-id")?.value ?? null;
+  const currentPlayerId = cookieStore.get("bingra-player-id")?.value ?? null;
 
   const { data: game, error: gameError } = await supabase
     .from("games")

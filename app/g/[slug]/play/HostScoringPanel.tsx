@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import type {
   ScorerParentCategory,
   ScorerSubtypeGroup,
-} from "../../../../lib/binga/event-catalog";
+} from "../../../../lib/bingra/event-catalog";
 import {
   getEventById,
   getScorerEventsForParent,
   getScorerOptionById,
   getScorerParentOptions,
   getScorerSubtypeOptions,
-} from "../../../../lib/binga/event-logic";
+} from "../../../../lib/bingra/event-logic";
 import {
   recordEventAction,
   type RecordEventFormState,

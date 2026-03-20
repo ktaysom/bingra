@@ -87,7 +87,7 @@ export async function joinGameAction(
     }
 
     const cookieOptions = {
-      name: "binga-player-id",
+      name: "bingra-player-id",
       value: playerData.id,
       path: `/g/${parsed.data.slug}`,
       maxAge: 60 * 60 * 24 * 30,

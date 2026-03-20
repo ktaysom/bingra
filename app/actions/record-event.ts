@@ -5,13 +5,13 @@ import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import {
   validateRecordedEvent,
   type TeamSelection,
-} from "../../lib/binga/event-logic";
+} from "../../lib/bingra/event-logic";
 import {
   calculateCardProgress,
   type CompletionMode,
   type CardCell as ProgressCardCell,
   type RecordedEvent,
-} from "../../lib/binga/card-progress";
+} from "../../lib/bingra/card-progress";
 
 export type RecordEventFormState = {
   error?: string;

@@ -102,7 +102,7 @@ const ADJECTIVES = [
 ];
 
 const NOUNS = [
-  "Binga",
+  "Bingra",
   "Buckets",
   "Ball",
   "Hoops",
@@ -227,7 +227,7 @@ const SPECIAL_NAMES = [
   "Court Chaos",
   "Bracket Buster",
   "And-One Energy",
-  "Binga Blitz",
+  "Bingra Blitz",
   "Deep Range",
   "Final Possession",
   "Battle Tested",

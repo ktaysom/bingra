@@ -6,7 +6,7 @@ import {
   calculateCardProgress,
   type CardCell,
   type RecordedEvent,
-} from "../lib/binga/card-progress.ts";
+} from "../lib/bingra/card-progress.ts";
 
 test("team-key matching: match, mismatch, and neutral wildcard", () => {
   const cells: CardCell[] = [

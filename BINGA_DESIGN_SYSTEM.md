@@ -1,9 +1,9 @@
-# Binga Design System
+# Bingra Design System
 
 ## Purpose
-This document defines the visual design system for Binga. All new pages, components, and UI updates must follow this system so the product feels cohesive, intentional, and branded.
+This document defines the visual design system for Bingra. All new pages, components, and UI updates must follow this system so the product feels cohesive, intentional, and branded.
 
-Binga should feel:
+Bingra should feel:
 - modern
 - clean
 - slightly playful
@@ -22,7 +22,7 @@ The design should avoid feeling:
 
 ## Brand Personality
 
-Binga is a tool for organizing sports-related information and workflows. The UI should reflect:
+Bingra is a tool for organizing sports-related information and workflows. The UI should reflect:
 - clarity
 - confidence
 - speed
@@ -194,7 +194,7 @@ If a secondary display font is ever introduced, it should be used sparingly and 
 
 ## Spacing and Layout
 
-Use consistent spacing. Binga should feel structured and breathable.
+Use consistent spacing. Bingra should feel structured and breathable.
 
 ### Default Layout Behavior
 - prefer centered content with a max width
@@ -321,7 +321,7 @@ Include:
 
 ## Interaction Style
 
-Binga should feel fast and calm.
+Bingra should feel fast and calm.
 
 ### Hover States
 - subtle
@@ -405,7 +405,7 @@ Do not overload with decorative styling.
 
 ## Dark Mode Default
 
-Binga should default to a dark, slate-based UI unless a page has a strong reason not to.
+Bingra should default to a dark, slate-based UI unless a page has a strong reason not to.
 
 Dark mode should feel:
 - premium
@@ -459,7 +459,7 @@ Do not introduce:
 - childish sports graphics
 - generic stock “game” visuals
 
-Avoid making Binga feel like:
+Avoid making Bingra feel like:
 - a school project
 - a toy app
 - a crypto dashboard
@@ -470,7 +470,7 @@ Avoid making Binga feel like:
 
 ## Visual North Star
 
-Every Binga page should feel like it belongs to the same product.
+Every Bingra page should feel like it belongs to the same product.
 
 If unsure, choose:
 - simpler layout

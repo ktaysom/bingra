@@ -7,7 +7,7 @@ import { createGameAction, CreateGameFormState } from "../actions/create-game";
 const initialState: CreateGameFormState = {};
 const DEFAULT_ROOM_NAMES = [
   "Friday Night Full-Court",
-  "No-Look Bingo League",
+  "No-Look Bingra League",
   "Fourth Quarter Frenzy",
   "Paint Battle Room",
   "Fastbreak Challenge",
@@ -156,11 +156,11 @@ export default function CreatePage() {
             </p>
 
             <h1 className="max-w-3xl text-5xl font-black leading-[0.94] tracking-[-0.06em] text-[#2c2622] sm:text-6xl lg:text-7xl">
-              Start a game
+              Every
               <br />
-              people actually
+             play
               <br />
-              want to join.
+              counts.
             </h1>
           </section>
 
@@ -178,7 +178,7 @@ export default function CreatePage() {
                 <input
                   name="title"
                   required
-                  placeholder="Friday Night Bingo"
+                  placeholder="Friday Night Bingra"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   className="h-16 w-full rounded-[1.75rem] border border-[#ddd2c7] bg-white/95 px-6 text-xl font-medium text-[#2f2925] placeholder:text-[#a09488] outline-none transition focus:border-[#9b8c7f] focus:bg-white focus:ring-4 focus:ring-[#d8ccc0]/50"

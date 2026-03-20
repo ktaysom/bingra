@@ -1,3 +1,5 @@
-export default function Home() {
-  return <div>Welcome to Bingra</div>;
+import { redirect } from "next/navigation";
+
+export default function HomePage() {
+  redirect("/create");
 }

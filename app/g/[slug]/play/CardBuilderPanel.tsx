@@ -9,9 +9,9 @@ import {
   summarizeCardPoints,
   type TeamKey,
   type RiskLevel,
-} from "../../../../lib/binga/event-logic";
-import type { EventCategory, GameEventType } from "../../../../lib/binga/event-catalog";
-import { mapPlayModeToGameMode, type PlayMode } from "../../../../lib/binga/types";
+} from "../../../../lib/bingra/event-logic";
+import type { EventCategory, GameEventType } from "../../../../lib/bingra/event-catalog";
+import { mapPlayModeToGameMode, type PlayMode } from "../../../../lib/bingra/types";
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { generateCardAction } from "../../../actions/generate-card";
