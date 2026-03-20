@@ -97,7 +97,7 @@ export default function CreatePage() {
   const [endCondition, setEndCondition] = useState<"first_to_complete" | "host_ends">(
     "first_to_complete",
   );
-  const [eventsPerCard, setEventsPerCard] = useState(9);
+  const [eventsPerCard, setEventsPerCard] = useState(5);
 
   const completionModeDb = completionMode === "streak" ? "STREAK" : "BLACKOUT";
   const endConditionDb =

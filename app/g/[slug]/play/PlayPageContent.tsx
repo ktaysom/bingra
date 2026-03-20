@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { CardBuilderPanel } from "./CardBuilderPanel";
+import { EndGameCelebration } from "./EndGameCelebration";
 import { HostScoringPanel } from "./HostScoringPanel";
 import { EndGameControl, GameStatusActionButton, ShareGameControl } from "./PlayHostControls";
 import { PlayRealtimeBridgeMount } from "./PlayRealtimeBridgeMount";
@@ -11,6 +12,7 @@ import {
   type RiskLevel,
 } from "../../../../lib/bingra/event-logic";
 import {
+  calculateCardProgress,
   calculateCompletedCellFlags,
   type CompletionMode,
   type RecordedEvent,
@@ -23,6 +25,7 @@ type GameRecord = {
   slug: string;
   title: string | null;
   status: "lobby" | "live" | "finished";
+  completed_at: string | null;
   winner_player_id: string | null;
   mode: "quick_play" | "streak";
   team_a_name: string;
@@ -65,6 +68,44 @@ type RecentScoredEvent = {
   team_key: string | null;
   created_at: string | null;
 };
+
+type ActivityFeedItem =
+  | {
+      id: string;
+      type: "player_joined";
+      createdAt: string;
+      playerName: string;
+    }
+  | {
+      id: string;
+      type: "event_recorded";
+      createdAt: string;
+      eventName: string;
+      points: number;
+      playerNames: string[];
+    }
+  | {
+      id: string;
+      type: "winner_declared";
+      createdAt: string;
+      playerName: string;
+    }
+  | {
+      id: string;
+      type: "game_ended";
+      createdAt: string;
+    }
+  | {
+      id: string;
+      type: "final_scores";
+      createdAt: string;
+      standings: Array<{
+        playerName: string;
+        finalScore: number;
+        rawPoints: number;
+        bingra: boolean;
+      }>;
+    };
 
 type CardRow = {
   id: string;
@@ -151,12 +192,6 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
   const isLive = game.status === "live";
   const isGameFinished = game.status === "finished";
   const lifecycleLabel = isLobby ? "Waiting for host" : isLive ? "Live" : "Ended";
-
-  const activityFeed = [
-    { id: "1", actor: "Host", action: "queued the matchup", timestamp: "2m ago" },
-    { id: "2", actor: "Scout", action: "shared film notes", timestamp: "5m ago" },
-    { id: "3", actor: "System", action: "synced game clock", timestamp: "12m ago" },
-  ];
 
   let allScoredEvents: RecentScoredEvent[] = [];
   let recentEventsError: string | null = null;
@@ -302,30 +337,170 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
   const lockedCardEvents = catalogEvents.length > 0 ? catalogEvents : initialCardEvents;
   const recentScoredEvents = allScoredEvents.slice(-10).reverse();
 
-  const scoredEventOrder = new Map(allScoredEvents.map((event, index) => [event.id, index]));
-
-  const firstCompletionEventId = liveCompletions.reduce<string | null>((winner, completion) => {
-    if (!winner) {
-      return completion.completed_at_event_id;
-    }
-
-    const currentOrder = scoredEventOrder.get(completion.completed_at_event_id) ?? Number.MAX_SAFE_INTEGER;
-    const winningOrder = scoredEventOrder.get(winner) ?? Number.MAX_SAFE_INTEGER;
-
-    return currentOrder < winningOrder ? completion.completed_at_event_id : winner;
-  }, null);
-
-  const tiedFirstCompleters = firstCompletionEventId
-    ? liveCompletions.filter((completion) => completion.completed_at_event_id === firstCompletionEventId)
-    : [];
-
   const winnerName = game.winner_player_id
     ? playersById.get(game.winner_player_id)?.display_name ?? null
     : leaderboardEntries[0]?.name ?? null;
 
+  const winnerEntry = game.winner_player_id
+    ? leaderboardEntries.find((entry) => entry.id === game.winner_player_id) ?? leaderboardEntries[0] ?? null
+    : leaderboardEntries[0] ?? null;
+
+  const scoreboardTargetId = `play-scoreboard-${game.id}`;
+
+  const playerCardsForScoring = new Map(
+    cardsForGame.map((card) => [
+      card.player_id,
+      (card.card_cells ?? []).map((cell) => ({
+        event_key: cell.event_key,
+        team_key: cell.team_key,
+        order_index: cell.order_index,
+        point_value: cell.point_value,
+      })),
+    ]),
+  );
+
+  const eventFeedItems: ActivityFeedItem[] = [];
+  const recordedEventsProgress: RecordedEvent[] = [];
+
+  for (const event of allScoredEvents) {
+    if (!event.created_at) {
+      continue;
+    }
+
+    const nextRecordedEvents = [
+      ...recordedEventsProgress,
+      {
+        event_key: event.event_key,
+        team_key: event.team_key,
+      },
+    ];
+
+    const playerNames: string[] = [];
+    let pointsAwarded = 0;
+
+    for (const player of players ?? []) {
+      const cardCells = playerCardsForScoring.get(player.id) ?? [];
+      const before = calculateCardProgress(recordedEventsProgress, cardCells, completionMode);
+      const after = calculateCardProgress(nextRecordedEvents, cardCells, completionMode);
+      const delta = after.score - before.score;
+
+      if (delta > 0) {
+        playerNames.push(player.display_name);
+        pointsAwarded += delta;
+      }
+    }
+
+    const eventBaseLabel = event.event_key ? getEventById(event.event_key)?.label : null;
+    const teamLabel =
+      event.team_key === "A"
+        ? game.team_a_name
+        : event.team_key === "B"
+          ? game.team_b_name
+          : null;
+    const resolvedEventName = [teamLabel, eventBaseLabel ?? event.event_label ?? event.event_key ?? "Event"]
+      .filter(Boolean)
+      .join(": ");
+
+    eventFeedItems.push({
+      id: `event-${event.id}`,
+      type: "event_recorded",
+      createdAt: event.created_at,
+      eventName: resolvedEventName,
+      points: pointsAwarded,
+      playerNames,
+    });
+
+    recordedEventsProgress.push({
+      event_key: event.event_key,
+      team_key: event.team_key,
+    });
+  }
+
+  const playerJoinedFeedItems: ActivityFeedItem[] = (players ?? [])
+    .filter((player) => Boolean(player.created_at))
+    .map((player) => ({
+      id: `player-${player.id}`,
+      type: "player_joined",
+      createdAt: player.created_at as string,
+      playerName: player.display_name,
+    }));
+
+  const gameLifecycleFeedItems: ActivityFeedItem[] = [];
+
+  if (game.status === "finished" && game.completed_at) {
+    if (winnerName) {
+      gameLifecycleFeedItems.push({
+        id: `winner-${game.id}`,
+        type: "winner_declared",
+        createdAt: game.completed_at,
+        playerName: winnerName,
+      });
+    }
+
+    gameLifecycleFeedItems.push({
+      id: `ended-${game.id}`,
+      type: "game_ended",
+      createdAt: game.completed_at,
+    });
+
+    gameLifecycleFeedItems.push({
+      id: `final-scores-${game.id}`,
+      type: "final_scores",
+      createdAt: game.completed_at,
+      standings: leaderboardEntries.map((entry) => ({
+        playerName: entry.name,
+        finalScore: entry.final_score,
+        rawPoints: entry.raw_points,
+        bingra: entry.has_bingra,
+      })),
+    });
+  }
+
+  const activityFeedItems: ActivityFeedItem[] = [
+    ...playerJoinedFeedItems,
+    ...eventFeedItems,
+    ...gameLifecycleFeedItems,
+  ].sort((a, b) => {
+    if (a.createdAt === b.createdAt) {
+      return b.id.localeCompare(a.id);
+    }
+
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+
+  const formatActivityTimestamp = (iso: string) =>
+    new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(iso));
+
   return (
     <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6">
       <PlayRealtimeBridgeMount gameId={game.id} />
+      <EndGameCelebration
+        gameId={game.id}
+        isFinished={isGameFinished}
+        winner={
+          winnerEntry
+            ? {
+                name: winnerEntry.name,
+                finalScore: winnerEntry.final_score,
+                rawPoints: winnerEntry.raw_points,
+                hasBingra: winnerEntry.has_bingra,
+              }
+            : null
+        }
+        topEntries={leaderboardEntries.slice(0, 3).map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          finalScore: entry.final_score,
+          rawPoints: entry.raw_points,
+          hasBingra: entry.has_bingra,
+        }))}
+        scoreboardTargetId={scoreboardTargetId}
+      />
 
       <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1">
@@ -393,29 +568,68 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
             </span>
           </div>
           <div className="mt-4 space-y-3">
-            {tiedFirstCompleters.length > 0 && (
-              <div className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                  Live first Bingra
-                </p>
-                <p className="mt-1 text-sm text-emerald-900">
-                  {tiedFirstCompleters
-                    .map((entry) => playersById.get(entry.player_id)?.display_name ?? "Unknown player")
-                    .join(", ")}
-                </p>
-              </div>
-            )}
+            {activityFeedItems.map((activity) => (
+              <div
+                key={activity.id}
+                className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3 text-sm">
+                  <div className="min-w-0 space-y-1">
+                    {activity.type === "player_joined" && (
+                      <>
+                        <p className="font-semibold text-slate-900">{activity.playerName} joined</p>
+                      </>
+                    )}
 
-            {!tiedFirstCompleters.length && liveCompletions.length > 0 && (
-              <div className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                  Live Bingra players
-                </p>
-                <p className="mt-1 text-sm text-emerald-900">
-                  {liveCompletions
-                    .map((entry) => playersById.get(entry.player_id)?.display_name ?? "Unknown player")
-                    .join(", ")}
-                </p>
+                    {activity.type === "event_recorded" && (
+                      <>
+                        <p className="font-semibold text-slate-900">
+                          {activity.eventName} recorded · {activity.points} pts
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {activity.playerNames.length > 0
+                            ? `Points awarded to ${activity.playerNames.join(", ")}`
+                            : "No points awarded"}
+                        </p>
+                      </>
+                    )}
+
+                    {activity.type === "winner_declared" && (
+                      <>
+                        <p className="font-semibold text-slate-900">{activity.playerName} declared winner</p>
+                      </>
+                    )}
+
+                    {activity.type === "game_ended" && (
+                      <>
+                        <p className="font-semibold text-slate-900">Game ended</p>
+                      </>
+                    )}
+
+                    {activity.type === "final_scores" && (
+                      <>
+                        <p className="font-semibold text-slate-900">Final scores posted</p>
+                        <ol className="mt-1 space-y-0.5 text-xs text-slate-500">
+                          {activity.standings.map((standing, index) => (
+                            <li key={`${activity.id}-${standing.playerName}`}>
+                              {index + 1}. {standing.playerName} · {standing.finalScore} final ({standing.rawPoints} raw{standing.bingra ? " · Bingra x2" : ""})
+                            </li>
+                          ))}
+                        </ol>
+                      </>
+                    )}
+                  </div>
+
+                  <span className="shrink-0 text-xs text-slate-500">
+                    {formatActivityTimestamp(activity.createdAt)}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {activityFeedItems.length === 0 && (
+              <div className="rounded-2xl bg-white/90 px-4 py-3 text-sm text-slate-500 shadow-sm">
+                No activity yet.
               </div>
             )}
 
@@ -424,23 +638,14 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
                 Unable to load live completion data yet.
               </div>
             )}
-
-            {activityFeed.map((activity) => (
-              <div
-                key={activity.id}
-                className="rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
-              >
-                <div className="flex items-center justify-between text-sm">
-                  <p className="font-semibold text-slate-900">{activity.actor}</p>
-                  <span className="text-xs text-slate-500">{activity.timestamp}</span>
-                </div>
-                <p className="text-sm text-slate-600">{activity.action}</p>
-              </div>
-            ))}
           </div>
         </section>
 
-        <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
+        <section
+          id={scoreboardTargetId}
+          tabIndex={-1}
+          className="rounded-2xl bg-white/90 p-6 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
