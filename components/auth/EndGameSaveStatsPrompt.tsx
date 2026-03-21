@@ -148,7 +148,7 @@ export function EndGameSaveStatsPrompt({
 
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <AuthDialog
-                label="Save stats with account"
+                label="Continue with email"
                 nextPath={`/g/${slug}/play`}
                 linkPlayerId={playerId}
                 emphasis="prominent"

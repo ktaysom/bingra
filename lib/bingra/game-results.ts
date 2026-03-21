@@ -24,6 +24,7 @@ export type GameScoreEntry = {
   raw_points: number;
   final_score: number;
   has_bingra: boolean;
+  bingra_completed_at?: string | null;
   completed_cells_count: number;
   is_one_away: boolean;
 };

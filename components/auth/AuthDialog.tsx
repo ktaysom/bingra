@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 
@@ -10,8 +9,6 @@ type AuthDialogProps = {
   linkPlayerId?: string;
   emphasis?: "subtle" | "prominent";
 };
-
-type PasswordMode = "sign_in" | "sign_up";
 
 function getAppBaseUrl(): string {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
@@ -33,31 +30,15 @@ function buildAuthCallbackUrl(nextPath: string, linkPlayerId?: string): string {
   return callbackUrl.toString();
 }
 
-function buildAuthFinalizeUrl(nextPath: string, linkPlayerId?: string): string {
-  const finalizeUrl = new URL("/auth/finalize", getAppBaseUrl());
-  finalizeUrl.searchParams.set("next", nextPath);
-
-  if (linkPlayerId) {
-    finalizeUrl.searchParams.set("link_player_id", linkPlayerId);
-  }
-
-  return finalizeUrl.toString();
-}
-
 export function AuthDialog({
-  label = "Sign in",
+  label = "Continue with email",
   nextPath,
   linkPlayerId,
   emphasis = "subtle",
 }: AuthDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [passwordMode, setPasswordMode] = useState<PasswordMode>("sign_in");
-  const [pendingGoogle, setPendingGoogle] = useState(false);
   const [pendingMagicLink, setPendingMagicLink] = useState(false);
-  const [pendingPasswordAuth, setPendingPasswordAuth] = useState(false);
-  const [pendingResetEmail, setPendingResetEmail] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,34 +58,7 @@ export function AuthDialog({
 
   const close = () => {
     setIsOpen(false);
-    setPendingGoogle(false);
     setPendingMagicLink(false);
-    setPendingPasswordAuth(false);
-    setPendingResetEmail(false);
-  };
-
-  const handleGoogle = async () => {
-    setPendingGoogle(true);
-    setError(null);
-
-    try {
-      const redirectTo = buildAuthCallbackUrl(nextPath, linkPlayerId);
-      const supabase = createSupabaseBrowserClient();
-      const { error: signInError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo,
-        },
-      });
-
-      if (signInError) {
-        throw signInError;
-      }
-    } catch (authError) {
-      const message = authError instanceof Error ? authError.message : "Unable to start Google sign in";
-      setError(message);
-      setPendingGoogle(false);
-    }
   };
 
   const handleMagicLink = async () => {
@@ -131,103 +85,12 @@ export function AuthDialog({
         throw magicLinkError;
       }
 
-      setMessage("Magic link sent. Check your inbox to continue.");
+      setMessage("Email sent. Check your inbox for your secure login link.");
     } catch (authError) {
       const message = authError instanceof Error ? authError.message : "Unable to send magic link";
       setError(message);
     } finally {
       setPendingMagicLink(false);
-    }
-  };
-
-  const handlePasswordAuth = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!email.trim()) {
-      setError("Please enter an email address");
-      return;
-    }
-
-    if (!password.trim()) {
-      setError("Please enter a password");
-      return;
-    }
-
-    setPendingPasswordAuth(true);
-    setError(null);
-    setMessage(null);
-
-    try {
-      const supabase = createSupabaseBrowserClient();
-
-      if (passwordMode === "sign_in") {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-
-        if (signInError) {
-          throw signInError;
-        }
-
-        window.location.assign(buildAuthFinalizeUrl(nextPath, linkPlayerId));
-        return;
-      }
-
-      const emailRedirectTo = buildAuthCallbackUrl(nextPath, linkPlayerId);
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          emailRedirectTo,
-        },
-      });
-
-      if (signUpError) {
-        throw signUpError;
-      }
-
-      if (data.session) {
-        window.location.assign(buildAuthFinalizeUrl(nextPath, linkPlayerId));
-        return;
-      }
-
-      setMessage("Account created. Check your email to verify your account and finish sign in.");
-    } catch (authError) {
-      const message = authError instanceof Error ? authError.message : "Unable to continue with password";
-      setError(message);
-    } finally {
-      setPendingPasswordAuth(false);
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      setError("Enter your email first so we can send a reset link");
-      return;
-    }
-
-    setPendingResetEmail(true);
-    setError(null);
-    setMessage(null);
-
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const redirectTo = buildAuthCallbackUrl("/auth/reset-password");
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo,
-      });
-
-      if (resetError) {
-        throw resetError;
-      }
-
-      setMessage("Password reset email sent. Use the link in your inbox to set a new password.");
-    } catch (authError) {
-      const message = authError instanceof Error ? authError.message : "Unable to send reset email";
-      setError(message);
-    } finally {
-      setPendingResetEmail(false);
     }
   };
 
@@ -263,20 +126,9 @@ export function AuthDialog({
                 to one auth.users.id and one profile, instead of creating a second account.
             */}
 
-            <button
-              type="button"
-              onClick={handleGoogle}
-              disabled={pendingGoogle || pendingMagicLink || pendingPasswordAuth || pendingResetEmail}
-              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-60"
-            >
-              {pendingGoogle ? "Redirecting..." : "Continue with Google"}
-            </button>
-
-            <div className="my-4 h-px bg-slate-200" />
-
-            <label className="text-xs font-medium uppercase tracking-wide text-slate-500" htmlFor="magic-link-email">
-              Email magic link
-            </label>
+            <p className="mt-4 text-sm text-slate-600">
+              Enter your email and we&apos;ll send you a secure login link.
+            </p>
             <input
               id="magic-link-email"
               type="email"
@@ -288,75 +140,11 @@ export function AuthDialog({
             <button
               type="button"
               onClick={handleMagicLink}
-              disabled={pendingGoogle || pendingMagicLink || pendingPasswordAuth || pendingResetEmail}
+              disabled={pendingMagicLink}
               className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
-              {pendingMagicLink ? "Sending..." : "Send magic link"}
+              {pendingMagicLink ? "Sending..." : "Continue with email"}
             </button>
-
-            <div className="my-4 h-px bg-slate-200" />
-
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Email + password</p>
-              <div className="inline-flex rounded-lg border border-slate-200 p-0.5 text-[11px] font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setPasswordMode("sign_in")}
-                  className={`rounded-md px-2 py-1 ${
-                    passwordMode === "sign_in" ? "bg-slate-900 text-white" : "text-slate-600"
-                  }`}
-                >
-                  Sign in
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPasswordMode("sign_up")}
-                  className={`rounded-md px-2 py-1 ${
-                    passwordMode === "sign_up" ? "bg-slate-900 text-white" : "text-slate-600"
-                  }`}
-                >
-                  Create account
-                </button>
-              </div>
-            </div>
-
-            <form className="mt-3 space-y-3" onSubmit={handlePasswordAuth}>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Password"
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-slate-400"
-              />
-
-              <button
-                type="submit"
-                disabled={pendingGoogle || pendingMagicLink || pendingPasswordAuth || pendingResetEmail}
-                className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-slate-800 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
-              >
-                {pendingPasswordAuth
-                  ? "Working..."
-                  : passwordMode === "sign_in"
-                    ? "Sign in with password"
-                    : "Create account"}
-              </button>
-            </form>
-
-            <button
-              type="button"
-              onClick={handleForgotPassword}
-              disabled={pendingGoogle || pendingMagicLink || pendingPasswordAuth || pendingResetEmail}
-              className="mt-2 text-xs font-semibold text-slate-600 underline disabled:opacity-60"
-            >
-              {pendingResetEmail ? "Sending reset email..." : "Forgot password?"}
-            </button>
-
-            <p className="mt-3 text-xs text-slate-500">
-              Prefer phone verification?{" "}
-              <Link href="/auth/phone" className="font-semibold text-slate-700 underline">
-                Use phone sign in
-              </Link>
-            </p>
 
             {message && <p className="mt-3 text-xs font-medium text-emerald-700">{message}</p>}
             {error && <p className="mt-3 text-xs font-medium text-red-600">{error}</p>}

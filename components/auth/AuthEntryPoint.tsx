@@ -131,7 +131,7 @@ export function AuthEntryPoint({ nextPath, linkPlayerId, subtle = true }: AuthEn
   if (!isAuthenticated) {
     return (
       <AuthDialog
-        label="Sign in"
+        label="Continue with email"
         nextPath={nextPath}
         linkPlayerId={linkPlayerId}
         emphasis={subtle ? "subtle" : "prominent"}
