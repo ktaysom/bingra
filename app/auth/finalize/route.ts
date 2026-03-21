@@ -17,7 +17,6 @@ function normalizeNextPath(input: string | null): string {
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get("code");
   const nextPath = normalizeNextPath(requestUrl.searchParams.get("next"));
   const linkPlayerId = requestUrl.searchParams.get("link_player_id");
 
@@ -46,20 +45,12 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  if (code) {
-    await supabase.auth.exchangeCodeForSession(code);
-  }
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (user?.id) {
     try {
-      // Multi-identity note:
-      // We treat auth.users.id as the stable account key and create exactly one profile per auth user.
-      // Future email+phone support should link both credentials to this SAME auth user/profile,
-      // rather than creating a second auth user (which would create a second profile).
       const profile = await getOrCreateProfileByAuthUserId(user.id);
 
       if (linkPlayerId) {
@@ -69,7 +60,7 @@ export async function GET(request: NextRequest) {
         });
       }
     } catch (error) {
-      console.error("[auth/callback] player link failed", error);
+      console.error("[auth/finalize] player link failed", error);
     }
   }
 

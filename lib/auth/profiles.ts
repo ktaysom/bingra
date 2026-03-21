@@ -2,7 +2,9 @@ import { createSupabaseAdminClient } from "../supabase/admin";
 
 export type ProfileRecord = {
   id: string;
-  auth_user_id: string;
+  // Canonical app identity: profiles.id === auth.users.id
+  // Keep all stats/ownership keyed to this stable UUID, not email/phone identifiers.
+  auth_user_id?: string;
 };
 
 export async function getProfileByAuthUserId(
@@ -12,8 +14,8 @@ export async function getProfileByAuthUserId(
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, auth_user_id")
-    .eq("auth_user_id", authUserId)
+    .select("id")
+    .eq("id", authUserId)
     .maybeSingle<ProfileRecord>();
 
   if (error) {
@@ -34,8 +36,8 @@ export async function getOrCreateProfileByAuthUserId(authUserId: string): Promis
 
   const { data: inserted, error: insertError } = await supabase
     .from("profiles")
-    .insert({ auth_user_id: authUserId })
-    .select("id, auth_user_id")
+    .insert({ id: authUserId, auth_user_id: authUserId })
+    .select("id")
     .maybeSingle<ProfileRecord>();
 
   if (insertError) {
