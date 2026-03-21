@@ -23,7 +23,7 @@ function SubmitButton() {
       disabled={pending}
       className="inline-flex h-14 w-full items-center justify-center rounded-2xl bg-[#2f6df6] px-6 text-base font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda] disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {pending ? "Joining..." : "Join game"}
+      {pending ? "Joining..." : "Join my Bingra game"}
     </button>
   );
 }
