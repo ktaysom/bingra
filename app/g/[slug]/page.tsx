@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { createSupabaseAdminClient } from "../../../lib/supabase/admin";
 import { JoinForm } from "./JoinForm";
 import { joinGameAction } from "../../actions/join-game";
+import { AuthEntryPoint } from "../../../components/auth/AuthEntryPoint";
 
 type JoinPageProps = {
   params: {
@@ -66,7 +67,9 @@ export default async function JoinGamePage(props: JoinPageProps) {
     <main className="mx-auto flex min-h-[70vh] w-full max-w-6xl flex-col justify-center px-4 py-12 sm:px-6">
       <section className="mx-auto w-full max-w-3xl rounded-2xl bg-white/90 p-8 shadow-md">
         <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500"></p>
+          <div className="flex items-start justify-between gap-3">
+            <AuthEntryPoint nextPath={`/g/${slug}`} subtle />
+          </div>
           <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">
             {teamAName} vs {teamBName}
           </h1>

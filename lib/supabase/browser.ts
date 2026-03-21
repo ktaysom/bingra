@@ -1,6 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-type BrowserSupabaseClient = ReturnType<typeof createClient>;
+type BrowserSupabaseClient = ReturnType<typeof createBrowserClient>;
 
 declare global {
   var __bingoSupabaseBrowserClient: BrowserSupabaseClient | undefined;
@@ -17,11 +17,11 @@ export function createSupabaseBrowserClient() {
   }
 
   if (typeof window === "undefined") {
-    return createClient(url, key);
+    return createBrowserClient(url, key);
   }
 
   if (!globalThis.__bingoSupabaseBrowserClient) {
-    globalThis.__bingoSupabaseBrowserClient = createClient(url, key);
+    globalThis.__bingoSupabaseBrowserClient = createBrowserClient(url, key);
   }
 
   return globalThis.__bingoSupabaseBrowserClient;

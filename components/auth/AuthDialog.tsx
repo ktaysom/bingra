@@ -1,0 +1,177 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
+
+type AuthDialogProps = {
+  label?: string;
+  nextPath: string;
+  linkPlayerId?: string;
+  emphasis?: "subtle" | "prominent";
+};
+
+function buildAuthCallbackUrl(nextPath: string, linkPlayerId?: string): string {
+  const callbackUrl = new URL("/auth/callback", window.location.origin);
+  callbackUrl.searchParams.set("next", nextPath);
+
+  if (linkPlayerId) {
+    callbackUrl.searchParams.set("link_player_id", linkPlayerId);
+  }
+
+  return callbackUrl.toString();
+}
+
+export function AuthDialog({
+  label = "Sign in",
+  nextPath,
+  linkPlayerId,
+  emphasis = "subtle",
+}: AuthDialogProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [pendingGoogle, setPendingGoogle] = useState(false);
+  const [pendingMagicLink, setPendingMagicLink] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const buttonClassName = useMemo(() => {
+    if (emphasis === "prominent") {
+      return "inline-flex h-10 items-center justify-center rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-60";
+    }
+
+    return "inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800";
+  }, [emphasis]);
+
+  const open = () => {
+    setIsOpen(true);
+    setMessage(null);
+    setError(null);
+  };
+
+  const close = () => {
+    setIsOpen(false);
+    setPendingGoogle(false);
+    setPendingMagicLink(false);
+  };
+
+  const handleGoogle = async () => {
+    setPendingGoogle(true);
+    setError(null);
+
+    try {
+      const redirectTo = buildAuthCallbackUrl(nextPath, linkPlayerId);
+      const supabase = createSupabaseBrowserClient();
+      const { error: signInError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+        },
+      });
+
+      if (signInError) {
+        throw signInError;
+      }
+    } catch (authError) {
+      const message = authError instanceof Error ? authError.message : "Unable to start Google sign in";
+      setError(message);
+      setPendingGoogle(false);
+    }
+  };
+
+  const handleMagicLink = async () => {
+    if (!email.trim()) {
+      setError("Please enter an email address");
+      return;
+    }
+
+    setPendingMagicLink(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const emailRedirectTo = buildAuthCallbackUrl(nextPath, linkPlayerId);
+      const supabase = createSupabaseBrowserClient();
+      const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: {
+          emailRedirectTo,
+        },
+      });
+
+      if (magicLinkError) {
+        throw magicLinkError;
+      }
+
+      setMessage("Magic link sent. Check your inbox to continue.");
+    } catch (authError) {
+      const message = authError instanceof Error ? authError.message : "Unable to send magic link";
+      setError(message);
+    } finally {
+      setPendingMagicLink(false);
+    }
+  };
+
+  return (
+    <>
+      <button type="button" onClick={open} className={buttonClassName}>
+        {label}
+      </button>
+
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-slate-900">Sign in to Bingra</h2>
+              <button
+                type="button"
+                onClick={close}
+                className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100"
+                aria-label="Close sign in"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Guest play stays available. Sign in to save stats and unlock history.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleGoogle}
+              disabled={pendingGoogle || pendingMagicLink}
+              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              {pendingGoogle ? "Redirecting..." : "Continue with Google"}
+            </button>
+
+            <div className="my-4 h-px bg-slate-200" />
+
+            <label className="text-xs font-medium uppercase tracking-wide text-slate-500" htmlFor="magic-link-email">
+              Email magic link
+            </label>
+            <input
+              id="magic-link-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-slate-400"
+            />
+            <button
+              type="button"
+              onClick={handleMagicLink}
+              disabled={pendingGoogle || pendingMagicLink}
+              className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              {pendingMagicLink ? "Sending..." : "Send magic link"}
+            </button>
+
+            {message && <p className="mt-3 text-xs font-medium text-emerald-700">{message}</p>}
+            {error && <p className="mt-3 text-xs font-medium text-red-600">{error}</p>}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

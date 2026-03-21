@@ -6,6 +6,8 @@ import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
+import { createSupabaseServerClient } from "../../lib/supabase/server";
+import { getOrCreateProfileByAuthUserId } from "../../lib/auth/profiles";
 
 export type JoinGameFormState = {
   error?: string;
@@ -49,6 +51,17 @@ export async function joinGameAction(
   }
 
   const supabase = createSupabaseAdminClient();
+  const supabaseServer = await createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabaseServer.auth.getUser();
+
+  let profileId: string | null = null;
+  if (user?.id) {
+    const profile = await getOrCreateProfileByAuthUserId(user.id);
+    profileId = profile.id;
+  }
 
   try {
     const { data: game, error: gameError } = await supabase
@@ -65,11 +78,41 @@ export async function joinGameAction(
       return { error: "Game not found" };
     }
 
+    if (profileId) {
+      const { data: existingLinkedPlayer, error: existingLinkedPlayerError } = await supabase
+        .from("players")
+        .select("id")
+        .eq("game_id", game.id)
+        .eq("profile_id", profileId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+
+      if (existingLinkedPlayerError) {
+        throw existingLinkedPlayerError;
+      }
+
+      if (existingLinkedPlayer?.id) {
+        const cookieStore = await cookies();
+        cookieStore.set({
+          name: "bingra-player-id",
+          value: existingLinkedPlayer.id,
+          path: `/g/${parsed.data.slug}`,
+          maxAge: 60 * 60 * 24 * 30,
+          httpOnly: true,
+          sameSite: "lax",
+        });
+
+        redirect(`/g/${parsed.data.slug}/play`);
+      }
+    }
+
     const insertPayload = {
       game_id: game.id,
       display_name: parsed.data.displayName,
       role: "player" as const,
       join_token: randomUUID(),
+      profile_id: profileId,
     };
 
     const { data: playerData, error: playerError } = await supabase
@@ -79,6 +122,35 @@ export async function joinGameAction(
       .maybeSingle();
 
     if (playerError) {
+      if (profileId && (playerError as { code?: string }).code === "23505") {
+        const { data: existingLinkedPlayer, error: existingLinkedPlayerError } = await supabase
+          .from("players")
+          .select("id")
+          .eq("game_id", game.id)
+          .eq("profile_id", profileId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle<{ id: string }>();
+
+        if (existingLinkedPlayerError) {
+          throw existingLinkedPlayerError;
+        }
+
+        if (existingLinkedPlayer?.id) {
+          const cookieStore = await cookies();
+          cookieStore.set({
+            name: "bingra-player-id",
+            value: existingLinkedPlayer.id,
+            path: `/g/${parsed.data.slug}`,
+            maxAge: 60 * 60 * 24 * 30,
+            httpOnly: true,
+            sameSite: "lax",
+          });
+
+          redirect(`/g/${parsed.data.slug}/play`);
+        }
+      }
+
       throw playerError;
     }
 

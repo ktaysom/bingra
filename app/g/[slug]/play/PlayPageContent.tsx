@@ -22,6 +22,8 @@ import {
   buildActivityFeedItems,
   type ActivityFeedItem,
 } from "../../../../lib/bingra/activity-feed";
+import { AuthEntryPoint } from "../../../../components/auth/AuthEntryPoint";
+import { EndGameSaveStatsPrompt } from "../../../../components/auth/EndGameSaveStatsPrompt";
 
 type GameRecord = {
   id: string;
@@ -417,6 +419,12 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
   return (
     <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6">
       <PlayRealtimeBridgeMount gameId={game.id} />
+      <EndGameSaveStatsPrompt
+        gameId={game.id}
+        slug={slug}
+        playerId={currentPlayerId}
+        isFinished={isGameFinished}
+      />
       <EndGameCelebration
         gameId={game.id}
         isFinished={isGameFinished}
@@ -446,7 +454,12 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
             <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{matchupHeadline}</h1>
             <p className="mt-1 text-sm text-slate-500">Hosted by {hostName}</p>
           </div>
-          <div className="sm:pt-1">
+          <div className="flex items-center gap-2 sm:pt-1">
+            <AuthEntryPoint
+              nextPath={`/g/${slug}/play`}
+              linkPlayerId={currentPlayerId}
+              subtle
+            />
             <InlineShareButton slug={slug} title={game.title ?? matchupHeadline} />
           </div>
         </div>

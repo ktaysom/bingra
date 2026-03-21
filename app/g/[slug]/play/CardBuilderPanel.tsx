@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   chooseRandomEvents,
@@ -72,6 +72,17 @@ function getIdentityTone(teamKey: TeamKey | null): { container: string } {
   return {
     container: "border border-slate-200 border-l-4 border-l-slate-300 bg-white/90 shadow-sm",
   };
+}
+
+function getCardEventIdentityKey(event: CardBuilderEvent): string {
+  return `${event.id}:${event.cardTeamKey ?? "NONE"}`;
+}
+
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
 }
 
 function isPossessionStyleEvent(event: GameEventType): boolean {
@@ -179,6 +190,10 @@ export function CardBuilderPanel({
   const [activeFilters, setActiveFilters] = useState<Set<AddFilterKey>>(new Set());
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [touchDragItemId, setTouchDragItemId] = useState<string | null>(null);
+  const touchLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchPointerStateRef = useRef<{ pointerId: number; itemId: string } | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const router = useRouter();
 
   const [generateState, generateAction, isSubmitting] = useActionState(generateCardAction, {});
@@ -381,18 +396,22 @@ export function CardBuilderPanel({
     });
   }, [generateState.error, generateState.success, isHydrated, isSubmitting]);
 
-  const handleReorder = (index: number, direction: "up" | "down") => {
-    if (mode !== "streak") return;
-
-    setCardEvents((prev) => {
-      const next = [...prev];
-      const newIndex = direction === "up" ? index - 1 : index + 1;
-      if (newIndex < 0 || newIndex >= next.length) {
-        return prev;
+  useEffect(() => {
+    return () => {
+      if (touchLongPressTimerRef.current) {
+        clearTimeout(touchLongPressTimerRef.current);
       }
-      [next[index], next[newIndex]] = [next[newIndex], next[index]];
-      return next;
-    });
+    };
+  }, []);
+
+  const clearTouchDragState = () => {
+    if (touchLongPressTimerRef.current) {
+      clearTimeout(touchLongPressTimerRef.current);
+      touchLongPressTimerRef.current = null;
+    }
+    touchPointerStateRef.current = null;
+    touchStartRef.current = null;
+    setTouchDragItemId(null);
   };
 
   const toggleFilter = (filter: AddFilterKey) => {
@@ -419,14 +438,81 @@ export function CardBuilderPanel({
       return;
     }
 
-    setCardEvents((prev) => {
-      const next = [...prev];
-      const [moved] = next.splice(dragIndex, 1);
-      next.splice(targetIndex, 0, moved);
-      return next;
-    });
-
+    setCardEvents((prev) => moveItem(prev, dragIndex, targetIndex));
     setDragIndex(null);
+  };
+
+  const handleTouchHandlePointerDown = (
+    event: React.PointerEvent<HTMLButtonElement>,
+    itemId: string,
+  ) => {
+    if (mode !== "streak" || event.pointerType !== "touch") return;
+
+    touchPointerStateRef.current = {
+      pointerId: event.pointerId,
+      itemId,
+    };
+    touchStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    touchLongPressTimerRef.current = setTimeout(() => {
+      setTouchDragItemId(itemId);
+    }, 220);
+  };
+
+  const handleTouchHandlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== "touch") return;
+
+    const pointerState = touchPointerStateRef.current;
+    if (!pointerState || pointerState.pointerId !== event.pointerId) return;
+
+    if (!touchDragItemId) {
+      const touchStart = touchStartRef.current;
+
+      if (touchStart) {
+        const deltaX = Math.abs(event.clientX - touchStart.x);
+        const deltaY = Math.abs(event.clientY - touchStart.y);
+
+        if (deltaX > 10 || deltaY > 10) {
+          clearTouchDragState();
+        }
+      }
+
+      return;
+    }
+
+    event.preventDefault();
+
+    const targetElement = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>("[data-reorder-id]");
+    const targetId = targetElement?.dataset.reorderId;
+
+    if (!targetId || targetId === touchDragItemId) return;
+
+    setCardEvents((prev) => {
+      const fromIndex = prev.findIndex((item) => getCardEventIdentityKey(item) === touchDragItemId);
+      const toIndex = prev.findIndex((item) => getCardEventIdentityKey(item) === targetId);
+
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+        return prev;
+      }
+
+      return moveItem(prev, fromIndex, toIndex);
+    });
+  };
+
+  const handleTouchHandlePointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== "touch") return;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    clearTouchDragState();
   };
 
   if (shouldRenderLocked) {
@@ -553,40 +639,60 @@ export function CardBuilderPanel({
               <p className="text-xs uppercase tracking-wide text-slate-500">Drag to reorder</p>
             </div>
             <ul className="divide-y divide-slate-200">
-              {cardEvents.map((event, index) => (
-                (() => {
-                  const tone = getIdentityTone(event.cardTeamKey ?? null);
+              {cardEvents.map((event, index) => {
+                const itemId = getCardEventIdentityKey(event);
+                const tone = getIdentityTone(event.cardTeamKey ?? null);
+                const isTouchDragging = touchDragItemId === itemId;
 
-                  return (
-                <li
-                  key={`${event.id}-${event.cardTeamKey ?? "NONE"}-reorder`}
-                  className={`flex items-center justify-between gap-3 px-4 py-3 text-sm text-slate-700 ${tone.container}`}
-                  draggable
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => handleDrop(index)}
-                >
-                  <div>
-                    <p className="font-medium text-slate-900">{index + 1}. {stripTeamPrefix(event.label, event.cardTeamKey ? teamNames[event.cardTeamKey] : null)}</p>
-                    {event.cardTeamKey && (
-                      <p className="text-[11px] text-slate-500">{teamNames[event.cardTeamKey]}</p>
-                    )}
-                    <p className="text-xs text-slate-500">{event.basePoints} pts</p>
-                  </div>
-                  <div className="flex items-center justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveEvent(index)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/90 text-sm font-semibold text-red-600 shadow-sm"
-                      aria-label={`Remove ${event.label}`}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </li>
-                  );
-                })()
-              ))}
+                return (
+                  <li
+                    key={`${event.id}-${event.cardTeamKey ?? "NONE"}-reorder`}
+                    data-reorder-id={itemId}
+                    className={`flex items-center justify-between gap-3 px-4 py-3 text-sm text-slate-700 ${tone.container} ${
+                      isTouchDragging ? "opacity-70" : ""
+                    }`}
+                    draggable
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => handleDrop(index)}
+                    onDragEnd={() => setDragIndex(null)}
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900">
+                        {index + 1}. {stripTeamPrefix(event.label, event.cardTeamKey ? teamNames[event.cardTeamKey] : null)}
+                      </p>
+                      {event.cardTeamKey && (
+                        <p className="text-[11px] text-slate-500">{teamNames[event.cardTeamKey]}</p>
+                      )}
+                      <p className="text-xs text-slate-500">{event.basePoints} pts</p>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 touch-none items-center justify-center rounded-2xl bg-white/90 text-base font-semibold text-slate-500 shadow-sm"
+                        aria-label={`Drag to reorder ${event.label}`}
+                        title="Long press then drag to reorder"
+                        onPointerDown={(pointerEvent) =>
+                          handleTouchHandlePointerDown(pointerEvent, itemId)
+                        }
+                        onPointerMove={handleTouchHandlePointerMove}
+                        onPointerUp={handleTouchHandlePointerUp}
+                        onPointerCancel={handleTouchHandlePointerUp}
+                      >
+                        ≡
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEvent(index)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/90 text-sm font-semibold text-red-600 shadow-sm"
+                        aria-label={`Remove ${event.label}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
           </div>

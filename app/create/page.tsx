@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createGameAction, CreateGameFormState } from "../actions/create-game";
 import { generateGameName } from "../../lib/bingra/game-name-generator";
+import { AuthEntryPoint } from "../../components/auth/AuthEntryPoint";
 
 const initialState: CreateGameFormState = {};
 
@@ -219,7 +220,10 @@ export default function CreatePage() {
     <main className="min-h-screen text-[#2f2925]">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-8 sm:px-6 md:py-10">
         <header className="mb-10">
-          <div className="text-2xl font-black tracking-[-0.04em] text-[#2c2622]">Bingra</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-2xl font-black tracking-[-0.04em] text-[#2c2622]">Bingra</div>
+            <AuthEntryPoint nextPath="/create" subtle />
+          </div>
         </header>
 
         <div className="grid flex-1 gap-12 lg:grid-cols-[1.02fr_0.98fr] lg:items-start">

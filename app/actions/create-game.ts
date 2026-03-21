@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
+import { createSupabaseServerClient } from "../../lib/supabase/server";
+import { getOrCreateProfileByAuthUserId } from "../../lib/auth/profiles";
 
 export type CreateGameFormState = {
   error?: string;
@@ -85,6 +87,18 @@ export async function createGameAction(
     }
 
     const supabase = createSupabaseAdminClient();
+    const supabaseServer = await createSupabaseServerClient();
+
+    const {
+      data: { user },
+    } = await supabaseServer.auth.getUser();
+
+    let profileId: string | null = null;
+    if (user?.id) {
+      const profile = await getOrCreateProfileByAuthUserId(user.id);
+      profileId = profile.id;
+    }
+
     console.log("[createGameAction] SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
     const rpcPayload = {
@@ -97,7 +111,7 @@ export async function createGameAction(
       p_event_keys: null,
       p_event_labels: null,
       p_event_points: null,
-      p_auth_user_id: null,
+      p_auth_user_id: user?.id ?? null,
     };
 
     console.log("[createGameAction] rpc_create_game payload", rpcPayload);
@@ -212,6 +226,7 @@ export async function createGameAction(
             display_name: parsed.data.hostDisplayName,
             role: "host",
             join_token: randomUUID(),
+            profile_id: profileId,
           })
           .select("id")
           .maybeSingle<{ id: string }>();
