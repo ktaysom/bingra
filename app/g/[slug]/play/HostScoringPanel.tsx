@@ -272,7 +272,9 @@ export function HostScoringPanel({
   function getTitle() {
     switch (stage) {
       case "event":
-        return parent === "score" ? "Score" : "Change of possession";
+        if (parent === "score") return "Score";
+        if (parent === "misc") return "Time Out";
+        return "Change of possession";
       case "subtype":
         return "Made free throw";
       case "team":

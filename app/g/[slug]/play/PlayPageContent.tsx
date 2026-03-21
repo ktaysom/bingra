@@ -2,9 +2,9 @@ import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { CardBuilderPanel } from "./CardBuilderPanel";
 import { EndGameCelebration } from "./EndGameCelebration";
 import { HostScoringPanel } from "./HostScoringPanel";
-import { EndGameControl, GameStatusActionButton, ShareGameControl } from "./PlayHostControls";
+import { EndGameControl, GameStatusActionButton, InlineShareButton } from "./PlayHostControls";
 import { PlayRealtimeBridgeMount } from "./PlayRealtimeBridgeMount";
-import { getPlayModeLabel, mapPlayModeToGameMode } from "../../../../lib/bingra/types";
+import { mapPlayModeToGameMode } from "../../../../lib/bingra/types";
 import {
   chooseRandomEvents,
   getEventById,
@@ -125,9 +125,14 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
 
   const playerCount = players?.length ?? 0;
   const playMode = game.completion_mode === "STREAK" ? "streak" : "quick_play";
-  const modeLabel = getPlayModeLabel(playMode);
   const initialRiskLevel: RiskLevel = 3;
   const teamNames: Record<TeamKey, string> = { A: game.team_a_name, B: game.team_b_name };
+  const hostName =
+    players?.find((player) => player.role === "host")?.display_name?.trim() || "Host";
+  const matchupHeadline =
+    game.team_a_name?.trim() && game.team_b_name?.trim()
+      ? `${game.team_a_name} vs ${game.team_b_name}`
+      : game.title?.trim() || "Untitled game";
   const initialCardEvents = chooseRandomEvents(game.events_per_card, {
     mode: mapPlayModeToGameMode(playMode),
     riskLevel: initialRiskLevel,
@@ -156,10 +161,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
   const isLobby = game.status === "lobby";
   const isLive = game.status === "live";
   const isGameFinished = game.status === "finished";
-  const lifecycleLabel = isLobby ? "Waiting for host" : isLive ? "Live" : "Ended";
-
   let allScoredEvents: RecentScoredEvent[] = [];
-  let recentEventsError: string | null = null;
 
   try {
     const { data, error } = await supabase
@@ -170,9 +172,8 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       .order("id", { ascending: true });
 
     allScoredEvents = (data as RecentScoredEvent[] | null) ?? [];
-    recentEventsError = error?.message ?? null;
   } catch (error) {
-    recentEventsError = String(error);
+    console.error("Unable to load scored events", error);
   }
 
   let liveCompletions: LiveCompletionRow[] = [];
@@ -300,7 +301,6 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
   });
 
   const lockedCardEvents = catalogEvents.length > 0 ? catalogEvents : initialCardEvents;
-  const recentScoredEvents = allScoredEvents.slice(-10).reverse();
 
   const winnerName = game.winner_player_id
     ? playersById.get(game.winner_player_id)?.display_name ?? null
@@ -440,60 +440,31 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
         scoreboardTargetId={scoreboardTargetId}
       />
 
-      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Player lobby
-          </p>
-          <h1 className="text-4xl font-semibold text-slate-900">Ready up</h1>
-          <p className="font-mono text-sm text-slate-500">/g/{slug}/play</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">
-            {lifecycleLabel}
-          </span>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-            {playerCount} players
-          </span>
+      <header className="rounded-2xl bg-white/90 p-6 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{matchupHeadline}</h1>
+            <p className="mt-1 text-sm text-slate-500">Hosted by {hostName}</p>
+          </div>
+          <div className="sm:pt-1">
+            <InlineShareButton slug={slug} title={game.title ?? matchupHeadline} />
+          </div>
         </div>
       </header>
 
-      <ShareGameControl slug={slug} title={game.title ?? "Untitled game"} />
+      <CardBuilderPanel
+        mode={playMode}
+        playerId={currentPlayerId}
+        eventsPerCard={game.events_per_card}
+        teamScope={game.team_scope}
+        endCondition={game.end_condition}
+        teamNames={teamNames}
+        initialRiskLevel={initialRiskLevel}
+        initialCardEvents={initialCardEvents}
+        lockedCardEvents={lockedCardEvents}
+      />
 
       <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Game
-            </p>
-            <h2 className="text-3xl font-semibold text-slate-900">
-              {game.title ?? "Untitled game"}
-            </h2>
-            <p className="font-mono text-xs uppercase text-slate-500">#{game.id}</p>
-          </div>
-          <div className="rounded-2xl bg-white/90 px-4 py-3 text-sm text-slate-600 shadow-sm">
-            <p className="font-semibold text-slate-900">{modeLabel}</p>
-            <p className="text-xs text-slate-500">
-              Status: {lifecycleLabel}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr_1fr]">
-        <CardBuilderPanel
-          mode={playMode}
-          playerId={currentPlayerId}
-          eventsPerCard={game.events_per_card}
-          teamScope={game.team_scope}
-          endCondition={game.end_condition}
-          teamNames={teamNames}
-          initialRiskLevel={initialRiskLevel}
-          initialCardEvents={initialCardEvents}
-          lockedCardEvents={lockedCardEvents}
-        />
-
-        <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -630,86 +601,58 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
               </div>
             )}
           </div>
-        </section>
+      </section>
 
-        <section
-          id={scoreboardTargetId}
-          tabIndex={-1}
-          className="rounded-2xl bg-white/90 p-6 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Leaderboard
-              </p>
-              <h2 className="text-xl font-semibold text-slate-900">Players</h2>
-            </div>
-            <span className="text-sm text-slate-500">{playerCount} joined</span>
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            {isLive
-              ? "Points update live. Bingra badge means this player gets a 2x multiplier when the game ends."
-              : "Final score = raw points ×2 with Bingra, otherwise raw points."}
-          </p>
-          <div className="mt-4 space-y-3">
-            {leaderboardEntries.map((entry, index) => (
-              <div
-                key={entry.id}
-                className="flex items-center justify-between rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {index + 1}. {entry.name}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {isLive
-                      ? `${entry.raw_points} Points`
-                      : `Final ${entry.final_score} • Raw ${entry.raw_points}${entry.has_bingra ? " • Bingra x2" : ""}`}
-                  </p>
-                </div>
-                <span className="text-xs font-medium text-slate-500">
-                  {entry.has_bingra
-                    ? "Bingra (2x)"
-                    : entry.is_one_away
-                      ? "One away"
-                      : `${entry.completed_cells_count} done`}
-                </span>
-              </div>
-            ))}
-          </div>
-          {playersError && (
-            <p className="mt-4 text-xs text-red-600">
-              Unable to load live player data for this game.
-            </p>
-          )}
-        </section>
-      </div>
-
-      <section className="rounded-2xl bg-white/90 p-4 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <section
+        id={scoreboardTargetId}
+        tabIndex={-1}
+        className="rounded-2xl bg-white/90 p-6 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+      >
+        <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Game lifecycle
+              Leaderboard
             </p>
-            <h2 className="text-xl font-semibold text-slate-900">
-              {isLobby ? "Lobby" : isLive ? "Live" : "Ended"}
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {isLobby
-                ? "Start the game to unlock event recording."
-                : isLive
-                  ? game.end_condition === "FIRST_COMPLETION"
-                    ? "Scoring is enabled. Game ends automatically on first Bingra, or the host can end it manually; winner is highest final score at game end."
-                    : "Scoring is enabled. Bingra doubles points; host ends the game to lock final scores."
-                  : winnerName
-                    ? `This game has ended. Winner: ${winnerName}.`
-                    : "This game has ended. Scoring is disabled."}
-            </p>
+            <h2 className="text-xl font-semibold text-slate-900">Players</h2>
           </div>
-
-          {isLobby && <GameStatusActionButton slug={slug} intent="start">Start game</GameStatusActionButton>}
-          {isLive && <EndGameControl slug={slug} />}
+          <span className="text-sm text-slate-500">{playerCount} joined</span>
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          {isLive
+            ? "Points update live. Bingra badge means this player gets a 2x multiplier when the game ends."
+            : "Final score = raw points ×2 with Bingra, otherwise raw points."}
+        </p>
+        <div className="mt-4 space-y-3">
+          {leaderboardEntries.map((entry, index) => (
+            <div
+              key={entry.id}
+              className="flex items-center justify-between rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
+            >
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {index + 1}. {entry.name}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {isLive
+                    ? `${entry.raw_points} Points`
+                    : `Final ${entry.final_score} • Raw ${entry.raw_points}${entry.has_bingra ? " • Bingra x2" : ""}`}
+                </p>
+              </div>
+              <span className="text-xs font-medium text-slate-500">
+                {entry.has_bingra
+                  ? "Bingra (2x)"
+                  : entry.is_one_away
+                    ? "One away"
+                    : `${entry.completed_cells_count} done`}
+              </span>
+            </div>
+          ))}
+        </div>
+        {playersError && (
+          <p className="mt-4 text-xs text-red-600">
+            Unable to load live player data for this game.
+          </p>
+        )}
       </section>
 
       {isLive ? (
@@ -735,51 +678,30 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
         </section>
       )}
 
-      <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
-        <div className="flex items-center justify-between">
+      <section className="rounded-2xl bg-white/90 p-4 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Recent recorded events
+              Game lifecycle
             </p>
-            <h2 className="text-xl font-semibold text-slate-900">Game writes</h2>
+            <h2 className="text-xl font-semibold text-slate-900">
+              {isLobby ? "Lobby" : isLive ? "Live" : "Ended"}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {isLobby
+                ? "Start the game to unlock event recording."
+                : isLive
+                  ? game.end_condition === "FIRST_COMPLETION"
+                    ? "Scoring is enabled. Game ends automatically on first Bingra, or the host can end it manually; winner is highest final score at game end."
+                    : "Scoring is enabled. Bingra doubles points; host ends the game to lock final scores."
+                  : winnerName
+                    ? `This game has ended. Winner: ${winnerName}.`
+                    : "This game has ended. Scoring is disabled."}
+            </p>
           </div>
-        </div>
-        <div className="mt-4 space-y-2 text-sm text-slate-600">
-          {recentScoredEvents && recentScoredEvents.length > 0 ? (
-            recentScoredEvents.map((event) => {
-              const catalogEvent = event.event_key
-                ? getEventById(event.event_key)
-                : undefined;
-              const label = catalogEvent?.label ?? event.event_label ?? event.event_key;
 
-              return (
-                <div
-                  key={event.id}
-                  className="flex items-center justify-between rounded-2xl bg-white/90 px-4 py-2 shadow-sm"
-                >
-                  <div className="space-y-0.5">
-                    <p className="font-medium text-slate-900">{label}</p>
-                    {event.team_key && (
-                      <p className="text-xs uppercase tracking-wide text-slate-400">
-                        {event.team_key === "A" ? game.team_a_name : event.team_key === "B" ? game.team_b_name : `Team ${event.team_key}`}
-                      </p>
-                    )}
-                  </div>
-                  {event.created_at && (
-                    <span className="text-[11px] text-slate-400">
-                      {new Date(event.created_at).toLocaleTimeString()}
-                    </span>
-                  )}
-                </div>
-              );
-            })
-          ) : recentEventsError ? (
-            <p className="text-xs text-slate-400">
-              Unable to load recorded events yet.
-            </p>
-          ) : (
-            <p className="text-xs text-slate-400">No recorded events found.</p>
-          )}
+          {isLobby && <GameStatusActionButton slug={slug} intent="start">Start game</GameStatusActionButton>}
+          {isLive && <EndGameControl slug={slug} />}
         </div>
       </section>
     </main>

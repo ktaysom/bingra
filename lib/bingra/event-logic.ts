@@ -58,6 +58,7 @@ export type ScorerSubtypeOption = {
 const SCORER_PARENT_OPTIONS: ScorerParentOption[] = [
   { id: "change-of-possession", label: "Change of possession" },
   { id: "score", label: "Score" },
+  { id: "misc", label: "Time Out" },
 ];
 
 const SCORER_SUBTYPE_FLOW_LABELS: Partial<Record<ScorerSubtypeGroup, string>> = {

@@ -12,7 +12,12 @@ type ShareGameControlProps = {
   title: string;
 };
 
-export function ShareGameControl({ slug, title }: ShareGameControlProps) {
+type InlineShareButtonProps = {
+  slug: string;
+  title: string;
+};
+
+function useShareGame(slug: string, title: string) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const invitePath = `/g/${slug}`;
 
@@ -22,7 +27,7 @@ export function ShareGameControl({ slug, title }: ShareGameControlProps) {
       if (navigator.share) {
         await navigator.share({
           title,
-          text: "Join my game",
+          text: "Join my Bingra!",
           url: inviteUrl,
         });
         setFeedback("Shared");
@@ -35,6 +40,16 @@ export function ShareGameControl({ slug, title }: ShareGameControlProps) {
       setFeedback("Unable to share right now");
     }
   };
+
+  return {
+    feedback,
+    invitePath,
+    handleShare,
+  };
+}
+
+export function ShareGameControl({ slug, title }: ShareGameControlProps) {
+  const { feedback, invitePath, handleShare } = useShareGame(slug, title);
 
   return (
     <section className="rounded-2xl bg-white/90 p-4 shadow-sm sm:p-6">
@@ -53,6 +68,23 @@ export function ShareGameControl({ slug, title }: ShareGameControlProps) {
       </div>
       {feedback && <p className="mt-2 text-xs text-slate-500">{feedback}</p>}
     </section>
+  );
+}
+
+export function InlineShareButton({ slug, title }: InlineShareButtonProps) {
+  const { feedback, handleShare } = useShareGame(slug, title);
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={handleShare}
+        className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-all duration-150 hover:scale-[1.02]"
+      >
+        Share
+      </button>
+      {feedback && <p className="text-xs text-slate-500">{feedback}</p>}
+    </div>
   );
 }
 
