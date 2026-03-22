@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 
+// Temporary dev-only consent copy for Twilio opt-in/consent page review.
 const CONSENT_TEXT =
-  "By continuing, you agree to receive a one-time SMS from Bingra to verify your identity. Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for help.";
+  "By continuing, you agree to receive a one-time SMS code from Bingra for login. Message & data rates may apply.";
 
 const CONSENT_TEXT_VERSION = "bingra_sms_consent_v1_2026_03_21";
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 
@@ -36,6 +37,10 @@ export function AuthDialog({
   linkPlayerId,
   emphasis = "subtle",
 }: AuthDialogProps) {
+  // Temporary local-dev toggle for Twilio phone-consent page setup.
+  const isPhoneOtpDevEnabled =
+    process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_ENABLE_PHONE_OTP_DEV === "true";
+
   const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [pendingMagicLink, setPendingMagicLink] = useState(false);
@@ -145,6 +150,18 @@ export function AuthDialog({
             >
               {pendingMagicLink ? "Sending..." : "Continue with email"}
             </button>
+
+            {isPhoneOtpDevEnabled && (
+              <>
+                <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">or</p>
+                <Link
+                  href="/auth/phone"
+                  className="mt-2 inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Continue with phone (dev only)
+                </Link>
+              </>
+            )}
 
             {message && <p className="mt-3 text-xs font-medium text-emerald-700">{message}</p>}
             {error && <p className="mt-3 text-xs font-medium text-red-600">{error}</p>}
