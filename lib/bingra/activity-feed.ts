@@ -1,5 +1,6 @@
 import { calculateCardProgress, type CardCell as ProgressCardCell, type CompletionMode, type RecordedEvent } from "./card-progress";
 import { getEventById, type TeamKey } from "./event-logic";
+import { resolveBaseEventKey } from "./card-event-key";
 
 export type ActivityFeedItemType =
   | "player_joined"
@@ -235,7 +236,8 @@ function resolveEventTone(input: {
     return "positive";
   }
 
-  const category = eventKey ? getEventById(eventKey)?.category : undefined;
+  const baseEventKey = resolveBaseEventKey(eventKey);
+  const category = baseEventKey ? getEventById(baseEventKey)?.category : undefined;
 
   if (category === "turnover" || category === "violation") {
     return "negative";
@@ -280,7 +282,8 @@ export function formatRecordedEventFeedItem(input: {
     eventKey: event.event_key,
   });
 
-  const rarity = event.event_key ? getEventById(event.event_key)?.rarity : undefined;
+  const baseEventKey = resolveBaseEventKey(event.event_key);
+  const rarity = baseEventKey ? getEventById(baseEventKey)?.rarity : undefined;
   const scoreText = buildScoreText({
     pointsAwarded,
     playerNames,
@@ -526,7 +529,8 @@ export function buildEventRecordedItems(input: {
       }
     }
 
-    const eventBaseLabel = event.event_key ? getEventById(event.event_key)?.label : null;
+    const baseEventKey = resolveBaseEventKey(event.event_key);
+    const eventBaseLabel = baseEventKey ? getEventById(baseEventKey)?.label : null;
     const teamLabel =
       event.team_key === "A"
         ? teamNames.A
@@ -535,7 +539,7 @@ export function buildEventRecordedItems(input: {
           : null;
     const resolvedEventName = [
       teamLabel,
-      eventBaseLabel ?? event.event_label ?? event.event_key ?? "Event",
+      eventBaseLabel ?? event.event_label ?? baseEventKey ?? "Event",
     ]
       .filter(Boolean)
       .join(": ");

@@ -10,6 +10,7 @@ import {
   type TeamKey,
   type RiskLevel,
 } from "../../../../lib/bingra/event-logic";
+import { buildCardCellEventKey } from "../../../../lib/bingra/card-event-key";
 import type { EventCategory, GameEventType } from "../../../../lib/bingra/event-catalog";
 import { mapPlayModeToGameMode, type PlayMode } from "../../../../lib/bingra/types";
 import { useActionState } from "react";
@@ -320,7 +321,7 @@ export function CardBuilderPanel({
 
     const selectedEventKeys = cardEvents.map((event) => event.id);
     const acceptedEvents = cardEvents.map((event, index) => ({
-      eventKey: event.id,
+      eventKey: buildCardCellEventKey(event.id, event.cardTeamKey ?? null),
       eventLabel: stripTeamPrefix(
         event.label,
         event.cardTeamKey ? teamNames[event.cardTeamKey] : null,

@@ -1,5 +1,7 @@
 export type CompletionMode = "BLACKOUT" | "STREAK";
 
+import { cardCellEventMatchesRecordedEvent } from "./card-event-key.ts";
+
 export type RecordedEvent = {
   event_key: string | null;
   team_key?: string | null;
@@ -22,19 +24,16 @@ export type CardProgress = {
 type IndexedCell = CardCell & { originalIndex: number };
 
 function isMatchingEvent(cell: CardCell, event: RecordedEvent): boolean {
-  if (!cell.event_key || !event.event_key) {
-    return false;
-  }
-
-  if (cell.event_key !== event.event_key) {
-    return false;
-  }
-
-  if (cell.team_key) {
-    return event.team_key === cell.team_key;
-  }
-
-  return true;
+  return cardCellEventMatchesRecordedEvent({
+    cardCell: {
+      eventKey: cell.event_key,
+      teamKey: cell.team_key,
+    },
+    recordedEvent: {
+      eventKey: event.event_key,
+      teamKey: event.team_key,
+    },
+  });
 }
 
 function toPointValue(value: number | null | undefined): number {

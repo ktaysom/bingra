@@ -13,6 +13,7 @@ import {
   getScorerParentOptions,
   getScorerSubtypeOptions,
 } from "../../../../lib/bingra/event-logic";
+import { resolveBaseEventKey } from "../../../../lib/bingra/card-event-key";
 import {
   recordEventAction,
   type RecordEventFormState,
@@ -400,7 +401,8 @@ export function HostScoringPanel({
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent</p>
           <ul className="mt-3 space-y-2">
             {recentEvents.map((entry, index) => {
-              const catalogEvent = entry.eventKey ? getEventById(entry.eventKey) : undefined;
+              const baseEventKey = resolveBaseEventKey(entry.eventKey);
+              const catalogEvent = baseEventKey ? getEventById(baseEventKey) : undefined;
               const label = catalogEvent?.label ?? entry.label ?? "Recorded event";
               const isNewest = index === 0 && !!entry.recordedEventId;
 

@@ -11,6 +11,7 @@ import {
   type TeamKey,
   type RiskLevel,
 } from "../../../../lib/bingra/event-logic";
+import { parseCardCellEventKey } from "../../../../lib/bingra/card-event-key";
 import {
   calculateCompletedCellFlags,
   type CompletionMode,
@@ -262,12 +263,17 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
 
   const catalogEvents = (currentPlayerCard?.card_cells ?? []).map((cell, index) => {
     const eventKey = typeof cell.event_key === "string" ? cell.event_key : `cell-${index}`;
-    const catalogEvent = eventKey ? getEventById(eventKey) : undefined;
+    const parsedEventKey = parseCardCellEventKey(eventKey);
+    const catalogEvent = parsedEventKey.baseEventKey
+      ? getEventById(parsedEventKey.baseEventKey)
+      : undefined;
     const fallbackBasePoints =
       typeof cell.point_value === "number" ? cell.point_value : 0;
-    const fallbackLabel = cell.event_label ?? eventKey;
+    const fallbackLabel = cell.event_label ?? parsedEventKey.baseEventKey ?? eventKey;
     const persistedTeamKey: TeamKey | null =
-      cell.team_key === "A" || cell.team_key === "B" ? cell.team_key : null;
+      cell.team_key === "A" || cell.team_key === "B"
+        ? cell.team_key
+        : parsedEventKey.qualifiedTeamKey;
     const event: typeof catalogEvent extends undefined ? never : typeof catalogEvent =
       catalogEvent ?? {
         id: eventKey,

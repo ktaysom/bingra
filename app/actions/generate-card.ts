@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
+import { assertUniqueCardCellEventKeys } from "../../lib/bingra/card-event-key";
 
 export type GenerateCardFormState = {
   success?: boolean;
@@ -142,6 +143,8 @@ export async function generateCardAction(
         ? event.eventKey === parsed.data.lockEventKey
         : false,
     }));
+
+    assertUniqueCardCellEventKeys(cellsPayload.map((cell) => cell.event_key));
 
     const { error: insertCellsError } = await supabase
       .from("card_cells")
