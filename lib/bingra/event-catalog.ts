@@ -22,6 +22,7 @@ export type GameEventType = {
   shortLabel: string;
   description: string;
   category: EventCategory;
+  maxThreshold?: number;
 
   scoringByProfile: Partial<Record<SportProfileKey, number>>;
   rarityByProfile: Partial<Record<SportProfileKey, 1 | 2 | 3 | 4 | 5>>;
@@ -240,6 +241,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Bonus FT",
     description: "A single made free throw during a bonus situation.",
     category: "score",
+    maxThreshold: 3,
     scoringByProfile: profilePoints({ hs: 25, college: 25, pro: 25 }),
     rarityByProfile: profileRarity({ hs: 4, college: 4, pro: 4 }),
     enabledProfiles: ALL_BASKETBALL_PROFILES,
@@ -509,6 +511,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Timeout",
     description: "A timeout is taken.",
     category: "timeout",
+    maxThreshold: 3,
     scoringByProfile: profilePoints({ hs: 5, college: 5, pro: 5 }),
     rarityByProfile: profileRarity({ hs: 1, college: 1, pro: 1 }),
     enabledProfiles: ALL_BASKETBALL_PROFILES,

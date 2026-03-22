@@ -94,6 +94,10 @@ export function getEventRarityForProfile(
   return event.rarityByProfile[profile] ?? 3;
 }
 
+export function getEventMaxThreshold(event: GameEventType): number {
+  return typeof event.maxThreshold === "number" ? event.maxThreshold : 5;
+}
+
 export function getEnabledEvents(): GameEventType[] {
   return EVENT_CATALOG.filter((event) => event.enabled);
 }

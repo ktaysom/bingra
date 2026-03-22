@@ -1,6 +1,7 @@
 import {
   calculateCardProgress,
   filterRecordedEventsByAcceptedAt,
+  normalizeCardCells,
   type CardCell,
   type CompletionMode,
   type RecordedEvent,
@@ -51,7 +52,7 @@ export function buildGameScores(input: BuildGameScoresInput): GameScoreEntry[] {
       return [];
     }
 
-    const cardCells = playerCard?.card_cells ?? [];
+    const cardCells = normalizeCardCells((playerCard?.card_cells ?? []) as Array<Partial<CardCell>>);
     const eligibleRecordedEvents = filterRecordedEventsByAcceptedAt(
       input.recordedEvents,
       acceptedAt,

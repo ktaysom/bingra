@@ -20,6 +20,8 @@ type PreviewCardCell = {
   event_label: string;
   team_key: "A" | "B" | null;
   point_value: number;
+  threshold: number;
+  current_count: number;
   is_completed: boolean;
 };
 
@@ -44,6 +46,14 @@ type LeaderboardCardPreviewProps = {
   scoreboardTargetId: string;
   playersError: string | null;
 };
+
+function formatThresholdEventLabel(threshold: number, eventLabel: string): string {
+  return `${threshold}+ ${eventLabel}`;
+}
+
+function formatProgressCount(currentCount: number, threshold: number): string {
+  return `${Math.min(currentCount, threshold)} / ${threshold}`;
+}
 
 export function LeaderboardCardPreview({
   leaderboardEntries,
@@ -228,7 +238,7 @@ export function LeaderboardCardPreview({
                             } ${cell.is_completed ? "ring-1 ring-blue-300" : ""}`}
                           >
                             <p className="break-words text-sm font-medium text-slate-900">
-                              {index + 1}. {cell.event_label}
+                              {index + 1}. {formatThresholdEventLabel(cell.threshold, cell.event_label)}
                             </p>
                             {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                             <div className="mt-1 flex items-center justify-between text-xs">
@@ -236,7 +246,9 @@ export function LeaderboardCardPreview({
                               <span
                                 className={cell.is_completed ? "font-semibold text-blue-600" : "text-slate-500"}
                               >
-                                {cell.is_completed ? "Complete" : "Incomplete"}
+                                {cell.is_completed
+                                  ? "Complete"
+                                  : formatProgressCount(cell.current_count, cell.threshold)}
                               </span>
                             </div>
                           </li>
@@ -263,7 +275,7 @@ export function LeaderboardCardPreview({
                             } ${cell.is_completed ? "ring-1 ring-blue-300" : ""}`}
                           >
                             <p className="break-words text-sm font-medium text-slate-900">
-                              {cell.event_label}
+                              {formatThresholdEventLabel(cell.threshold, cell.event_label)}
                             </p>
                             {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                             <div className="mt-1 flex items-center justify-between text-xs">
@@ -271,7 +283,9 @@ export function LeaderboardCardPreview({
                               <span
                                 className={cell.is_completed ? "font-semibold text-blue-600" : "text-slate-500"}
                               >
-                                {cell.is_completed ? "Complete" : "Incomplete"}
+                                {cell.is_completed
+                                  ? "Complete"
+                                  : formatProgressCount(cell.current_count, cell.threshold)}
                               </span>
                             </div>
                           </li>

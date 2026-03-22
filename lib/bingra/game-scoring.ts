@@ -1,5 +1,20 @@
 export const BINGRA_MULTIPLIER = 2;
 
+const THRESHOLD_SCORE_MULTIPLIER_BY_LEVEL: Record<1 | 2 | 3 | 4 | 5, number> = {
+  1: 1.0,
+  2: 2.2,
+  3: 3.8,
+  4: 5.8,
+  5: 8.0,
+};
+
+export function getThresholdScoreMultiplier(threshold: number): number {
+  const normalizedThreshold = Number.isFinite(threshold) ? Math.max(1, Math.ceil(threshold)) : 1;
+  const clampedThreshold = Math.min(normalizedThreshold, 5) as 1 | 2 | 3 | 4 | 5;
+
+  return THRESHOLD_SCORE_MULTIPLIER_BY_LEVEL[clampedThreshold];
+}
+
 export type ScoreBreakdown = {
   raw_points: number;
   has_bingra: boolean;

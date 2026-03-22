@@ -1,5 +1,7 @@
 export type CardCell = {
   eventKey: string;
+  team?: string | null;
+  threshold: number;
   orderIndex?: number | null;
   marked: boolean;
 };

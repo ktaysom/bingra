@@ -1,4 +1,9 @@
-import type { CompletionMode, RecordedEvent, CardCell } from "./card-progress";
+import {
+  normalizeCardCells,
+  type CompletionMode,
+  type RecordedEvent,
+  type CardCell,
+} from "./card-progress";
 import { buildGameScores, resolveWinnerPlayerId } from "./game-results";
 
 type FinalizeInput = {
@@ -215,7 +220,7 @@ export async function finalizeGameAndSetWinner(input: FinalizeInput): Promise<Fi
 
   const { data: cardsData, error: cardsError } = await input.supabase
     .from("cards")
-    .select("player_id, accepted_at, card_cells(order_index, event_key, team_key, point_value)")
+    .select("player_id, accepted_at, card_cells(order_index, event_key, team_key, point_value, threshold)")
     .eq("game_id", input.gameId);
 
   const { data: completionsData, error: completionsError } = await input.supabase
@@ -266,7 +271,7 @@ export async function finalizeGameAndSetWinner(input: FinalizeInput): Promise<Fi
     cards: cards.map((card) => ({
       player_id: card.player_id,
       accepted_at: card.accepted_at,
-      card_cells: card.card_cells ?? [],
+      card_cells: normalizeCardCells((card.card_cells ?? []) as Array<Partial<CardCell>>),
     })),
     recordedEvents,
     completionMode: input.completionMode,

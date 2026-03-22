@@ -13,6 +13,7 @@ import {
   isEventEnabledForProfile,
 } from "../../lib/bingra/event-logic";
 import { resolveSportProfileKey } from "../../lib/bingra/sport-profiles";
+import { buildCardCellsPayload } from "../../lib/bingra/card-cells-payload";
 
 export type GenerateCardFormState = {
   success?: boolean;
@@ -27,10 +28,13 @@ const inputSchema = z.object({
   acceptedEvents: z
     .array(
       z.object({
+        eventId: z.string().min(1).optional(),
         eventKey: z.string().min(1),
         eventLabel: z.string().min(1),
         pointValue: z.number(),
+        team: z.union([z.literal("A"), z.literal("B"), z.null()]).optional(),
         teamKey: z.union([z.literal("A"), z.literal("B"), z.null()]).optional(),
+        threshold: z.number().finite().positive().optional(),
         orderIndex: z.number().int().nonnegative().optional(),
       }),
     )
@@ -157,17 +161,11 @@ export async function generateCardAction(
       throw deleteCellsError;
     }
 
-    const cellsPayload = acceptedEvents.map((event, index) => ({
-      card_id: cardId,
-      event_key: event.eventKey,
-      event_label: event.eventLabel,
-      team_key: event.teamKey ?? null,
-      point_value: event.pointValue,
-      order_index: event.orderIndex ?? index,
-      is_lock: parsed.data.lockEventKey
-        ? event.eventKey === parsed.data.lockEventKey
-        : false,
-    }));
+    const cellsPayload = buildCardCellsPayload({
+      cardId,
+      acceptedEvents,
+      lockEventKey: parsed.data.lockEventKey,
+    });
 
     assertUniqueCardCellEventKeys(cellsPayload.map((cell) => cell.event_key));
 

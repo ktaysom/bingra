@@ -10,6 +10,7 @@ import { resolveSportProfileKey } from "../../lib/bingra/sport-profiles";
 import {
   calculateCardProgress,
   filterRecordedEventsByAcceptedAt,
+  normalizeCardCells,
   type CompletionMode,
   type CardCell as ProgressCardCell,
   type RecordedEvent,
@@ -241,7 +242,7 @@ export async function recordEventAction(
   console.info("[recordEventAction][perf] cards read start", { gameId: game.id });
   const { data: cards, error: cardsError } = await supabase
     .from("cards")
-    .select("id, player_id, accepted_at, card_cells(order_index, event_key, team_key, point_value)")
+    .select("id, player_id, accepted_at, card_cells(order_index, event_key, team_key, point_value, threshold)")
     .eq("game_id", game.id);
   console.info("[recordEventAction][perf] cards read end", {
     durationMs: Date.now() - cardsReadStartedAt,
@@ -271,12 +272,9 @@ export async function recordEventAction(
       continue;
     }
 
-    const progressCells: ProgressCardCell[] = (card.card_cells ?? []).map((cell: Record<string, unknown>) => ({
-      event_key: typeof cell.event_key === "string" ? cell.event_key : null,
-      team_key: typeof cell.team_key === "string" ? cell.team_key : null,
-      order_index: typeof cell.order_index === "number" ? cell.order_index : null,
-      point_value: typeof cell.point_value === "number" ? cell.point_value : null,
-    }));
+    const progressCells: ProgressCardCell[] = normalizeCardCells(
+      (card.card_cells ?? []) as Array<Partial<ProgressCardCell>>,
+    );
 
     const beforeProgress = calculateCardProgress(
       filterRecordedEventsByAcceptedAt(recordedEventsBefore, acceptedAt),

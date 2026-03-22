@@ -1,6 +1,7 @@
 import {
   calculateCardProgress,
   filterRecordedEventsByAcceptedAt,
+  normalizeCardCells,
   type CardCell,
   type CompletionMode,
   type RecordedEvent,
@@ -30,7 +31,7 @@ type ScoredEventRow = {
 export async function recomputeGameCompletions(input: RecomputeInput): Promise<void> {
   const { data: cardsData, error: cardsError } = await input.supabase
     .from("cards")
-    .select("player_id, accepted_at, card_cells(order_index, event_key, team_key, point_value)")
+    .select("player_id, accepted_at, card_cells(order_index, event_key, team_key, point_value, threshold)")
     .eq("game_id", input.gameId);
 
   const { data: scoredEventsData, error: scoredEventsError } = await input.supabase
@@ -73,12 +74,12 @@ export async function recomputeGameCompletions(input: RecomputeInput): Promise<v
 
       const beforeProgress = calculateCardProgress(
         filterRecordedEventsByAcceptedAt(beforeEvents, card.accepted_at),
-        card.card_cells ?? [],
+        normalizeCardCells((card.card_cells ?? []) as Array<Partial<CardCell>>),
         input.completionMode,
       );
       const afterProgress = calculateCardProgress(
         filterRecordedEventsByAcceptedAt(afterEvents, card.accepted_at),
-        card.card_cells ?? [],
+        normalizeCardCells((card.card_cells ?? []) as Array<Partial<CardCell>>),
         input.completionMode,
       );
 

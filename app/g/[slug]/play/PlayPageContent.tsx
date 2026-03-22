@@ -16,8 +16,9 @@ import {
 } from "../../../../lib/bingra/event-logic";
 import { parseCardCellEventKey } from "../../../../lib/bingra/card-event-key";
 import {
-  calculateCompletedCellFlags,
+  calculateCardProgress,
   filterRecordedEventsByAcceptedAt,
+  normalizeCardCells,
   type CompletionMode,
   type RecordedEvent,
   type CardCell as ProgressCardCell,
@@ -96,6 +97,7 @@ type CardRow = {
     event_label: string | null;
     team_key: string | null;
     point_value: number | null;
+    threshold?: number | null;
   }[];
 };
 
@@ -131,7 +133,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
   {
     const { data, error } = await supabase
       .from("cards")
-      .select("id, player_id, accepted_at, card_cells(order_index, event_key, event_label, team_key, point_value)")
+      .select("id, player_id, accepted_at, card_cells(order_index, event_key, event_label, team_key, point_value, threshold)")
       .eq("game_id", game.id)
       .returns<CardRow[]>();
 
@@ -196,6 +198,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       label: teamKey ? `${teamNames[teamKey]}: ${event.label}` : event.label,
       shortLabel: teamKey ? `${teamNames[teamKey]}: ${event.shortLabel}` : event.shortLabel,
       cardTeamKey: teamKey,
+      threshold: 1,
     };
   });
 
@@ -260,12 +263,15 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     cards: cardsForGame.map((card) => ({
       player_id: card.player_id,
       accepted_at: card.accepted_at,
-      card_cells: (card.card_cells ?? []).map((cell) => ({
-        event_key: cell.event_key,
-        team_key: cell.team_key,
-        order_index: cell.order_index,
-        point_value: cell.point_value,
-      })),
+      card_cells: normalizeCardCells(
+        (card.card_cells ?? []).map((cell) => ({
+          event_key: cell.event_key,
+          team_key: cell.team_key,
+          order_index: cell.order_index,
+          point_value: cell.point_value,
+          threshold: cell.threshold,
+        })),
+      ),
     })),
     recordedEvents,
     completionMode,
@@ -309,13 +315,14 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     ? cardsByPlayerId.get(currentPlayerId) ?? null
     : null;
 
-  const currentPlayerProgressCells: ProgressCardCell[] = (currentPlayerCard?.card_cells ?? []).map(
-    (cell) => ({
+  const currentPlayerProgressCells: ProgressCardCell[] = normalizeCardCells(
+    (currentPlayerCard?.card_cells ?? []).map((cell) => ({
       event_key: cell.event_key,
       team_key: cell.team_key,
       order_index: cell.order_index,
       point_value: cell.point_value,
-    }),
+      threshold: cell.threshold,
+    })),
   );
 
   const currentPlayerAcceptedAt = currentPlayerCard?.accepted_at ?? null;
@@ -324,11 +331,12 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     currentPlayerAcceptedAt,
   );
 
-  const currentPlayerCompletedFlags = calculateCompletedCellFlags(
+  const currentPlayerProgress = calculateCardProgress(
     currentPlayerEligibleRecordedEvents,
     currentPlayerProgressCells,
     completionMode,
   );
+  const currentPlayerCellProgress = currentPlayerProgress.cell_progress;
 
   const catalogEvents = (currentPlayerCard?.card_cells ?? []).map((cell, index) => {
     const eventKey = typeof cell.event_key === "string" ? cell.event_key : `cell-${index}`;
@@ -376,6 +384,8 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
         ? `${teamNames[persistedTeamKey]}: ${event.shortLabel}`
         : event.shortLabel;
 
+    const cellProgress = currentPlayerCellProgress[index];
+
     return {
       ...event,
       label: resolvedLabel,
@@ -383,7 +393,17 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       points: getEventPointsForProfile(event, sportProfile),
       rarity: getEventRarityForProfile(event, sportProfile),
       cardTeamKey: persistedTeamKey,
-      marked: currentPlayerCompletedFlags[index] ?? false,
+      threshold:
+        typeof cellProgress?.threshold === "number"
+          ? cellProgress.threshold
+          : typeof cell.threshold === "number"
+            ? cell.threshold
+            : 1,
+      current_count: typeof cellProgress?.current_count === "number" ? cellProgress.current_count : 0,
+      remaining_count:
+        typeof cellProgress?.remaining_count === "number" ? cellProgress.remaining_count : null,
+      is_completed: cellProgress?.is_completed ?? false,
+      marked: cellProgress?.is_completed ?? false,
     };
   });
 
@@ -407,23 +427,27 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       (left, right) => left.order_index - right.order_index,
     );
 
-    const progressCells: ProgressCardCell[] = sortedCells.map((cell) => ({
-      event_key: cell.event_key,
-      team_key: cell.team_key,
-      order_index: cell.order_index,
-      point_value: cell.point_value,
-    }));
+    const progressCells: ProgressCardCell[] = normalizeCardCells(
+      sortedCells.map((cell) => ({
+        event_key: cell.event_key,
+        team_key: cell.team_key,
+        order_index: cell.order_index,
+        point_value: cell.point_value,
+        threshold: cell.threshold,
+      })),
+    );
 
     const eligibleRecordedEvents = filterRecordedEventsByAcceptedAt(
       recordedEvents,
       playerCard?.accepted_at ?? null,
     );
 
-    const completedFlags = calculateCompletedCellFlags(
+    const cardProgress = calculateCardProgress(
       eligibleRecordedEvents,
       progressCells,
       completionMode,
     );
+    const cellProgress = cardProgress.cell_progress;
 
     const leaderboardEntry = leaderboardEntryByPlayerId.get(player.id);
 
@@ -447,7 +471,17 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
           event_label: cell.event_label ?? parsedEventKey.baseEventKey ?? `Event ${index + 1}`,
           team_key: resolvedTeamKey,
           point_value: typeof cell.point_value === "number" ? cell.point_value : 0,
-          is_completed: completedFlags[index] ?? false,
+          threshold:
+            typeof cellProgress[index]?.threshold === "number"
+              ? cellProgress[index].threshold
+              : typeof cell.threshold === "number"
+                ? cell.threshold
+                : 1,
+          current_count:
+            typeof cellProgress[index]?.current_count === "number"
+              ? cellProgress[index].current_count
+              : 0,
+          is_completed: cellProgress[index]?.is_completed ?? false,
         };
       }),
     };
@@ -458,12 +492,15 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       card.player_id,
       {
         accepted_at: card.accepted_at,
-        card_cells: (card.card_cells ?? []).map((cell) => ({
-          event_key: cell.event_key,
-          team_key: cell.team_key,
-          order_index: cell.order_index,
-          point_value: cell.point_value,
-        })),
+        card_cells: normalizeCardCells(
+          (card.card_cells ?? []).map((cell) => ({
+            event_key: cell.event_key,
+            team_key: cell.team_key,
+            order_index: cell.order_index,
+            point_value: cell.point_value,
+            threshold: cell.threshold,
+          })),
+        ),
       },
     ]),
   );

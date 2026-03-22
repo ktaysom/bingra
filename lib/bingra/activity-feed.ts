@@ -1,6 +1,5 @@
 import {
   calculateCardProgress,
-  calculateCompletedCellFlags,
   filterRecordedEventsByAcceptedAt,
   type CardCell as ProgressCardCell,
   type CompletionMode,
@@ -123,6 +122,14 @@ type ActivityFeedPlayerProgress = {
   isComplete: boolean;
   isOneAway: boolean;
 };
+
+function getRemainingTotalCount(cells: { remaining_count: number }[]): number {
+  return cells.reduce((total, cell) => total + Math.max(cell.remaining_count, 0), 0);
+}
+
+function formatThresholdPredictionLabel(threshold: number, eventLabel: string): string {
+  return `${threshold}+ ${eventLabel}`;
+}
 
 const POSITIVE_FLAVOR_POOL = ["Huge play.", "Things are heating up.", "Crowd is buzzing."] as const;
 const NEGATIVE_FLAVOR_POOL = ["That hurts.", "Tough break.", "Momentum shifts."] as const;
@@ -557,47 +564,56 @@ export function buildEventRecordedItems(input: {
       const before = calculateCardProgress(eligibleBefore, cardCells, completionMode);
       const after = calculateCardProgress(eligibleAfter, cardCells, completionMode);
       const delta = after.score - before.score;
+      const beforeRemainingTotalCount = getRemainingTotalCount(before.cell_progress);
+      const afterRemainingTotalCount = getRemainingTotalCount(after.cell_progress);
 
       scoresBeforeByPlayerName.set(player.display_name, before.score);
       scoresAfterByPlayerName.set(player.display_name, after.score);
       progressBeforeByPlayerId.set(player.id, {
         isComplete: before.is_complete,
-        isOneAway: before.is_one_away,
+        isOneAway: beforeRemainingTotalCount === 1,
       });
       progressAfterByPlayerId.set(player.id, {
         isComplete: after.is_complete,
-        isOneAway: after.is_one_away,
+        isOneAway: afterRemainingTotalCount === 1,
       });
 
-      if (after.is_one_away && !before.is_one_away) {
-        const completedFlags = calculateCompletedCellFlags(
-          eligibleAfter,
-          cardCells,
-          completionMode,
+      if (afterRemainingTotalCount === 1 && beforeRemainingTotalCount !== 1) {
+        const remainingIndex = after.cell_progress.findIndex(
+          (cellProgress) => cellProgress.remaining_count > 0,
         );
-        const missingIndex = completedFlags.findIndex((flag) => !flag);
 
-        if (missingIndex !== -1) {
-          const missingCell = cardCells[missingIndex];
-          const eventKey = missingCell?.event_key;
+        if (remainingIndex !== -1) {
+          const remainingCell = cardCells[remainingIndex];
+          const remainingCellProgress = after.cell_progress[remainingIndex];
+          const eventKey = remainingCell?.event_key;
           const baseEventKey = resolveBaseEventKey(eventKey);
           const eventMeta = baseEventKey ? getEventById(baseEventKey) : undefined;
-          const eventName = eventMeta?.label ?? eventKey;
+          const baseEventLabel = eventMeta?.label ?? eventKey ?? "event";
+          const teamLabel =
+            remainingCell?.team_key === "A"
+              ? teamNames.A
+              : remainingCell?.team_key === "B"
+                ? teamNames.B
+                : null;
+          const detailedEventLabel =
+            teamLabel && eventMeta?.teamScope === "team"
+              ? `${teamLabel}: ${baseEventLabel}`
+              : baseEventLabel;
+          const threshold = remainingCellProgress?.threshold ?? remainingCell?.threshold ?? 1;
+          const predictionLabel = formatThresholdPredictionLabel(threshold, detailedEventLabel);
+          const rarity = eventMeta
+            ? getEventRarityForProfile(
+                eventMeta,
+                sportProfile ?? DEFAULT_SPORT_PROFILE,
+              )
+            : undefined;
+          const rarityLabel = rarity ? ` (${rarityToLabel(rarity)})` : "";
 
-          if (eventName) {
-            const rarity = eventMeta
-              ? getEventRarityForProfile(
-                  eventMeta,
-                  sportProfile ?? DEFAULT_SPORT_PROFILE,
-                )
-              : undefined;
-            const rarityLabel = rarity ? ` (${rarityToLabel(rarity)})` : "";
-
-            oneAwayDetailByPlayerId.set(
-              player.id,
-              `Needs: ${eventName}${rarityLabel} to complete the card`,
-            );
-          }
+          oneAwayDetailByPlayerId.set(
+            player.id,
+            `Needs 1 more ${detailedEventLabel} to complete ${predictionLabel}${rarityLabel}`,
+          );
         }
       }
 

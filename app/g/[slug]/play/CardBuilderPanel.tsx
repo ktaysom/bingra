@@ -5,6 +5,7 @@ import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import {
   chooseRandomEvents,
   estimateCardRiskLabel,
+  getEventMaxThreshold,
   getEventPointsForProfile,
   getEventsForMode,
   summarizeCardPoints,
@@ -14,6 +15,7 @@ import {
 import { buildCardCellEventKey } from "../../../../lib/bingra/card-event-key";
 import type { EventCategory, GameEventType } from "../../../../lib/bingra/event-catalog";
 import { mapPlayModeToGameMode, type PlayMode } from "../../../../lib/bingra/types";
+import { getThresholdScoreMultiplier } from "../../../../lib/bingra/game-scoring";
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { generateCardAction } from "../../../actions/generate-card";
@@ -27,6 +29,10 @@ type GameTeamScope = "both_teams" | "team_a_only" | "team_b_only";
 type CardBuilderEvent = GameEventType & {
   marked?: boolean;
   cardTeamKey?: TeamKey | null;
+  threshold: number;
+  current_count?: number;
+  remaining_count?: number;
+  is_completed?: boolean;
 };
 
 type CardBuilderPanelProps = {
@@ -86,6 +92,31 @@ function getIdentityTone(teamKey: TeamKey | null): { container: string } {
 
 function getCardEventIdentityKey(event: CardBuilderEvent): string {
   return `${event.id}:${event.cardTeamKey ?? "NONE"}`;
+}
+
+function getAddableEventIdentityKey(candidate: AddableEvent): string {
+  return `${candidate.event.id}:${candidate.cardTeamKey ?? "NONE"}`;
+}
+
+function formatThresholdEventLabel(threshold: number, eventLabel: string): string {
+  return `${threshold}+ ${eventLabel}`;
+}
+
+function formatProgressCount(currentCount: number, threshold: number): string {
+  return `${Math.min(currentCount, threshold)} / ${threshold}`;
+}
+
+function toSafePoints(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function getThresholdPreviewPoints(event: CardBuilderEvent, sportProfile: SportProfileKey): number {
+  const threshold = typeof event.threshold === "number" && Number.isFinite(event.threshold)
+    ? event.threshold
+    : 1;
+  const basePoints = toSafePoints(getEventPointsForProfile(event, sportProfile));
+
+  return Math.round(basePoints * getThresholdScoreMultiplier(threshold));
 }
 
 function moveItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
@@ -167,6 +198,7 @@ function generateCardEvents(
       label: getDisplayLabel(event),
       shortLabel: getDisplayLabel(event),
       cardTeamKey,
+      threshold: 1,
     };
   });
 }
@@ -200,6 +232,9 @@ export function CardBuilderPanel({
   );
   const [activeFilters, setActiveFilters] = useState<Set<AddFilterKey>>(new Set());
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+  const [expandedAddEventIdentityKeys, setExpandedAddEventIdentityKeys] = useState<Set<string>>(
+    new Set(),
+  );
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [touchDragItemId, setTouchDragItemId] = useState<string | null>(null);
   const touchLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -210,6 +245,7 @@ export function CardBuilderPanel({
   const [generateState, generateAction, isSubmitting] = useActionState(generateCardAction, {});
   const [editState, editAction, isEditSubmitting] = useActionState(editCardAction, {});
   const [acceptFeedback, setAcceptFeedback] = useState<string | null>(null);
+  const [acceptActionError, setAcceptActionError] = useState<string | null>(null);
   const isAccepted = Boolean(cardAcceptedAt);
   const isPermanentlyLocked = isAccepted && gameStatus !== "lobby";
   const isTemporarilyAccepted = isAccepted && gameStatus === "lobby";
@@ -328,6 +364,15 @@ export function CardBuilderPanel({
     });
 
     if (!isHydrated || isSubmitting || !playerId || !isCardReadyToAccept) {
+      const clientError = !isHydrated
+        ? "Card builder is still loading. Please try again."
+        : isSubmitting
+          ? "Card acceptance is already in progress."
+          : !playerId
+            ? "You need to join this game before you can accept a card."
+            : "Add all required events before accepting your card.";
+
+      setAcceptActionError(clientError);
       console.info("[CardBuilderPanel] Accept card blocked", {
         reason: !isHydrated
           ? "not_hydrated"
@@ -340,15 +385,20 @@ export function CardBuilderPanel({
       return;
     }
 
+    setAcceptActionError(null);
+
     const selectedEventKeys = cardEvents.map((event) => event.id);
     const acceptedEvents = cardEvents.map((event, index) => ({
+      eventId: event.id,
       eventKey: buildCardCellEventKey(event.id, event.cardTeamKey ?? null),
       eventLabel: stripTeamPrefix(
         event.label,
         event.cardTeamKey ? teamNames[event.cardTeamKey] : null,
       ),
       pointValue: getEventPointsForProfile(event, sportProfile),
+      team: event.cardTeamKey ?? null,
       teamKey: event.cardTeamKey ?? null,
+      threshold: event.threshold,
       orderIndex: index,
     }));
 
@@ -373,9 +423,24 @@ export function CardBuilderPanel({
     setCardEvents((prev) => prev.filter((_, eventIndex) => eventIndex !== index));
   };
 
-  const handleAddEvent = (candidate: AddableEvent) => {
+  const toggleAddEventExpansion = (identityKey: string) => {
+    setExpandedAddEventIdentityKeys((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(identityKey)) {
+        next.delete(identityKey);
+      } else {
+        next.add(identityKey);
+      }
+
+      return next;
+    });
+  };
+
+  const handleAddEventWithThreshold = (candidate: AddableEvent, threshold: number) => {
     if (!canAddMoreEvents) return;
-    if (selectedIdentityKeys.has(candidate.identityKey)) return;
+    const identityKey = getAddableEventIdentityKey(candidate);
+    if (selectedIdentityKeys.has(identityKey)) return;
 
     setCardEvents((prev) => [
       ...prev,
@@ -384,8 +449,15 @@ export function CardBuilderPanel({
         label: candidate.eventName,
         shortLabel: candidate.eventName,
         cardTeamKey: candidate.cardTeamKey,
+        threshold,
       },
     ]);
+
+    setExpandedAddEventIdentityKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(identityKey);
+      return next;
+    });
 
     if (cardEvents.length + 1 >= eventsPerCard) {
       setIsAddSheetOpen(false);
@@ -404,6 +476,7 @@ export function CardBuilderPanel({
 
   useEffect(() => {
     if (generateState.success) {
+      setAcceptActionError(null);
       setAcceptFeedback(
         gameStatus === "live"
           ? "You're live — scoring has started"
@@ -412,6 +485,12 @@ export function CardBuilderPanel({
       router.refresh();
     }
   }, [gameStatus, generateState.success, router]);
+
+  useEffect(() => {
+    if (generateState.error) {
+      setAcceptActionError(generateState.error);
+    }
+  }, [generateState.error]);
 
   useEffect(() => {
     if (editState.success) {
@@ -581,24 +660,32 @@ export function CardBuilderPanel({
                   {lockedCard.map((event, index) => {
                     const tone = getIdentityTone(event.cardTeamKey ?? null);
                     const teamName = event.cardTeamKey ? teamNames[event.cardTeamKey] : null;
+                    const threshold = typeof event.threshold === "number" ? event.threshold : 1;
+                    const isCompleted = Boolean(event.is_completed ?? event.marked);
+                    const currentCount =
+                      typeof event.current_count === "number"
+                        ? event.current_count
+                        : isCompleted
+                          ? threshold
+                          : 0;
 
                     return (
                       <li
                         key={`${event.id}-${event.cardTeamKey ?? "NONE"}-${index}`}
                         className={`flex items-center justify-between gap-3 px-4 py-3 text-sm text-slate-700 ${tone.container} ${
-                          event.marked ? "ring-1 ring-blue-300" : ""
+                          isCompleted ? "ring-1 ring-blue-300" : ""
                         }`}
                       >
                         <div>
                           <p className="font-medium text-slate-900">
-                            {index + 1}. {stripTeamPrefix(event.label, teamName)}
+                            {index + 1}. {formatThresholdEventLabel(threshold, stripTeamPrefix(event.label, teamName))}
                           </p>
                           {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                           <p className="text-xs text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</p>
                         </div>
-                        {event.marked && (
-                          <p className="text-xs font-semibold text-blue-600">Complete</p>
-                        )}
+                        <p className={isCompleted ? "text-xs font-semibold text-blue-600" : "text-xs text-slate-500"}>
+                          {isCompleted ? "Complete" : formatProgressCount(currentCount, threshold)}
+                        </p>
                       </li>
                     );
                   })}
@@ -613,22 +700,32 @@ export function CardBuilderPanel({
                   (() => {
                     const tone = getIdentityTone(event.cardTeamKey ?? null);
                     const teamName = event.cardTeamKey ? teamNames[event.cardTeamKey] : null;
+                    const threshold = typeof event.threshold === "number" ? event.threshold : 1;
+                    const isCompleted = Boolean(event.is_completed ?? event.marked);
+                    const currentCount =
+                      typeof event.current_count === "number"
+                        ? event.current_count
+                        : isCompleted
+                          ? threshold
+                          : 0;
 
                     return (
                   <div
                     key={`${event.id}-${event.cardTeamKey ?? "NONE"}-${index}`}
                     className={`rounded-lg px-3 py-2 ${tone.container} ${
-                      event.marked ? "ring-1 ring-blue-300" : ""
+                      isCompleted ? "ring-1 ring-blue-300" : ""
                     }`}
                   >
-                    <p className="font-medium text-slate-900">{stripTeamPrefix(event.label, teamName)}</p>
+                    <p className="font-medium text-slate-900">
+                      {formatThresholdEventLabel(threshold, stripTeamPrefix(event.label, teamName))}
+                    </p>
                     {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
-                    <p className="text-xs text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</p>
-                    {event.marked && (
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
-                        Complete
-                      </p>
-                    )}
+                    <div className="mt-1 flex items-center justify-between text-xs">
+                      <span className="text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</span>
+                      <span className={isCompleted ? "font-semibold text-blue-600" : "text-slate-500"}>
+                        {isCompleted ? "Complete" : formatProgressCount(currentCount, threshold)}
+                      </span>
+                    </div>
                   </div>
                     );
                   })()
@@ -642,7 +739,11 @@ export function CardBuilderPanel({
           <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => editAction()}
+              onClick={() => {
+                startTransition(() => {
+                  editAction();
+                });
+              }}
               disabled={isEditSubmitting}
               className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -722,12 +823,15 @@ export function CardBuilderPanel({
                   >
                     <div className="min-w-0">
                       <p className="font-medium text-slate-900">
-                        {index + 1}. {stripTeamPrefix(event.label, event.cardTeamKey ? teamNames[event.cardTeamKey] : null)}
+                        {index + 1}. {formatThresholdEventLabel(
+                          event.threshold,
+                          stripTeamPrefix(event.label, event.cardTeamKey ? teamNames[event.cardTeamKey] : null),
+                        )}
                       </p>
                       {event.cardTeamKey && (
                         <p className="text-[11px] text-slate-500">{teamNames[event.cardTeamKey]}</p>
                       )}
-                      <p className="text-xs text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</p>
+                      <p className="text-xs text-slate-500">{getThresholdPreviewPoints(event, sportProfile)} pts</p>
                     </div>
                     <div className="flex items-center justify-end gap-2">
                       <button
@@ -774,9 +878,11 @@ export function CardBuilderPanel({
                       className={`flex items-start justify-between gap-3 px-4 py-3 text-sm text-slate-700 ${tone.container}`}
                     >
                       <div className="min-w-0">
-                        <p className="font-medium text-slate-900">{stripTeamPrefix(event.label, teamName)}</p>
+                        <p className="font-medium text-slate-900">
+                          {formatThresholdEventLabel(event.threshold, stripTeamPrefix(event.label, teamName))}
+                        </p>
                         {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
-                        <p className="text-xs text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</p>
+                        <p className="text-xs text-slate-500">{getThresholdPreviewPoints(event, sportProfile)} pts</p>
                       </div>
                       <button
                         type="button"
@@ -866,27 +972,66 @@ export function CardBuilderPanel({
                         const alreadyOnCard = selectedIdentityKeys.has(event.identityKey);
                         const disabled = alreadyOnCard || !canAddMoreEvents;
                         const tone = getIdentityTone(event.cardTeamKey);
+                        const identityKey = getAddableEventIdentityKey(event);
+                        const isExpanded = expandedAddEventIdentityKeys.has(identityKey);
+                        const maxThreshold = getEventMaxThreshold(event.event);
+                        const resolvedBasePoints = getEventPointsForProfile(event.event, sportProfile);
+                        const basePoints =
+                          typeof resolvedBasePoints === "number" && Number.isFinite(resolvedBasePoints)
+                            ? resolvedBasePoints
+                            : 0;
+                        const thresholdOptions = Array.from(
+                          { length: maxThreshold },
+                          (_, index) => index + 1,
+                        );
 
                         return (
                           <li
                             key={event.identityKey}
-                            className={`flex items-center justify-between gap-3 rounded-xl p-3 ${tone.container}`}
+                            className={`rounded-xl p-3 ${tone.container}`}
                           >
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-slate-900">{event.eventName}</p>
-                              {event.teamName && (
-                                <p className="text-[11px] text-slate-500">{event.teamName}</p>
-                              )}
-                              <p className="text-xs text-slate-500">{getEventPointsForProfile(event.event, sportProfile)} pts</p>
-                            </div>
                             <button
                               type="button"
-                              onClick={() => handleAddEvent(event)}
+                              onClick={() => toggleAddEventExpansion(identityKey)}
                               disabled={disabled}
-                              className="rounded-2xl bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm disabled:opacity-50"
+                              className="flex w-full items-center justify-between gap-3 text-left disabled:cursor-not-allowed disabled:opacity-70"
+                              aria-expanded={isExpanded}
                             >
-                              {alreadyOnCard ? "Added" : "Add"}
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-slate-900">{event.eventName}</p>
+                                {event.teamName && (
+                                  <p className="text-[11px] text-slate-500">{event.teamName}</p>
+                                )}
+                                <p className="text-xs text-slate-500">{getEventPointsForProfile(event.event, sportProfile)} pts</p>
+                              </div>
+                              <span className="rounded-2xl bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm">
+                                {alreadyOnCard ? "Added" : isExpanded ? "Hide" : "Choose"}
+                              </span>
                             </button>
+
+                            {isExpanded && !alreadyOnCard && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {thresholdOptions.map((threshold) => (
+                                  (() => {
+                                    const thresholdPoints = Math.round(
+                                      basePoints * getThresholdScoreMultiplier(threshold),
+                                    );
+
+                                    return (
+                                  <button
+                                    key={`${identityKey}-threshold-${threshold}`}
+                                    type="button"
+                                    onClick={() => handleAddEventWithThreshold(event, threshold)}
+                                    disabled={!canAddMoreEvents}
+                                    className="rounded-2xl bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm disabled:opacity-50"
+                                  >
+                                    <span className="block leading-tight">{threshold}+ · {thresholdPoints} pts</span>
+                                  </button>
+                                    );
+                                  })()
+                                ))}
+                              </div>
+                            )}
                           </li>
                         );
                       })}
@@ -930,8 +1075,8 @@ export function CardBuilderPanel({
           You need to join this game before you can accept a card.
         </p>
       )}
-      {generateState.error && (
-        <p className="mt-3 text-xs text-red-600">{generateState.error}</p>
+      {(acceptActionError || generateState.error) && (
+        <p className="mt-3 text-xs text-red-600">{acceptActionError ?? generateState.error}</p>
       )}
       {editState.error && (
         <p className="mt-3 text-xs text-red-600">{editState.error}</p>

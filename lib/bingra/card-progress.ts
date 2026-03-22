@@ -1,6 +1,7 @@
 export type CompletionMode = "BLACKOUT" | "STREAK";
 
 import { cardCellEventMatchesRecordedEvent } from "./card-event-key";
+import { getThresholdScoreMultiplier } from "./game-scoring";
 
 export type RecordedEvent = {
   event_key: string | null;
@@ -13,6 +14,7 @@ export type CardCell = {
   team_key?: string | null;
   order_index?: number | null;
   point_value?: number | null;
+  threshold: number;
 };
 
 export type CardProgress = {
@@ -20,6 +22,16 @@ export type CardProgress = {
   is_complete: boolean;
   is_one_away: boolean;
   score: number;
+  cell_progress: CardCellProgress[];
+};
+
+export type CardCellProgress = {
+  event_key: string | null;
+  team_key: string | null;
+  current_count: number;
+  threshold: number;
+  remaining_count: number;
+  is_completed: boolean;
 };
 
 type IndexedCell = CardCell & { originalIndex: number };
@@ -39,6 +51,28 @@ function isMatchingEvent(cell: CardCell, event: RecordedEvent): boolean {
 
 function toPointValue(value: number | null | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function calculateThresholdAdjustedPoints(basePoints: number, threshold: number): number {
+  return Math.round(basePoints * getThresholdScoreMultiplier(threshold));
+}
+
+function toThreshold(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 1;
+}
+
+export function normalizeCardCell(cell: Partial<CardCell>): CardCell {
+  return {
+    event_key: typeof cell.event_key === "string" ? cell.event_key : null,
+    team_key: typeof cell.team_key === "string" ? cell.team_key : null,
+    order_index: typeof cell.order_index === "number" ? cell.order_index : null,
+    point_value: typeof cell.point_value === "number" ? cell.point_value : null,
+    threshold: toThreshold(cell.threshold),
+  };
+}
+
+export function normalizeCardCells(cells: Array<Partial<CardCell>>): CardCell[] {
+  return cells.map((cell) => normalizeCardCell(cell));
 }
 
 export function filterRecordedEventsByAcceptedAt(
@@ -88,22 +122,60 @@ export function calculateCompletedCellFlags(
   card_cells: CardCell[],
   completion_mode: CompletionMode,
 ): boolean[] {
-  const completed = new Array<boolean>(card_cells.length).fill(false);
+  return calculateCardCellProgress(recorded_events, card_cells, completion_mode).map(
+    (cellProgress) => cellProgress.is_completed,
+  );
+}
+
+export function calculateCardCellProgress(
+  recorded_events: RecordedEvent[],
+  card_cells: CardCell[],
+  completion_mode: CompletionMode,
+): CardCellProgress[] {
+  const progress: CardCellProgress[] = card_cells.map((cell) => {
+    const threshold = toThreshold(cell.threshold);
+
+    return {
+      event_key: cell.event_key,
+      team_key: typeof cell.team_key === "string" ? cell.team_key : null,
+      current_count: 0,
+      threshold,
+      remaining_count: threshold,
+      is_completed: false,
+    };
+  });
 
   if (completion_mode === "BLACKOUT") {
     for (let cellIndex = 0; cellIndex < card_cells.length; cellIndex += 1) {
       const cell = card_cells[cellIndex];
-      completed[cellIndex] = recorded_events.some((event) => isMatchingEvent(cell, event));
+      let currentCount = 0;
+
+      for (const event of recorded_events) {
+        if (isMatchingEvent(cell, event)) {
+          currentCount += 1;
+        }
+      }
+
+      const threshold = progress[cellIndex]?.threshold ?? 1;
+      const remainingCount = Math.max(threshold - currentCount, 0);
+
+      progress[cellIndex] = {
+        ...(progress[cellIndex] as CardCellProgress),
+        current_count: currentCount,
+        remaining_count: remainingCount,
+        is_completed: currentCount >= threshold,
+      };
     }
 
-    return completed;
+    return progress;
   }
 
   const orderedCells = sortCellsForStreak(card_cells);
   let lastMatchedEventIndex = -1;
 
   for (const cell of orderedCells) {
-    let matchedEventIndex = -1;
+    const threshold = toThreshold(cell.threshold);
+    let currentCount = 0;
 
     for (
       let eventIndex = lastMatchedEventIndex + 1;
@@ -111,20 +183,30 @@ export function calculateCompletedCellFlags(
       eventIndex += 1
     ) {
       if (isMatchingEvent(cell, recorded_events[eventIndex])) {
-        matchedEventIndex = eventIndex;
-        break;
+        currentCount += 1;
+        lastMatchedEventIndex = eventIndex;
+
+        if (currentCount >= threshold) {
+          break;
+        }
       }
     }
 
-    if (matchedEventIndex === -1) {
+    const remainingCount = Math.max(threshold - currentCount, 0);
+
+    progress[cell.originalIndex] = {
+      ...(progress[cell.originalIndex] as CardCellProgress),
+      current_count: currentCount,
+      remaining_count: remainingCount,
+      is_completed: currentCount >= threshold,
+    };
+
+    if (currentCount < threshold) {
       break;
     }
-
-    completed[cell.originalIndex] = true;
-    lastMatchedEventIndex = matchedEventIndex;
   }
 
-  return completed;
+  return progress;
 }
 
 /**
@@ -145,29 +227,42 @@ export function calculateCardProgress(
       is_complete: false,
       is_one_away: false,
       score: 0,
+      cell_progress: [],
     };
   }
 
-  const completed = calculateCompletedCellFlags(recorded_events, card_cells, completion_mode);
+  const cellProgress = calculateCardCellProgress(recorded_events, card_cells, completion_mode);
 
   let completedCount = 0;
   let score = 0;
+  let remainingTotalCount = 0;
 
-  for (let index = 0; index < card_cells.length; index += 1) {
-    if (!completed[index]) {
+  for (let index = 0; index < cellProgress.length; index += 1) {
+    const cell = card_cells[index];
+    const progress = cellProgress[index];
+
+    if (!progress) {
+      continue;
+    }
+
+    remainingTotalCount += progress.remaining_count;
+
+    if (!progress.is_completed) {
       continue;
     }
 
     completedCount += 1;
-    score += toPointValue(card_cells[index].point_value);
+    score += calculateThresholdAdjustedPoints(
+      toPointValue(cell?.point_value),
+      progress.threshold,
+    );
   }
-
-  const remaining = totalCells - completedCount;
 
   return {
     completed_cells_count: completedCount,
     is_complete: completedCount === totalCells,
-    is_one_away: remaining === 1,
+    is_one_away: remainingTotalCount === 1,
     score,
+    cell_progress: cellProgress,
   };
 }
