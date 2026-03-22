@@ -3,6 +3,10 @@ import { createSupabaseAdminClient } from "../../../lib/supabase/admin";
 import { JoinForm } from "./JoinForm";
 import { joinGameAction } from "../../actions/join-game";
 import { AuthEntryPoint } from "../../../components/auth/AuthEntryPoint";
+import {
+  getSportProfileLabel,
+  resolveSportProfileKey,
+} from "../../../lib/bingra/sport-profiles";
 
 type JoinPageProps = {
   params: {
@@ -16,6 +20,7 @@ type GameRecord = {
   title: string | null;
   team_a_name: string;
   team_b_name: string;
+  sport_profile: string | null;
 };
 
 type HostRecord = {
@@ -32,7 +37,7 @@ export default async function JoinGamePage(props: JoinPageProps) {
 
   const { data: game, error } = await supabase
     .from("games")
-    .select("id, slug, title, team_a_name, team_b_name")
+    .select("id, slug, title, team_a_name, team_b_name, sport_profile")
     .eq("slug", slug)
     .maybeSingle<GameRecord>();
 
@@ -62,6 +67,7 @@ export default async function JoinGamePage(props: JoinPageProps) {
   const teamAName = game.team_a_name?.trim() || "Team A";
   const teamBName = game.team_b_name?.trim() || "Team B";
   const hostName = host?.display_name?.trim() || "Host";
+  const sportProfileLabel = getSportProfileLabel(resolveSportProfileKey(game.sport_profile));
 
   return (
     <main className="mx-auto flex min-h-[70vh] w-full max-w-6xl flex-col justify-center px-4 py-12 sm:px-6">
@@ -74,6 +80,7 @@ export default async function JoinGamePage(props: JoinPageProps) {
             {teamAName} vs {teamBName}
           </h1>
           <p className="text-sm text-slate-500">Hosted by {hostName}</p>
+          <p className="text-xs text-slate-500">{sportProfileLabel}</p>
           <p className="pt-1 text-base font-medium text-slate-700">
             Predict what happens. Beat everyone watching.
           </p>

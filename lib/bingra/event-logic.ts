@@ -5,6 +5,10 @@ import {
   type ScorerParentCategory,
   type ScorerSubtypeGroup,
 } from "./event-catalog";
+import {
+  DEFAULT_SPORT_PROFILE,
+  type SportProfileKey,
+} from "./sport-profiles";
 
 export type TeamKey = "A" | "B";
 export type TeamSelection = TeamKey | null;
@@ -65,6 +69,31 @@ const SCORER_SUBTYPE_FLOW_LABELS: Partial<Record<ScorerSubtypeGroup, string>> = 
   "free-throw": "Made free throw",
 };
 
+export function isEventEnabledForProfile(
+  event: GameEventType,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): boolean {
+  if (!event.enabledProfiles || event.enabledProfiles.length === 0) {
+    return true;
+  }
+
+  return event.enabledProfiles.includes(profile);
+}
+
+export function getEventPointsForProfile(
+  event: GameEventType,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): number {
+  return event.scoringByProfile[profile] ?? 0;
+}
+
+export function getEventRarityForProfile(
+  event: GameEventType,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): 1 | 2 | 3 | 4 | 5 {
+  return event.rarityByProfile[profile] ?? 3;
+}
+
 export function getEnabledEvents(): GameEventType[] {
   return EVENT_CATALOG.filter((event) => event.enabled);
 }
@@ -83,36 +112,51 @@ export function requireEventById(eventId: string): GameEventType {
   return event;
 }
 
-export function getEventsForMode(mode: GameMode): GameEventType[] {
-  return getEnabledEvents().filter((event) => event.allowedModes.includes(mode));
+export function getEventsForMode(mode: GameMode, profile?: SportProfileKey): GameEventType[] {
+  return getEnabledEvents().filter(
+    (event) =>
+      event.allowedModes.includes(mode) &&
+      isEventEnabledForProfile(event, profile ?? DEFAULT_SPORT_PROFILE),
+  );
 }
 
-export function getTeamScopedEvents(mode?: GameMode): GameEventType[] {
-  const events = mode ? getEventsForMode(mode) : getEnabledEvents();
+export function getTeamScopedEvents(mode?: GameMode, profile?: SportProfileKey): GameEventType[] {
+  const events = mode
+    ? getEventsForMode(mode, profile)
+    : getEnabledEvents().filter((event) => isEventEnabledForProfile(event, profile));
   return events.filter((event) => event.teamScope === "team");
 }
 
-export function getGameScopedEvents(mode?: GameMode): GameEventType[] {
-  const events = mode ? getEventsForMode(mode) : getEnabledEvents();
+export function getGameScopedEvents(mode?: GameMode, profile?: SportProfileKey): GameEventType[] {
+  const events = mode
+    ? getEventsForMode(mode, profile)
+    : getEnabledEvents().filter((event) => isEventEnabledForProfile(event, profile));
   return events.filter((event) => event.teamScope === "none");
 }
 
 export function getEventsByCategory(
   category: GameEventType["category"],
   mode?: GameMode,
+  profile?: SportProfileKey,
 ): GameEventType[] {
-  const events = mode ? getEventsForMode(mode) : getEnabledEvents();
+  const events = mode
+    ? getEventsForMode(mode, profile)
+    : getEnabledEvents().filter((event) => isEventEnabledForProfile(event, profile));
   return events.filter((event) => event.category === category);
 }
 
 export function getEventsForRiskLevel(
   riskLevel: RiskLevel,
   mode?: GameMode,
+  profile?: SportProfileKey,
 ): GameEventType[] {
-  const events = mode ? getEventsForMode(mode) : getEnabledEvents();
+  const events = mode
+    ? getEventsForMode(mode, profile)
+    : getEnabledEvents().filter((event) => isEventEnabledForProfile(event, profile));
 
   return events.filter((event) => {
-    const distance = Math.abs(event.rarity - riskLevel);
+    const rarity = getEventRarityForProfile(event, profile);
+    const distance = Math.abs(rarity - riskLevel);
     return distance <= 1;
   });
 }
@@ -120,20 +164,27 @@ export function getEventsForRiskLevel(
 export function filterEventsByRiskBias(
   events: GameEventType[],
   riskLevel: RiskLevel,
+  profile?: SportProfileKey,
 ): GameEventType[] {
-  const filtered = events.filter((event) => Math.abs(event.rarity - riskLevel) <= 1);
+  const filtered = events.filter(
+    (event) => Math.abs(getEventRarityForProfile(event, profile) - riskLevel) <= 1,
+  );
   return filtered.length > 0 ? filtered : events;
 }
 
 export function getWeightedEventsForRiskLevel(
   riskLevel: RiskLevel,
   mode?: GameMode,
+  profile?: SportProfileKey,
 ): GameEventType[] {
-  const events = mode ? getEventsForMode(mode) : getEnabledEvents();
+  const events = mode
+    ? getEventsForMode(mode, profile)
+    : getEnabledEvents().filter((event) => isEventEnabledForProfile(event, profile));
   const weighted: GameEventType[] = [];
 
   for (const event of events) {
-    const distance = Math.abs(event.rarity - riskLevel);
+    const rarity = getEventRarityForProfile(event, profile);
+    const distance = Math.abs(rarity - riskLevel);
 
     let copies = 1;
     if (distance === 0) copies = 5;
@@ -150,15 +201,25 @@ export function getWeightedEventsForRiskLevel(
 }
 
 export function calculateCardPointValue(events: GameEventType[]): number {
-  return events.reduce((sum, event) => sum + event.basePoints, 0);
+  return events.reduce(
+    (sum, event) => sum + getEventPointsForProfile(event, DEFAULT_SPORT_PROFILE),
+    0,
+  );
 }
 
-export function summarizeCardPoints(events: GameEventType[]): CardPointSummary {
-  const totalBasePoints = calculateCardPointValue(events);
+export function summarizeCardPoints(
+  events: GameEventType[],
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): CardPointSummary {
+  const totalBasePoints = events.reduce(
+    (sum, event) => sum + getEventPointsForProfile(event, profile),
+    0,
+  );
   const averageBasePoints = events.length > 0 ? totalBasePoints / events.length : 0;
   const rarityScore =
     events.length > 0
-      ? events.reduce((sum, event) => sum + event.rarity, 0) / events.length
+      ? events.reduce((sum, event) => sum + getEventRarityForProfile(event, profile), 0) /
+        events.length
       : 0;
 
   return {
@@ -168,14 +229,20 @@ export function summarizeCardPoints(events: GameEventType[]): CardPointSummary {
   };
 }
 
-export function sortEventsForDisplay(events: GameEventType[]): GameEventType[] {
+export function sortEventsForDisplay(
+  events: GameEventType[],
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): GameEventType[] {
   return [...events].sort((a, b) => {
     if (a.category !== b.category) {
       return a.category.localeCompare(b.category);
     }
 
-    if (a.basePoints !== b.basePoints) {
-      return a.basePoints - b.basePoints;
+    const pointsA = getEventPointsForProfile(a, profile);
+    const pointsB = getEventPointsForProfile(b, profile);
+
+    if (pointsA !== pointsB) {
+      return pointsA - pointsB;
     }
 
     return a.label.localeCompare(b.label);
@@ -227,8 +294,14 @@ export function buildHostLabel(
 export function getHostRenderableEvents(
   mode?: GameMode,
   teamNames?: Partial<Record<TeamKey, string>>,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
 ): HostRenderableEvent[] {
-  const events = sortEventsForDisplay(mode ? getEventsForMode(mode) : getEnabledEvents());
+  const events = sortEventsForDisplay(
+    mode
+      ? getEventsForMode(mode, profile)
+      : getEnabledEvents().filter((event) => isEventEnabledForProfile(event, profile)),
+    profile,
+  );
   const renderable: HostRenderableEvent[] = [];
 
   for (const event of events) {
@@ -257,8 +330,9 @@ export function getHostRenderableEvents(
 export function getHostEventGroups(
   mode?: GameMode,
   teamNames?: Partial<Record<TeamKey, string>>,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
 ): Record<string, HostRenderableEvent[]> {
-  const renderable = getHostRenderableEvents(mode, teamNames);
+  const renderable = getHostRenderableEvents(mode, teamNames, profile);
 
   return renderable.reduce<Record<string, HostRenderableEvent[]>>((groups, item) => {
     const key = item.event.category;
@@ -294,6 +368,7 @@ export function validateRecordedEvent(input: {
   eventId: string;
   team?: TeamSelection;
   allowTeamWildcardForTeamScoped?: boolean;
+  profile?: SportProfileKey;
 }): { valid: true; event: GameEventType } | { valid: false; reason: string } {
   const event = getEventById(input.eventId);
 
@@ -305,6 +380,13 @@ export function validateRecordedEvent(input: {
   }
 
   const team = input.team ?? null;
+
+  if (!isEventEnabledForProfile(event, input.profile ?? DEFAULT_SPORT_PROFILE)) {
+    return {
+      valid: false,
+      reason: `Event ${input.eventId} is not enabled for this game profile`,
+    };
+  }
 
   if (
     !isEventAllowedForTeam(event, team, {
@@ -330,14 +412,16 @@ export function chooseRandomEvents(
     riskLevel?: RiskLevel;
     uniqueByEventId?: boolean;
     includeGameScopedEvents?: boolean;
+    profile?: SportProfileKey;
   },
 ): GameEventType[] {
   const mode = options?.mode;
   const riskLevel = options?.riskLevel ?? 3;
   const uniqueByEventId = options?.uniqueByEventId ?? true;
   const includeGameScopedEvents = options?.includeGameScopedEvents ?? true;
+  const profile = options?.profile ?? DEFAULT_SPORT_PROFILE;
 
-  let pool = getWeightedEventsForRiskLevel(riskLevel, mode);
+  let pool = getWeightedEventsForRiskLevel(riskLevel, mode, profile);
 
   if (!includeGameScopedEvents) {
     pool = pool.filter((event) => event.teamScope === "team");
@@ -366,8 +450,11 @@ export function chooseRandomEvents(
   return chosen;
 }
 
-export function estimateCardRiskLabel(events: GameEventType[]): string {
-  const summary = summarizeCardPoints(events);
+export function estimateCardRiskLabel(
+  events: GameEventType[],
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): string {
+  const summary = summarizeCardPoints(events, profile);
 
   if (summary.rarityScore >= 4.25 || summary.averageBasePoints >= 75) {
     return "High Risk";
@@ -384,8 +471,13 @@ export function estimateCardRiskLabel(events: GameEventType[]): string {
  * Scorer-flow helpers
  */
 
-export function getScorerEnabledEvents(mode?: GameMode): GameEventType[] {
-  const events = mode ? getEventsForMode(mode) : getEnabledEvents();
+export function getScorerEnabledEvents(
+  mode?: GameMode,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): GameEventType[] {
+  const events = mode
+    ? getEventsForMode(mode, profile)
+    : getEnabledEvents().filter((event) => isEventEnabledForProfile(event, profile));
 
   return events
     .filter((event) => event.scorerEnabled)
@@ -407,8 +499,9 @@ export function getScorerEnabledEvents(mode?: GameMode): GameEventType[] {
 
 export function getScorerParentOptions(
   mode?: GameMode,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
 ): ScorerParentOption[] {
-  const events = getScorerEnabledEvents(mode);
+  const events = getScorerEnabledEvents(mode, profile);
   const availableParents = new Set(
     events
       .map((event) => event.scorerParentCategory)
@@ -421,12 +514,13 @@ export function getScorerParentOptions(
 export function getScorerEventsForParent(
   parent: ScorerParentCategory,
   mode?: GameMode,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
 ): Array<{
   id: string;
   label: string;
   subtypeGroup?: ScorerSubtypeGroup;
 }> {
-  const scorerEvents = getScorerEnabledEvents(mode);
+  const scorerEvents = getScorerEnabledEvents(mode, profile);
   const parentEvents = scorerEvents.filter(
     (event) => event.scorerParentCategory === parent,
   );
@@ -480,12 +574,13 @@ export function getScorerEventsForParent(
 export function getScorerSubtypeOptions(
   subtypeGroup: ScorerSubtypeGroup,
   mode?: GameMode,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
 ): ScorerSubtypeOption[] {
   if (subtypeGroup === "none") {
     return [];
   }
 
-  const scorerEvents = getScorerEnabledEvents(mode);
+  const scorerEvents = getScorerEnabledEvents(mode, profile);
 
   return scorerEvents
     .filter((event) => event.scorerSubtypeGroup === subtypeGroup)
@@ -514,8 +609,9 @@ export function getScorerSubtypeOptions(
 export function getScorerDirectEventOptions(
   parent: ScorerParentCategory,
   mode?: GameMode,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
 ): ScorerEventOption[] {
-  const scorerEvents = getScorerEnabledEvents(mode);
+  const scorerEvents = getScorerEnabledEvents(mode, profile);
 
   return scorerEvents
     .filter(
@@ -548,8 +644,13 @@ export function getScorerDirectEventOptions(
 export function getScorerOptionById(
   eventId: string,
   mode?: GameMode,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
 ): ScorerEventOption | undefined {
-  const event = (mode ? getEventsForMode(mode) : getEnabledEvents()).find(
+  const event = (
+    mode
+      ? getEventsForMode(mode, profile)
+      : getEnabledEvents().filter((item) => isEventEnabledForProfile(item, profile))
+  ).find(
     (item) => item.id === eventId && item.scorerEnabled,
   );
 
@@ -571,7 +672,14 @@ export function getScorerOptionById(
   };
 }
 
-export function eventRequiresTeam(eventId: string): boolean {
+export function eventRequiresTeam(
+  eventId: string,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): boolean {
   const event = getEventById(eventId);
+  if (!event || !isEventEnabledForProfile(event, profile)) {
+    return false;
+  }
+
   return event?.teamScope === "team";
 }

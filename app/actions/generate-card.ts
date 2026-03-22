@@ -4,7 +4,15 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
-import { assertUniqueCardCellEventKeys } from "../../lib/bingra/card-event-key";
+import {
+  assertUniqueCardCellEventKeys,
+  parseCardCellEventKey,
+} from "../../lib/bingra/card-event-key";
+import {
+  getEventById,
+  isEventEnabledForProfile,
+} from "../../lib/bingra/event-logic";
+import { resolveSportProfileKey } from "../../lib/bingra/sport-profiles";
 
 export type GenerateCardFormState = {
   success?: boolean;
@@ -73,17 +81,32 @@ export async function generateCardAction(
 
     const { data: playerRecord, error: playerError } = await supabase
       .from("players")
-      .select("game_id, games!players_game_id_fkey(slug)")
+      .select("game_id, games!players_game_id_fkey(slug, sport_profile)")
       .eq("id", cookiePlayerId)
-      .maybeSingle<{ game_id?: string; games?: { slug?: string } }>();
+      .maybeSingle<{ game_id?: string; games?: { slug?: string; sport_profile?: string | null } }>();
 
     if (playerError) {
       throw playerError;
     }
 
     const gameId = playerRecord?.game_id;
+    const sportProfile = resolveSportProfileKey(playerRecord?.games?.sport_profile ?? null);
     if (!gameId) {
       throw new Error("Player is not associated with an active game.");
+    }
+
+    for (const acceptedEvent of acceptedEvents) {
+      const parsedEventKey = parseCardCellEventKey(acceptedEvent.eventKey);
+      const baseEventKey = parsedEventKey.baseEventKey;
+
+      if (!baseEventKey) {
+        continue;
+      }
+
+      const catalogEvent = getEventById(baseEventKey);
+      if (!catalogEvent || !isEventEnabledForProfile(catalogEvent, sportProfile)) {
+        throw new Error(`Event ${baseEventKey} is not enabled for this game profile.`);
+      }
     }
 
     const { data: existingCards, error: existingCardsError } = await supabase

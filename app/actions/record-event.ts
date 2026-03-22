@@ -6,6 +6,7 @@ import {
   validateRecordedEvent,
   type TeamSelection,
 } from "../../lib/bingra/event-logic";
+import { resolveSportProfileKey } from "../../lib/bingra/sport-profiles";
 import {
   calculateCardProgress,
   filterRecordedEventsByAcceptedAt,
@@ -27,6 +28,7 @@ export type RecordEventFormState = {
 const recordEventSchema = z.object({
   slug: z.string().min(1, "Missing game slug"),
   eventKey: z.string().min(1, "Missing event key"),
+  sportProfile: z.string().optional(),
   team: z.union([
     z.literal("A"),
     z.literal("B"),
@@ -53,6 +55,7 @@ export async function recordEventAction(
   const actionStartedAt = Date.now();
   const rawSlug = formData.get("slug");
   const rawEventKey = formData.get("eventKey");
+  const rawSportProfile = formData.get("sportProfile");
   const rawTeam = formData.get("team");
 
   console.info("[recordEventAction][perf] action start", {
@@ -71,6 +74,7 @@ export async function recordEventAction(
   const parsed = recordEventSchema.safeParse({
     slug: typeof rawSlug === "string" ? rawSlug.trim() : "",
     eventKey: typeof rawEventKey === "string" ? rawEventKey.trim() : "",
+    sportProfile: typeof rawSportProfile === "string" ? rawSportProfile : undefined,
     team:
       rawTeam === "A" || rawTeam === "B" ? rawTeam : null,
   });
@@ -91,7 +95,7 @@ export async function recordEventAction(
   });
   const { data: game, error: gameError } = await supabase
     .from("games")
-    .select("id, status, completion_mode, end_condition, team_scope")
+    .select("id, status, completion_mode, end_condition, team_scope, sport_profile")
     .eq("slug", parsed.data.slug)
     .maybeSingle<{
       id: string;
@@ -99,6 +103,7 @@ export async function recordEventAction(
       completion_mode: CompletionMode;
       end_condition: "FIRST_COMPLETION" | "HOST_DECLARED";
       team_scope: "both_teams" | "team_a_only" | "team_b_only";
+      sport_profile: string | null;
     }>();
   console.info("[recordEventAction][perf] game lookup end", {
     durationMs: Date.now() - gameLookupStartedAt,
@@ -134,6 +139,7 @@ export async function recordEventAction(
   const validation = validateRecordedEvent({
     eventId: parsed.data.eventKey,
     team: parsed.data.team as TeamSelection | undefined,
+    profile: resolveSportProfileKey(parsed.data.sportProfile ?? game.sport_profile),
   });
 
   if (!validation.valid) {

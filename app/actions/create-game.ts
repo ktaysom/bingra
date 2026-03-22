@@ -8,6 +8,11 @@ import { z } from "zod";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 import { getOrCreateProfileByAuthUserId } from "../../lib/auth/profiles";
+import {
+  DEFAULT_SPORT_PROFILE,
+  SPORT_PROFILES,
+  type SportProfileKey,
+} from "../../lib/bingra/sport-profiles";
 
 export type CreateGameFormState = {
   error?: string;
@@ -25,6 +30,10 @@ const formSchema = z.object({
   eventsPerCard: z.coerce.number().int().min(3).max(15),
   visibility: z.enum(["private", "public"]),
   allowCustomCards: z.boolean(),
+  sport_profile: z.custom<SportProfileKey>((value) =>
+    typeof value === "string" &&
+    SPORT_PROFILES.some((profile) => profile.key === value),
+  ),
 });
 
 function formatError(error: unknown): string {
@@ -55,6 +64,7 @@ export async function createGameAction(
   const rawEventsPerCard = formData.get("eventsPerCard") ?? "8";
   const rawVisibility = formData.get("visibility") ?? "private";
   const allowCustomCardsInput = formData.get("allowCustomCards");
+  const rawSportProfile = formData.get("sport_profile") ?? DEFAULT_SPORT_PROFILE;
 
   console.info("[createGameAction][perf] action start", {
     startedAt: new Date(actionStartedAt).toISOString(),
@@ -80,6 +90,8 @@ export async function createGameAction(
     eventsPerCard: typeof rawEventsPerCard === "string" ? Number(rawEventsPerCard) : 8,
     visibility: typeof rawVisibility === "string" ? rawVisibility : "private",
     allowCustomCards: allowCustomCardsInput ? true : false,
+    sport_profile:
+      typeof rawSportProfile === "string" ? rawSportProfile : DEFAULT_SPORT_PROFILE,
   });
 
     if (!parsed.success) {
@@ -180,6 +192,8 @@ export async function createGameAction(
           team_b_name: parsed.data.teamBName,
           team_scope: parsed.data.teamScope,
           events_per_card: parsed.data.eventsPerCard,
+          sport_profile: parsed.data.sport_profile,
+          catalog_version: "v1",
         })
         .eq("id", verifyRow.id)
         .limit(1);

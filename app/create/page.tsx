@@ -5,6 +5,11 @@ import { useFormStatus } from "react-dom";
 import { createGameAction, CreateGameFormState } from "../actions/create-game";
 import { generateGameName } from "../../lib/bingra/game-name-generator";
 import { AuthEntryPoint } from "../../components/auth/AuthEntryPoint";
+import {
+  DEFAULT_SPORT_PROFILE,
+  SPORT_PROFILES,
+  type SportProfileKey,
+} from "../../lib/bingra/sport-profiles";
 
 const initialState: CreateGameFormState = {};
 
@@ -99,6 +104,7 @@ export default function CreatePage() {
     "first_to_complete",
   );
   const [eventsPerCard, setEventsPerCard] = useState(5);
+  const [sportProfile, setSportProfile] = useState<SportProfileKey>(DEFAULT_SPORT_PROFILE);
 
   const completionModeDb = completionMode === "streak" ? "STREAK" : "BLACKOUT";
   const endConditionDb =
@@ -254,6 +260,7 @@ export default function CreatePage() {
               <input type="hidden" name="visibility" value="private" />
               <input type="hidden" name="allowCustomCards" value="on" />
               <input type="hidden" name="eventsPerCard" value={String(eventsPerCard)} />
+              <input type="hidden" name="sport_profile" value={sportProfile} />
 
               <div className="rounded-2xl bg-white/90 p-5 shadow-sm">
                 <SectionHeader
@@ -281,6 +288,38 @@ export default function CreatePage() {
                   />
                 </div>
               </div>
+
+              <section className="rounded-2xl bg-white/90 p-5 shadow-sm">
+                <SectionHeader
+                  eyebrow="Sport profile"
+                  title="League rules"
+                  description="Choose which basketball ruleset to use for scoring and event balancing."
+                />
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {SPORT_PROFILES.map((profile) => (
+                    <label key={profile.key} className="block">
+                      <input
+                        type="radio"
+                        name="sport_profile_selector"
+                        value={profile.key}
+                        checked={sportProfile === profile.key}
+                        onChange={() => setSportProfile(profile.key)}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${
+                          sportProfile === profile.key
+                            ? "border-[#8f7f71] bg-[#f7f0e8] text-[#2f2925]"
+                            : "border-[#ddd2c7] bg-[#faf7f3] text-[#5c544d]"
+                        }`}
+                      >
+                        {profile.label}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </section>
 
               <section className="rounded-2xl bg-white/90 p-5 shadow-sm">
                 <SectionHeader

@@ -13,6 +13,10 @@ import {
   getScorerParentOptions,
   getScorerSubtypeOptions,
 } from "../../../../lib/bingra/event-logic";
+import {
+  DEFAULT_SPORT_PROFILE,
+  type SportProfileKey,
+} from "../../../../lib/bingra/sport-profiles";
 import { resolveBaseEventKey } from "../../../../lib/bingra/card-event-key";
 import {
   recordEventAction,
@@ -31,6 +35,7 @@ type HostScoringPanelProps = {
     A: string;
     B: string;
   };
+  sportProfile?: SportProfileKey;
 };
 
 type RecentEvent = {
@@ -51,6 +56,7 @@ export function HostScoringPanel({
   isFinished = false,
   teamScope = "both_teams",
   teamNames = { A: "Team A", B: "Team B" },
+  sportProfile = DEFAULT_SPORT_PROFILE,
 }: HostScoringPanelProps) {
   const router = useRouter();
 
@@ -71,26 +77,26 @@ export function HostScoringPanel({
 
   const lastSubmissionRef = useRef<RecentEvent | null>(null);
 
-  const parentOptions = useMemo(() => getScorerParentOptions(), []);
+  const parentOptions = useMemo(() => getScorerParentOptions(undefined, sportProfile), [sportProfile]);
   const eventOptions = useMemo(() => {
-    return parent ? getScorerEventsForParent(parent) : [];
-  }, [parent]);
+    return parent ? getScorerEventsForParent(parent, undefined, sportProfile) : [];
+  }, [parent, sportProfile]);
 
   const selectedEventOption = useMemo(() => {
-    return selectedEventId ? getScorerOptionById(selectedEventId) : undefined;
-  }, [selectedEventId]);
+    return selectedEventId ? getScorerOptionById(selectedEventId, undefined, sportProfile) : undefined;
+  }, [selectedEventId, sportProfile]);
 
   const selectedSubtypeOption = useMemo(() => {
-    return selectedSubtypeId ? getScorerOptionById(selectedSubtypeId) : undefined;
-  }, [selectedSubtypeId]);
+    return selectedSubtypeId ? getScorerOptionById(selectedSubtypeId, undefined, sportProfile) : undefined;
+  }, [selectedSubtypeId, sportProfile]);
 
   const subtypeOptions = useMemo(() => {
     if (!selectedSubtypeGroup) {
       return [];
     }
 
-    return getScorerSubtypeOptions(selectedSubtypeGroup);
-  }, [selectedSubtypeGroup]);
+    return getScorerSubtypeOptions(selectedSubtypeGroup, undefined, sportProfile);
+  }, [selectedSubtypeGroup, sportProfile]);
 
   const finalEvent = selectedSubtypeOption ?? selectedEventOption;
 
@@ -142,6 +148,7 @@ export function HostScoringPanel({
     const formData = new FormData();
     formData.set("slug", slug);
     formData.set("eventKey", eventId);
+    formData.set("sportProfile", sportProfile);
     if (team) {
       formData.set("team", team);
     }
@@ -180,7 +187,7 @@ export function HostScoringPanel({
       return;
     }
 
-    const resolved = getScorerOptionById(option.id);
+    const resolved = getScorerOptionById(option.id, undefined, sportProfile);
     if (!resolved) return;
 
     setSelectedEventId(resolved.id);
@@ -211,7 +218,7 @@ export function HostScoringPanel({
   }
 
   function handleSubtypeSelect(subtypeId: string) {
-    const resolved = getScorerOptionById(subtypeId);
+    const resolved = getScorerOptionById(subtypeId, undefined, sportProfile);
     if (!resolved) return;
 
     setSelectedSubtypeId(resolved.id);

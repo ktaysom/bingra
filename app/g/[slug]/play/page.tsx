@@ -25,6 +25,7 @@ type GameRecord = {
   events_per_card: number;
   completion_mode: CompletionMode;
   end_condition: "FIRST_COMPLETION" | "HOST_DECLARED";
+  sport_profile: string | null;
 };
 
 export const metadata: Metadata = {
@@ -39,7 +40,7 @@ export default async function PlayPage(props: PlayPageProps) {
   const { data: game, error: gameError } = await supabase
     .from("games")
     .select(
-      "id, slug, title, status, completed_at, winner_player_id, mode, team_a_name, team_b_name, team_scope, events_per_card, completion_mode, end_condition",
+      "id, slug, title, status, completed_at, winner_player_id, mode, team_a_name, team_b_name, team_scope, events_per_card, completion_mode, end_condition, sport_profile",
     )
     .eq("slug", slug)
     .maybeSingle<GameRecord>();

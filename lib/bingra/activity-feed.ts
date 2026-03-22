@@ -5,8 +5,16 @@ import {
   type CompletionMode,
   type RecordedEvent,
 } from "./card-progress";
-import { getEventById, type TeamKey } from "./event-logic";
+import {
+  getEventById,
+  getEventRarityForProfile,
+  type TeamKey,
+} from "./event-logic";
 import { resolveBaseEventKey } from "./card-event-key";
+import {
+  DEFAULT_SPORT_PROFILE,
+  type SportProfileKey,
+} from "./sport-profiles";
 
 export type ActivityFeedItemType =
   | "player_joined"
@@ -236,6 +244,7 @@ function buildScoreText(input: {
 function resolveEventTone(input: {
   pointsAwarded: number;
   eventKey: string | null;
+  sportProfile: SportProfileKey;
 }): ActivityFeedTone {
   const { pointsAwarded, eventKey } = input;
 
@@ -246,7 +255,7 @@ function resolveEventTone(input: {
   const baseEventKey = resolveBaseEventKey(eventKey);
   const category = baseEventKey ? getEventById(baseEventKey)?.category : undefined;
 
-  if (category === "turnover" || category === "violation") {
+  if (category === "change_of_possession") {
     return "negative";
   }
 
@@ -273,6 +282,7 @@ export function formatRecordedEventFeedItem(input: {
   resolvedEventName: string;
   scoresBeforeByPlayerName: Map<string, number>;
   scoresAfterByPlayerName: Map<string, number>;
+  sportProfile?: SportProfileKey;
 }): Extract<ActivityFeedItem, { type: "event_recorded" }> {
   const {
     event,
@@ -282,15 +292,23 @@ export function formatRecordedEventFeedItem(input: {
     resolvedEventName,
     scoresBeforeByPlayerName,
     scoresAfterByPlayerName,
+    sportProfile,
   } = input;
 
   const tone = resolveEventTone({
     pointsAwarded,
     eventKey: event.event_key,
+    sportProfile: sportProfile ?? DEFAULT_SPORT_PROFILE,
   });
 
   const baseEventKey = resolveBaseEventKey(event.event_key);
-  const rarity = baseEventKey ? getEventById(baseEventKey)?.rarity : undefined;
+  const resolvedEvent = baseEventKey ? getEventById(baseEventKey) : undefined;
+  const rarity = resolvedEvent
+    ? getEventRarityForProfile(
+        resolvedEvent,
+        sportProfile ?? DEFAULT_SPORT_PROFILE,
+      )
+    : undefined;
   const scoreText = buildScoreText({
     pointsAwarded,
     playerNames,
@@ -478,8 +496,9 @@ export function buildEventRecordedItems(input: {
   playerCardsByPlayerId: Map<string, { accepted_at: string | null; card_cells: ProgressCardCell[] }>;
   completionMode: CompletionMode;
   teamNames: Record<TeamKey, string>;
+  sportProfile?: SportProfileKey;
 }): ActivityFeedItem[] {
-  const { events, players, playerCardsByPlayerId, completionMode, teamNames } = input;
+  const { events, players, playerCardsByPlayerId, completionMode, teamNames, sportProfile } = input;
   const eventFeedItems: ActivityFeedItem[] = [];
   const recordedEventsProgress: RecordedEvent[] = [];
   const playerNamesById = new Map(players.map((player) => [player.id, player.display_name]));
@@ -587,6 +606,7 @@ export function buildEventRecordedItems(input: {
         resolvedEventName,
         scoresBeforeByPlayerName,
         scoresAfterByPlayerName,
+        sportProfile,
       }),
     );
 
@@ -718,6 +738,7 @@ export function buildActivityFeedItems(input: {
   completedAt: string | null;
   winnerName: string | null;
   leaderboardEntries: ActivityFeedLeaderboardEntry[];
+  sportProfile?: SportProfileKey;
 }): ActivityFeedItem[] {
   const playerJoinedFeedItems = buildPlayerJoinedItems(input.players);
   const eventFeedItems = buildEventRecordedItems({
@@ -726,6 +747,7 @@ export function buildActivityFeedItems(input: {
     playerCardsByPlayerId: input.playerCardsByPlayerId,
     completionMode: input.completionMode,
     teamNames: input.teamNames,
+    sportProfile: input.sportProfile,
   });
   const gameLifecycleFeedItems = buildGameLifecycleItems({
     gameId: input.gameId,

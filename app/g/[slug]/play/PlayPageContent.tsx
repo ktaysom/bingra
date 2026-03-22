@@ -8,7 +8,9 @@ import { LeaderboardCardPreview } from "./LeaderboardCardPreview";
 import { mapPlayModeToGameMode } from "../../../../lib/bingra/types";
 import {
   chooseRandomEvents,
+  getEventPointsForProfile,
   getEventById,
+  getEventRarityForProfile,
   type TeamKey,
   type RiskLevel,
 } from "../../../../lib/bingra/event-logic";
@@ -25,6 +27,10 @@ import {
   buildActivityFeedItems,
   type ActivityFeedItem,
 } from "../../../../lib/bingra/activity-feed";
+import {
+  getSportProfileLabel,
+  resolveSportProfileKey,
+} from "../../../../lib/bingra/sport-profiles";
 import { AuthEntryPoint } from "../../../../components/auth/AuthEntryPoint";
 import { EndGameSaveStatsPrompt } from "../../../../components/auth/EndGameSaveStatsPrompt";
 
@@ -42,6 +48,7 @@ type GameRecord = {
   events_per_card: number;
   completion_mode: CompletionMode;
   end_condition: "FIRST_COMPLETION" | "HOST_DECLARED";
+  sport_profile: string | null;
 };
 
 type PlayerRecord = {
@@ -100,6 +107,8 @@ type PlayPageContentProps = {
 
 export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageContentProps) {
   const supabase = createSupabaseAdminClient();
+  const sportProfile = resolveSportProfileKey(game.sport_profile);
+  const sportProfileLabel = getSportProfileLabel(sportProfile);
 
   let players: PlayerRecord[] | null = null;
   let playersError: string | null = null;
@@ -169,6 +178,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     riskLevel: initialRiskLevel,
     uniqueByEventId: true,
     includeGameScopedEvents: game.team_scope === "both_teams",
+    profile: sportProfile,
   }).map((event, index) => {
     const teamKey: TeamKey | null =
       event.teamScope === "team"
@@ -339,9 +349,17 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
         label: fallbackLabel,
         shortLabel: fallbackLabel,
         description: "",
-        category: "scoring",
-        rarity: 3,
-        basePoints: fallbackBasePoints,
+        category: "score",
+        scoringByProfile: {
+          basketball_high_school: fallbackBasePoints,
+          basketball_college: fallbackBasePoints,
+          basketball_pro: fallbackBasePoints,
+        },
+        rarityByProfile: {
+          basketball_high_school: 3,
+          basketball_college: 3,
+          basketball_pro: 3,
+        },
         enabled: true,
         allowedModes: [mapPlayModeToGameMode(game.mode)],
         teamScope: "none",
@@ -362,6 +380,8 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       ...event,
       label: resolvedLabel,
       shortLabel: resolvedShortLabel,
+      points: getEventPointsForProfile(event, sportProfile),
+      rarity: getEventRarityForProfile(event, sportProfile),
       cardTeamKey: persistedTeamKey,
       marked: currentPlayerCompletedFlags[index] ?? false,
     };
@@ -486,6 +506,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       raw_points: entry.raw_points,
       has_bingra: entry.has_bingra,
     })),
+    sportProfile,
   });
 
   const formatActivityTimestamp = (iso: string) =>
@@ -595,6 +616,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
           <div>
             <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{matchupHeadline}</h1>
             <p className="mt-1 text-sm text-slate-500">Hosted by {displayHostName}</p>
+            <p className="mt-1 text-xs text-slate-500">{sportProfileLabel}</p>
           </div>
           <div className="flex items-center gap-2 sm:pt-1">
             <AuthEntryPoint
@@ -625,6 +647,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
         initialRiskLevel={initialRiskLevel}
         initialCardEvents={initialCardEvents}
         lockedCardEvents={lockedCardEvents}
+        sportProfile={sportProfile}
       />
 
       {shouldShowAcceptReminder && (
@@ -802,6 +825,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
           isFinished={isGameFinished}
           teamScope={game.team_scope}
           teamNames={teamNames}
+          sportProfile={sportProfile}
         />
       ) : isLobby ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm sm:p-6">

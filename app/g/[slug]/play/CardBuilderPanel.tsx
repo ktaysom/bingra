@@ -5,6 +5,7 @@ import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import {
   chooseRandomEvents,
   estimateCardRiskLabel,
+  getEventPointsForProfile,
   getEventsForMode,
   summarizeCardPoints,
   type TeamKey,
@@ -17,6 +18,10 @@ import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { generateCardAction } from "../../../actions/generate-card";
 import { editCardAction } from "../../../actions/edit-card";
+import {
+  DEFAULT_SPORT_PROFILE,
+  type SportProfileKey,
+} from "../../../../lib/bingra/sport-profiles";
 type GameTeamScope = "both_teams" | "team_a_only" | "team_b_only";
 
 type CardBuilderEvent = GameEventType & {
@@ -36,6 +41,7 @@ type CardBuilderPanelProps = {
   initialRiskLevel: RiskLevel;
   initialCardEvents: CardBuilderEvent[];
   lockedCardEvents: CardBuilderEvent[];
+  sportProfile: SportProfileKey;
 };
 
 type AddableEvent = {
@@ -92,10 +98,7 @@ function moveItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
 function isPossessionStyleEvent(event: GameEventType): boolean {
   return (
     event.scorerParentCategory === "change-of-possession" ||
-    event.category === "defense" ||
-    event.category === "turnover" ||
-    event.category === "violation" ||
-    event.category === "hustle"
+    event.category === "change_of_possession"
   );
 }
 
@@ -110,7 +113,7 @@ function matchesAddFilter(filter: AddFilterKey, candidate: AddableEvent): boolea
     case "neutral":
       return candidate.cardTeamKey == null;
     case "scoring":
-      return category === "scoring" || category === "free-throw";
+      return category === "score";
     case "possession":
       return isPossessionStyleEvent(candidate.event);
     default:
@@ -148,12 +151,14 @@ function generateCardEvents(
   eventsPerCard: number,
   teamScope: GameTeamScope,
   teamNames: Record<TeamKey, string>,
+  sportProfile: SportProfileKey,
 ): CardBuilderEvent[] {
   return chooseRandomEvents(eventsPerCard, {
     mode: mapPlayModeToGameMode(mode),
     riskLevel,
     uniqueByEventId: true,
     includeGameScopedEvents: teamScope === "both_teams",
+    profile: sportProfile,
   }).map((event, index) => {
     const cardTeamKey = resolveTeamKey(teamScope, event, index);
 
@@ -178,6 +183,7 @@ export function CardBuilderPanel({
   initialRiskLevel,
   initialCardEvents,
   lockedCardEvents,
+  sportProfile = DEFAULT_SPORT_PROFILE,
 }: CardBuilderPanelProps) {
   const [isHydrated, setIsHydrated] = useState(false);
   const [riskLevel, setRiskLevel] = useState<RiskLevel>(initialRiskLevel);
@@ -209,11 +215,17 @@ export function CardBuilderPanel({
   const isTemporarilyAccepted = isAccepted && gameStatus === "lobby";
   const shouldRenderLockedPreview = isPermanentlyLocked || isTemporarilyAccepted;
 
-  const cardSummary = useMemo(() => summarizeCardPoints(cardEvents), [cardEvents]);
-  const cardRiskLabel = useMemo(() => estimateCardRiskLabel(cardEvents), [cardEvents]);
+  const cardSummary = useMemo(
+    () => summarizeCardPoints(cardEvents, sportProfile),
+    [cardEvents, sportProfile],
+  );
+  const cardRiskLabel = useMemo(
+    () => estimateCardRiskLabel(cardEvents, sportProfile),
+    [cardEvents, sportProfile],
+  );
 
   const addableEvents = useMemo<AddableEvent[]>(() => {
-    const modeEvents = getEventsForMode(mapPlayModeToGameMode(mode));
+    const modeEvents = getEventsForMode(mapPlayModeToGameMode(mode), sportProfile);
     const items: AddableEvent[] = [];
 
     for (const event of modeEvents) {
@@ -266,7 +278,7 @@ export function CardBuilderPanel({
       if (groupDelta !== 0) return groupDelta;
       return a.eventName.localeCompare(b.eventName);
     });
-  }, [mode, teamScope, teamNames]);
+  }, [mode, teamScope, teamNames, sportProfile]);
 
   const selectedIdentityKeys = useMemo(() => {
     return new Set(cardEvents.map((event) => `${event.id}:${event.cardTeamKey ?? "NONE"}`));
@@ -292,13 +304,17 @@ export function CardBuilderPanel({
   const canAddMoreEvents = cardEvents.length < eventsPerCard;
 
   const handleGenerateAgain = () => {
-    setCardEvents(generateCardEvents(mode, riskLevel, eventsPerCard, teamScope, teamNames));
+    setCardEvents(
+      generateCardEvents(mode, riskLevel, eventsPerCard, teamScope, teamNames, sportProfile),
+    );
   };
 
   const handleRiskChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextValue = Number(event.target.value) as RiskLevel;
     setRiskLevel(nextValue);
-    setCardEvents(generateCardEvents(mode, nextValue, eventsPerCard, teamScope, teamNames));
+    setCardEvents(
+      generateCardEvents(mode, nextValue, eventsPerCard, teamScope, teamNames, sportProfile),
+    );
   };
 
   const handleAcceptCard = () => {
@@ -331,7 +347,7 @@ export function CardBuilderPanel({
         event.label,
         event.cardTeamKey ? teamNames[event.cardTeamKey] : null,
       ),
-      pointValue: event.basePoints,
+      pointValue: getEventPointsForProfile(event, sportProfile),
       teamKey: event.cardTeamKey ?? null,
       orderIndex: index,
     }));
@@ -578,7 +594,7 @@ export function CardBuilderPanel({
                             {index + 1}. {stripTeamPrefix(event.label, teamName)}
                           </p>
                           {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
-                          <p className="text-xs text-slate-500">{event.basePoints} pts</p>
+                          <p className="text-xs text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</p>
                         </div>
                         {event.marked && (
                           <p className="text-xs font-semibold text-blue-600">Complete</p>
@@ -607,7 +623,7 @@ export function CardBuilderPanel({
                   >
                     <p className="font-medium text-slate-900">{stripTeamPrefix(event.label, teamName)}</p>
                     {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
-                    <p className="text-xs text-slate-500">{event.basePoints} pts</p>
+                    <p className="text-xs text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</p>
                     {event.marked && (
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
                         Complete
@@ -711,7 +727,7 @@ export function CardBuilderPanel({
                       {event.cardTeamKey && (
                         <p className="text-[11px] text-slate-500">{teamNames[event.cardTeamKey]}</p>
                       )}
-                      <p className="text-xs text-slate-500">{event.basePoints} pts</p>
+                      <p className="text-xs text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</p>
                     </div>
                     <div className="flex items-center justify-end gap-2">
                       <button
@@ -760,7 +776,7 @@ export function CardBuilderPanel({
                       <div className="min-w-0">
                         <p className="font-medium text-slate-900">{stripTeamPrefix(event.label, teamName)}</p>
                         {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
-                        <p className="text-xs text-slate-500">{event.basePoints} pts</p>
+                        <p className="text-xs text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</p>
                       </div>
                       <button
                         type="button"
@@ -861,7 +877,7 @@ export function CardBuilderPanel({
                               {event.teamName && (
                                 <p className="text-[11px] text-slate-500">{event.teamName}</p>
                               )}
-                              <p className="text-xs text-slate-500">{event.event.basePoints} pts</p>
+                              <p className="text-xs text-slate-500">{getEventPointsForProfile(event.event, sportProfile)} pts</p>
                             </div>
                             <button
                               type="button"
