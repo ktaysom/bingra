@@ -533,6 +533,8 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     return "rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700";
   };
 
+  const activityFeedIsScrollable = activityFeedItems.length > 7;
+
   return (
     <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6">
       <PlayRealtimeBridgeMount gameId={game.id} />
@@ -621,7 +623,13 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
               Live
             </span>
           </div>
-          <div className="mt-4 space-y-3">
+          <div
+            className={`mt-4 space-y-3 overflow-y-auto ${
+              activityFeedIsScrollable
+                ? "max-h-[28rem] sm:max-h-[31rem] pr-2 [scrollbar-gutter:stable]"
+                : ""
+            }`}
+          >
             {activityFeedItems.map((activity) => (
               <div
                 key={activity.id}
