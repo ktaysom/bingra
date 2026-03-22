@@ -1,5 +1,6 @@
 import {
   calculateCardProgress,
+  calculateCompletedCellFlags,
   filterRecordedEventsByAcceptedAt,
   type CardCell as ProgressCardCell,
   type CompletionMode,
@@ -274,6 +275,14 @@ function getFlavorDetail(seed: string, tone: ActivityFeedTone): string {
   return pickStableVariant(seed, NEUTRAL_FLAVOR_POOL);
 }
 
+function rarityToLabel(rarity: 1 | 2 | 3 | 4 | 5): string {
+  if (rarity === 1) return "Common";
+  if (rarity === 2) return "Uncommon";
+  if (rarity === 3) return "Rare";
+  if (rarity === 4) return "Epic";
+  return "Legendary";
+}
+
 export function formatRecordedEventFeedItem(input: {
   event: ActivityFeedScoredEvent;
   pointsAwarded: number;
@@ -339,6 +348,7 @@ export function buildProgressMilestoneItems(input: {
   playerNamesById: Map<string, string>;
   progressBeforeByPlayerId: Map<string, ActivityFeedPlayerProgress>;
   progressAfterByPlayerId: Map<string, ActivityFeedPlayerProgress>;
+  oneAwayDetailByPlayerId: Map<string, string>;
   announcedOneAwayPlayerIds: Set<string>;
 }): Array<Extract<ActivityFeedItem, { type: "progress_milestone" }>> {
   const {
@@ -347,6 +357,7 @@ export function buildProgressMilestoneItems(input: {
     playerNamesById,
     progressBeforeByPlayerId,
     progressAfterByPlayerId,
+    oneAwayDetailByPlayerId,
     announcedOneAwayPlayerIds,
   } = input;
 
@@ -377,7 +388,7 @@ export function buildProgressMilestoneItems(input: {
       playerName,
       milestone: "one_away",
       headline: `🎯 ${playerName} is 1 away from Bingra`,
-      detail: "One more event completes the card.",
+      detail: oneAwayDetailByPlayerId.get(playerId) ?? "One more event completes the card.",
       tone: "neutral",
       rarity: 3,
       emphasis: "highlight",
@@ -529,6 +540,7 @@ export function buildEventRecordedItems(input: {
     const scoresAfterByPlayerName = new Map<string, number>();
     const progressBeforeByPlayerId = new Map<string, ActivityFeedPlayerProgress>();
     const progressAfterByPlayerId = new Map<string, ActivityFeedPlayerProgress>();
+    const oneAwayDetailByPlayerId = new Map<string, string>();
     let pointsAwarded = 0;
 
     for (const player of players) {
@@ -556,6 +568,38 @@ export function buildEventRecordedItems(input: {
         isComplete: after.is_complete,
         isOneAway: after.is_one_away,
       });
+
+      if (after.is_one_away && !before.is_one_away) {
+        const completedFlags = calculateCompletedCellFlags(
+          eligibleAfter,
+          cardCells,
+          completionMode,
+        );
+        const missingIndex = completedFlags.findIndex((flag) => !flag);
+
+        if (missingIndex !== -1) {
+          const missingCell = cardCells[missingIndex];
+          const eventKey = missingCell?.event_key;
+          const baseEventKey = resolveBaseEventKey(eventKey);
+          const eventMeta = baseEventKey ? getEventById(baseEventKey) : undefined;
+          const eventName = eventMeta?.label ?? eventKey;
+
+          if (eventName) {
+            const rarity = eventMeta
+              ? getEventRarityForProfile(
+                  eventMeta,
+                  sportProfile ?? DEFAULT_SPORT_PROFILE,
+                )
+              : undefined;
+            const rarityLabel = rarity ? ` (${rarityToLabel(rarity)})` : "";
+
+            oneAwayDetailByPlayerId.set(
+              player.id,
+              `Needs: ${eventName}${rarityLabel} to complete the card`,
+            );
+          }
+        }
+      }
 
       if (delta > 0) {
         playerNames.push(player.display_name);
@@ -617,6 +661,7 @@ export function buildEventRecordedItems(input: {
         playerNamesById,
         progressBeforeByPlayerId,
         progressAfterByPlayerId,
+        oneAwayDetailByPlayerId,
         announcedOneAwayPlayerIds,
       }),
     );
