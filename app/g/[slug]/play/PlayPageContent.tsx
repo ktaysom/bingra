@@ -135,8 +135,31 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
   const playMode = game.completion_mode === "STREAK" ? "streak" : "quick_play";
   const initialRiskLevel: RiskLevel = 3;
   const teamNames: Record<TeamKey, string> = { A: game.team_a_name, B: game.team_b_name };
-  const hostName =
-    players?.find((player) => player.role === "host")?.display_name?.trim() || "Host";
+  const hostName = players?.find((player) => player.role === "host")?.display_name?.trim() || null;
+  const displayHostName = hostName || "Host";
+  const resolvedTeamA = game.team_a_name?.trim() || null;
+  const resolvedTeamB = game.team_b_name?.trim() || null;
+  const parsedTeamsFromTitle = (() => {
+    const title = game.title?.trim();
+    if (!title) {
+      return { teamA: null, teamB: null };
+    }
+
+    const match = title.match(/^(.*?)\s+vs\.?\s+(.*?)$/i);
+    if (!match) {
+      return { teamA: null, teamB: null };
+    }
+
+    const teamAFromTitle = match[1]?.trim() || null;
+    const teamBFromTitle = match[2]?.trim() || null;
+
+    return {
+      teamA: teamAFromTitle,
+      teamB: teamBFromTitle,
+    };
+  })();
+  const shareTeamA = resolvedTeamA || parsedTeamsFromTitle.teamA;
+  const shareTeamB = resolvedTeamB || parsedTeamsFromTitle.teamB;
   const matchupHeadline =
     game.team_a_name?.trim() && game.team_b_name?.trim()
       ? `${game.team_a_name} vs ${game.team_b_name}`
@@ -571,7 +594,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{matchupHeadline}</h1>
-            <p className="mt-1 text-sm text-slate-500">Hosted by {hostName}</p>
+            <p className="mt-1 text-sm text-slate-500">Hosted by {displayHostName}</p>
           </div>
           <div className="flex items-center gap-2 sm:pt-1">
             <AuthEntryPoint
@@ -579,7 +602,13 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
               linkPlayerId={currentPlayerId}
               subtle
             />
-            <InlineShareButton slug={slug} title={game.title ?? matchupHeadline} />
+            <InlineShareButton
+              slug={slug}
+              title={game.title ?? matchupHeadline}
+              teamA={shareTeamA}
+              teamB={shareTeamB}
+              hostName={hostName}
+            />
           </div>
         </div>
       </header>

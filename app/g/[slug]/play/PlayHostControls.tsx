@@ -10,31 +10,77 @@ import {
 type ShareGameControlProps = {
   slug: string;
   title: string;
+  teamA?: string | null;
+  teamB?: string | null;
+  hostName?: string | null;
 };
 
 type InlineShareButtonProps = {
   slug: string;
   title: string;
+  teamA?: string | null;
+  teamB?: string | null;
+  hostName?: string | null;
 };
 
-function useShareGame(slug: string, title: string) {
+function buildShareText({
+  teamA,
+  teamB,
+  hostName,
+}: {
+  teamA?: string | null;
+  teamB?: string | null;
+  hostName?: string | null;
+}) {
+  const hasTeams = teamA && teamB;
+  const hasHost = hostName;
+
+  if (hasTeams && hasHost) {
+    return `Join my ${teamA} vs ${teamB} Bingra, hosted by ${hostName}`;
+  }
+
+  if (hasTeams) {
+    return `Join my ${teamA} vs ${teamB} Bingra`;
+  }
+
+  if (hasHost) {
+    return `Join my Bingra, hosted by ${hostName}`;
+  }
+
+  return "Join my Bingra";
+}
+
+function useShareGame(
+  slug: string,
+  title: string,
+  {
+    teamA,
+    teamB,
+    hostName,
+  }: {
+    teamA?: string | null;
+    teamB?: string | null;
+    hostName?: string | null;
+  },
+) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const invitePath = `/g/${slug}`;
 
   const handleShare = async () => {
     const inviteUrl = `${window.location.origin}${invitePath}`;
+    const shareText = buildShareText({ teamA, teamB, hostName });
     try {
       if (navigator.share) {
         await navigator.share({
-          title,
-          text: "Join my Bingra!",
+          title: shareText || title,
+          text: shareText,
           url: inviteUrl,
         });
         setFeedback("Shared");
         return;
       }
 
-      await navigator.clipboard.writeText(inviteUrl);
+      await navigator.clipboard.writeText(`${shareText} ${inviteUrl}`);
       setFeedback("Invite link copied");
     } catch {
       setFeedback("Unable to share right now");
@@ -48,8 +94,12 @@ function useShareGame(slug: string, title: string) {
   };
 }
 
-export function ShareGameControl({ slug, title }: ShareGameControlProps) {
-  const { feedback, invitePath, handleShare } = useShareGame(slug, title);
+export function ShareGameControl({ slug, title, teamA, teamB, hostName }: ShareGameControlProps) {
+  const { feedback, invitePath, handleShare } = useShareGame(slug, title, {
+    teamA,
+    teamB,
+    hostName,
+  });
 
   return (
     <section className="rounded-2xl bg-white/90 p-4 shadow-sm sm:p-6">
@@ -71,8 +121,12 @@ export function ShareGameControl({ slug, title }: ShareGameControlProps) {
   );
 }
 
-export function InlineShareButton({ slug, title }: InlineShareButtonProps) {
-  const { feedback, handleShare } = useShareGame(slug, title);
+export function InlineShareButton({ slug, title, teamA, teamB, hostName }: InlineShareButtonProps) {
+  const { feedback, handleShare } = useShareGame(slug, title, {
+    teamA,
+    teamB,
+    hostName,
+  });
 
   return (
     <div className="flex items-center gap-2">
