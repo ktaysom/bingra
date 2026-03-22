@@ -4,6 +4,7 @@ import { EndGameCelebration } from "./EndGameCelebration";
 import { HostScoringPanel } from "./HostScoringPanel";
 import { EndGameControl, GameStatusActionButton, InlineShareButton } from "./PlayHostControls";
 import { PlayRealtimeBridgeMount } from "./PlayRealtimeBridgeMount";
+import { LeaderboardCardPreview } from "./LeaderboardCardPreview";
 import { mapPlayModeToGameMode } from "../../../../lib/bingra/types";
 import {
   chooseRandomEvents,
@@ -14,6 +15,7 @@ import {
 import { parseCardCellEventKey } from "../../../../lib/bingra/card-event-key";
 import {
   calculateCompletedCellFlags,
+  filterRecordedEventsByAcceptedAt,
   type CompletionMode,
   type RecordedEvent,
   type CardCell as ProgressCardCell,
@@ -58,6 +60,8 @@ type LeaderboardEntry = {
   is_one_away: boolean;
   completed_cells_count: number;
   join_order: number;
+  is_active: boolean;
+  status_label?: string;
 };
 
 type LiveCompletionRow = {
@@ -78,6 +82,7 @@ type RecentScoredEvent = {
 type CardRow = {
   id: string;
   player_id: string;
+  accepted_at: string | null;
   card_cells: {
     order_index: number;
     event_key: string | null;
@@ -117,7 +122,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
   {
     const { data, error } = await supabase
       .from("cards")
-      .select("id, player_id, card_cells(order_index, event_key, event_label, team_key, point_value)")
+      .select("id, player_id, accepted_at, card_cells(order_index, event_key, event_label, team_key, point_value)")
       .eq("game_id", game.id)
       .returns<CardRow[]>();
 
@@ -200,6 +205,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
   const recordedEvents: RecordedEvent[] = allScoredEvents.map((event) => ({
     event_key: event.event_key,
     team_key: event.team_key,
+    created_at: event.created_at,
   }));
   const bingraCompletedAtByPlayerId = new Map<string, string>();
   for (const completion of liveCompletions) {
@@ -212,7 +218,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
   const cardsByPlayerId = new Map(cardsForGame.map((card) => [card.player_id, card]));
   const playersById = new Map((players ?? []).map((player) => [player.id, player]));
 
-  const leaderboardEntries: LeaderboardEntry[] = buildGameScores({
+  const scoringLeaderboardEntries: LeaderboardEntry[] = buildGameScores({
     players: (players ?? []).map((player) => ({
       id: player.id,
       display_name: player.display_name,
@@ -220,6 +226,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     })),
     cards: cardsForGame.map((card) => ({
       player_id: card.player_id,
+      accepted_at: card.accepted_at,
       card_cells: (card.card_cells ?? []).map((cell) => ({
         event_key: cell.event_key,
         team_key: cell.team_key,
@@ -240,7 +247,30 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     is_one_away: entry.is_one_away,
     completed_cells_count: entry.completed_cells_count,
     join_order: entry.join_order,
+    is_active: true,
   }));
+
+  const scoringEntriesByPlayerId = new Map(scoringLeaderboardEntries.map((entry) => [entry.id, entry]));
+
+  const inactiveLeaderboardEntries: LeaderboardEntry[] = (players ?? [])
+    .filter((player) => !scoringEntriesByPlayerId.has(player.id))
+    .map((player, joinOrder) => ({
+      id: player.id,
+      name: player.display_name,
+      raw_points: 0,
+      final_score: 0,
+      has_bingra: false,
+      is_one_away: false,
+      completed_cells_count: 0,
+      join_order: joinOrder,
+      is_active: false,
+      status_label: "No card accepted",
+    }));
+
+  const leaderboardEntries: LeaderboardEntry[] = [
+    ...scoringLeaderboardEntries,
+    ...inactiveLeaderboardEntries,
+  ];
 
   const currentPlayerCard = currentPlayerId
     ? cardsByPlayerId.get(currentPlayerId) ?? null
@@ -255,8 +285,14 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     }),
   );
 
-  const currentPlayerCompletedFlags = calculateCompletedCellFlags(
+  const currentPlayerAcceptedAt = currentPlayerCard?.accepted_at ?? null;
+  const currentPlayerEligibleRecordedEvents = filterRecordedEventsByAcceptedAt(
     recordedEvents,
+    currentPlayerAcceptedAt,
+  );
+
+  const currentPlayerCompletedFlags = calculateCompletedCellFlags(
+    currentPlayerEligibleRecordedEvents,
     currentPlayerProgressCells,
     completionMode,
   );
@@ -312,31 +348,106 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
 
   const winnerName = game.winner_player_id
     ? playersById.get(game.winner_player_id)?.display_name ?? null
-    : leaderboardEntries[0]?.name ?? null;
+    : scoringLeaderboardEntries[0]?.name ?? null;
 
   const winnerEntry = game.winner_player_id
-    ? leaderboardEntries.find((entry) => entry.id === game.winner_player_id) ?? leaderboardEntries[0] ?? null
-    : leaderboardEntries[0] ?? null;
+    ? scoringLeaderboardEntries.find((entry) => entry.id === game.winner_player_id) ?? scoringLeaderboardEntries[0] ?? null
+    : scoringLeaderboardEntries[0] ?? null;
 
   const scoreboardTargetId = `play-scoreboard-${game.id}`;
+
+  const leaderboardEntryByPlayerId = new Map(leaderboardEntries.map((entry) => [entry.id, entry]));
+
+  const playerCardPreviews = (players ?? []).map((player) => {
+    const playerCard = cardsByPlayerId.get(player.id) ?? null;
+    const sortedCells = [...(playerCard?.card_cells ?? [])].sort(
+      (left, right) => left.order_index - right.order_index,
+    );
+
+    const progressCells: ProgressCardCell[] = sortedCells.map((cell) => ({
+      event_key: cell.event_key,
+      team_key: cell.team_key,
+      order_index: cell.order_index,
+      point_value: cell.point_value,
+    }));
+
+    const eligibleRecordedEvents = filterRecordedEventsByAcceptedAt(
+      recordedEvents,
+      playerCard?.accepted_at ?? null,
+    );
+
+    const completedFlags = calculateCompletedCellFlags(
+      eligibleRecordedEvents,
+      progressCells,
+      completionMode,
+    );
+
+    const leaderboardEntry = leaderboardEntryByPlayerId.get(player.id);
+
+    return {
+      player_id: player.id,
+      player_name: player.display_name,
+      card_accepted_at: playerCard?.accepted_at ?? null,
+      completed_cells_count: leaderboardEntry?.completed_cells_count ?? 0,
+      total_cells_count: sortedCells.length,
+      is_one_away: leaderboardEntry?.is_one_away ?? false,
+      has_bingra: leaderboardEntry?.has_bingra ?? false,
+      card_cells: sortedCells.map((cell, index) => {
+        const parsedEventKey = parseCardCellEventKey(cell.event_key);
+        const resolvedTeamKey: TeamKey | null =
+          cell.team_key === "A" || cell.team_key === "B"
+            ? cell.team_key
+            : parsedEventKey.qualifiedTeamKey;
+
+        return {
+          order_index: cell.order_index,
+          event_label: cell.event_label ?? parsedEventKey.baseEventKey ?? `Event ${index + 1}`,
+          team_key: resolvedTeamKey,
+          point_value: typeof cell.point_value === "number" ? cell.point_value : 0,
+          is_completed: completedFlags[index] ?? false,
+        };
+      }),
+    };
+  });
 
   const playerCardsForScoring = new Map(
     cardsForGame.map((card) => [
       card.player_id,
-      (card.card_cells ?? []).map((cell) => ({
-        event_key: cell.event_key,
-        team_key: cell.team_key,
-        order_index: cell.order_index,
-        point_value: cell.point_value,
-      })),
+      {
+        accepted_at: card.accepted_at,
+        card_cells: (card.card_cells ?? []).map((cell) => ({
+          event_key: cell.event_key,
+          team_key: cell.team_key,
+          order_index: cell.order_index,
+          point_value: cell.point_value,
+        })),
+      },
     ]),
   );
+
+  const unacceptedPlayerIds = new Set(
+    cardsForGame
+      .filter((card) => !card.accepted_at)
+      .map((card) => card.player_id),
+  );
+
+  for (const player of players ?? []) {
+    if (!cardsByPlayerId.has(player.id)) {
+      unacceptedPlayerIds.add(player.id);
+    }
+  }
+
+  const shouldShowAcceptReminder =
+    isLive &&
+    currentPlayerId != null &&
+    unacceptedPlayerIds.has(currentPlayerId);
 
   const activityFeedItems: ActivityFeedItem[] = buildActivityFeedItems({
     players: (players ?? []).map((player) => ({
       id: player.id,
       display_name: player.display_name,
       created_at: player.created_at,
+      accepted_at: cardsByPlayerId.get(player.id)?.accepted_at ?? null,
     })),
     events: allScoredEvents,
     playerCardsByPlayerId: playerCardsForScoring,
@@ -444,7 +555,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
               }
             : null
         }
-        topEntries={leaderboardEntries.slice(0, 3).map((entry) => ({
+        topEntries={scoringLeaderboardEntries.slice(0, 3).map((entry) => ({
           id: entry.id,
           name: entry.name,
           finalScore: entry.final_score,
@@ -474,6 +585,8 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       <CardBuilderPanel
         mode={playMode}
         playerId={currentPlayerId}
+        gameStatus={game.status}
+        cardAcceptedAt={currentPlayerAcceptedAt}
         eventsPerCard={game.events_per_card}
         teamScope={game.team_scope}
         endCondition={game.end_condition}
@@ -482,6 +595,19 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
         initialCardEvents={initialCardEvents}
         lockedCardEvents={lockedCardEvents}
       />
+
+      {shouldShowAcceptReminder && (
+        <section
+          role="alert"
+          className="rounded-2xl border-2 border-amber-300 bg-amber-100 p-5 text-amber-950 shadow-sm"
+        >
+          <p className="text-sm font-semibold uppercase tracking-wide">Action required</p>
+          <h2 className="mt-1 text-xl font-bold">Accept your card to start scoring</h2>
+          <p className="mt-2 text-sm">
+            Events are live, but your score and progress remain at zero until you accept your card.
+          </p>
+        </section>
+      )}
 
       <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
           <div className="flex items-center justify-between">
@@ -622,57 +748,16 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
           </div>
       </section>
 
-      <section
-        id={scoreboardTargetId}
-        tabIndex={-1}
-        className="rounded-2xl bg-white/90 p-6 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Leaderboard
-            </p>
-            <h2 className="text-xl font-semibold text-slate-900">Players</h2>
-          </div>
-          <span className="text-sm text-slate-500">{playerCount} joined</span>
-        </div>
-        <p className="mt-2 text-xs text-slate-500">
-          {isLive
-            ? "Points update live. Bingra badge means this player gets a 2x multiplier when the game ends."
-            : "Final score = raw points ×2 with Bingra, otherwise raw points."}
-        </p>
-        <div className="mt-4 space-y-3">
-          {leaderboardEntries.map((entry, index) => (
-            <div
-              key={entry.id}
-              className="flex items-center justify-between rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
-            >
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  {index + 1}. {entry.name}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {isLive
-                    ? `${entry.raw_points} Points`
-                    : `Final ${entry.final_score} • Raw ${entry.raw_points}${entry.has_bingra ? " • Bingra x2" : ""}`}
-                </p>
-              </div>
-              <span className="text-xs font-medium text-slate-500">
-                {entry.has_bingra
-                  ? "Bingra (2x)"
-                  : entry.is_one_away
-                    ? "One away"
-                    : `${entry.completed_cells_count} done`}
-              </span>
-            </div>
-          ))}
-        </div>
-        {playersError && (
-          <p className="mt-4 text-xs text-red-600">
-            Unable to load live player data for this game.
-          </p>
-        )}
-      </section>
+      <LeaderboardCardPreview
+        leaderboardEntries={leaderboardEntries}
+        playerCards={playerCardPreviews}
+        teamNames={teamNames}
+        mode={playMode === "streak" ? "streak" : "blackout"}
+        isLive={isLive}
+        playerCount={playerCount}
+        scoreboardTargetId={scoreboardTargetId}
+        playersError={playersError}
+      />
 
       {isLive ? (
         <HostScoringPanel

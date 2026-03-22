@@ -1,4 +1,10 @@
-import { calculateCardProgress, type CardCell as ProgressCardCell, type CompletionMode, type RecordedEvent } from "./card-progress";
+import {
+  calculateCardProgress,
+  filterRecordedEventsByAcceptedAt,
+  type CardCell as ProgressCardCell,
+  type CompletionMode,
+  type RecordedEvent,
+} from "./card-progress";
 import { getEventById, type TeamKey } from "./event-logic";
 import { resolveBaseEventKey } from "./card-event-key";
 
@@ -86,6 +92,7 @@ export type ActivityFeedPlayer = {
   id: string;
   display_name: string;
   created_at: string | null;
+  accepted_at?: string | null;
 };
 
 export type ActivityFeedScoredEvent = {
@@ -468,7 +475,7 @@ export function buildPlayerJoinedItems(players: ActivityFeedPlayer[]): ActivityF
 export function buildEventRecordedItems(input: {
   events: ActivityFeedScoredEvent[];
   players: ActivityFeedPlayer[];
-  playerCardsByPlayerId: Map<string, ProgressCardCell[]>;
+  playerCardsByPlayerId: Map<string, { accepted_at: string | null; card_cells: ProgressCardCell[] }>;
   completionMode: CompletionMode;
   teamNames: Record<TeamKey, string>;
 }): ActivityFeedItem[] {
@@ -492,6 +499,7 @@ export function buildEventRecordedItems(input: {
       {
         event_key: event.event_key,
         team_key: event.team_key,
+        created_at: event.created_at,
       },
     ];
 
@@ -505,9 +513,18 @@ export function buildEventRecordedItems(input: {
     let pointsAwarded = 0;
 
     for (const player of players) {
-      const cardCells = playerCardsByPlayerId.get(player.id) ?? [];
-      const before = calculateCardProgress(recordedEventsProgress, cardCells, completionMode);
-      const after = calculateCardProgress(nextRecordedEvents, cardCells, completionMode);
+      const card = playerCardsByPlayerId.get(player.id);
+      const acceptedAt = card?.accepted_at ?? null;
+
+      if (!acceptedAt) {
+        continue;
+      }
+
+      const cardCells = card?.card_cells ?? [];
+      const eligibleBefore = filterRecordedEventsByAcceptedAt(recordedEventsProgress, acceptedAt);
+      const eligibleAfter = filterRecordedEventsByAcceptedAt(nextRecordedEvents, acceptedAt);
+      const before = calculateCardProgress(eligibleBefore, cardCells, completionMode);
+      const after = calculateCardProgress(eligibleAfter, cardCells, completionMode);
       const delta = after.score - before.score;
 
       scoresBeforeByPlayerName.set(player.display_name, before.score);
@@ -622,6 +639,7 @@ export function buildEventRecordedItems(input: {
     recordedEventsProgress.push({
       event_key: event.event_key,
       team_key: event.team_key,
+      created_at: event.created_at,
     });
   }
 
@@ -692,7 +710,7 @@ export function sortActivityFeedItems(items: ActivityFeedItem[]): ActivityFeedIt
 export function buildActivityFeedItems(input: {
   players: ActivityFeedPlayer[];
   events: ActivityFeedScoredEvent[];
-  playerCardsByPlayerId: Map<string, ProgressCardCell[]>;
+  playerCardsByPlayerId: Map<string, { accepted_at: string | null; card_cells: ProgressCardCell[] }>;
   completionMode: CompletionMode;
   teamNames: Record<TeamKey, string>;
   gameId: string;

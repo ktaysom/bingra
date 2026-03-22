@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:play-logic": "node --experimental-strip-types --test scripts/play-card-progress.test.ts"
+    "test:play-logic": "node --loader ./scripts/ts-extension-loader.mjs --experimental-strip-types --test scripts/play-card-progress.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",

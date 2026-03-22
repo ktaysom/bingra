@@ -1,10 +1,11 @@
 export type CompletionMode = "BLACKOUT" | "STREAK";
 
-import { cardCellEventMatchesRecordedEvent } from "./card-event-key.ts";
+import { cardCellEventMatchesRecordedEvent } from "./card-event-key";
 
 export type RecordedEvent = {
   event_key: string | null;
   team_key?: string | null;
+  created_at?: string | null;
 };
 
 export type CardCell = {
@@ -38,6 +39,33 @@ function isMatchingEvent(cell: CardCell, event: RecordedEvent): boolean {
 
 function toPointValue(value: number | null | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+export function filterRecordedEventsByAcceptedAt(
+  recorded_events: RecordedEvent[],
+  accepted_at: string | null | undefined,
+): RecordedEvent[] {
+  if (!accepted_at) {
+    return [];
+  }
+
+  const acceptedAtMs = new Date(accepted_at).getTime();
+  if (!Number.isFinite(acceptedAtMs)) {
+    return [];
+  }
+
+  return recorded_events.filter((event) => {
+    if (!event.created_at) {
+      return false;
+    }
+
+    const recordedAtMs = new Date(event.created_at).getTime();
+    if (!Number.isFinite(recordedAtMs)) {
+      return false;
+    }
+
+    return recordedAtMs >= acceptedAtMs;
+  });
 }
 
 function sortCellsForStreak(cells: CardCell[]): IndexedCell[] {

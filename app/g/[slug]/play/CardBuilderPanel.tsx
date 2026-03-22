@@ -16,6 +16,7 @@ import { mapPlayModeToGameMode, type PlayMode } from "../../../../lib/bingra/typ
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { generateCardAction } from "../../../actions/generate-card";
+import { editCardAction } from "../../../actions/edit-card";
 type GameTeamScope = "both_teams" | "team_a_only" | "team_b_only";
 
 type CardBuilderEvent = GameEventType & {
@@ -26,6 +27,8 @@ type CardBuilderEvent = GameEventType & {
 type CardBuilderPanelProps = {
   mode: PlayMode;
   playerId: string | null;
+  gameStatus: "lobby" | "live" | "finished";
+  cardAcceptedAt: string | null;
   eventsPerCard: number;
   teamScope: GameTeamScope;
   endCondition: "FIRST_COMPLETION" | "HOST_DECLARED";
@@ -166,6 +169,8 @@ function generateCardEvents(
 export function CardBuilderPanel({
   mode,
   playerId,
+  gameStatus,
+  cardAcceptedAt,
   eventsPerCard,
   teamScope,
   endCondition,
@@ -187,7 +192,6 @@ export function CardBuilderPanel({
       };
     }),
   );
-  const [isLocked, setIsLocked] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<AddFilterKey>>(new Set());
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -198,9 +202,12 @@ export function CardBuilderPanel({
   const router = useRouter();
 
   const [generateState, generateAction, isSubmitting] = useActionState(generateCardAction, {});
-  const hasPersistedLockedCard =
-    lockedCardEvents.length > 0 && lockedCardEvents !== initialCardEvents;
-  const shouldRenderLocked = hasPersistedLockedCard || isLocked;
+  const [editState, editAction, isEditSubmitting] = useActionState(editCardAction, {});
+  const [acceptFeedback, setAcceptFeedback] = useState<string | null>(null);
+  const isAccepted = Boolean(cardAcceptedAt);
+  const isPermanentlyLocked = isAccepted && gameStatus !== "lobby";
+  const isTemporarilyAccepted = isAccepted && gameStatus === "lobby";
+  const shouldRenderLockedPreview = isPermanentlyLocked || isTemporarilyAccepted;
 
   const cardSummary = useMemo(() => summarizeCardPoints(cardEvents), [cardEvents]);
   const cardRiskLabel = useMemo(() => estimateCardRiskLabel(cardEvents), [cardEvents]);
@@ -286,14 +293,12 @@ export function CardBuilderPanel({
 
   const handleGenerateAgain = () => {
     setCardEvents(generateCardEvents(mode, riskLevel, eventsPerCard, teamScope, teamNames));
-    setIsLocked(false);
   };
 
   const handleRiskChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextValue = Number(event.target.value) as RiskLevel;
     setRiskLevel(nextValue);
     setCardEvents(generateCardEvents(mode, nextValue, eventsPerCard, teamScope, teamNames));
-    setIsLocked(false);
   };
 
   const handleAcceptCard = () => {
@@ -383,10 +388,20 @@ export function CardBuilderPanel({
 
   useEffect(() => {
     if (generateState.success) {
-      setIsLocked(true);
+      setAcceptFeedback(
+        gameStatus === "live"
+          ? "You're live — scoring has started"
+          : "Card locked. You can still edit before game starts",
+      );
       router.refresh();
     }
-  }, [generateState.success, router]);
+  }, [gameStatus, generateState.success, router]);
+
+  useEffect(() => {
+    if (editState.success) {
+      router.refresh();
+    }
+  }, [editState.success, router]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -516,15 +531,29 @@ export function CardBuilderPanel({
     clearTouchDragState();
   };
 
-  if (shouldRenderLocked) {
-    const lockedCard = hasPersistedLockedCard ? lockedCardEvents : cardEvents;
+  if (shouldRenderLockedPreview) {
+    const lockedCard = lockedCardEvents.length > 0 ? lockedCardEvents : cardEvents;
 
     return (
       <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Card Builder</p>
-          <h2 className="text-2xl font-semibold text-slate-900">Your card is locked</h2>
-          <p className="text-sm text-slate-500">Waiting for the host to start the game.</p>
+          <h2 className="text-2xl font-semibold text-slate-900">
+            {isPermanentlyLocked ? "Your card is locked" : "Card accepted"}
+          </h2>
+          <p className="text-sm text-slate-500">
+            {isPermanentlyLocked
+              ? "You're live — scoring has started"
+              : "Card locked. You can still edit before game starts"}
+          </p>
+          {(acceptFeedback || generateState.success) && (
+            <p className="inline-flex w-fit rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+              {acceptFeedback ??
+                (isPermanentlyLocked
+                  ? "You're live — scoring has started"
+                  : "Card locked. You can still edit before game starts")}
+            </p>
+          )}
         </div>
 
         <div className="mt-6 space-y-4 rounded-2xl bg-white/90 p-4 shadow-sm">
@@ -592,6 +621,23 @@ export function CardBuilderPanel({
             </>
           )}
         </div>
+
+        {!isPermanentlyLocked && (
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => editAction()}
+              disabled={isEditSubmitting}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isEditSubmitting ? "Unlocking..." : "Edit card"}
+            </button>
+          </div>
+        )}
+
+        {editState.error && (
+          <p className="mt-3 text-xs text-red-600">{editState.error}</p>
+        )}
       </section>
     );
   }
@@ -870,6 +916,9 @@ export function CardBuilderPanel({
       )}
       {generateState.error && (
         <p className="mt-3 text-xs text-red-600">{generateState.error}</p>
+      )}
+      {editState.error && (
+        <p className="mt-3 text-xs text-red-600">{editState.error}</p>
       )}
       </div>
 

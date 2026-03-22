@@ -1,5 +1,6 @@
 import {
   calculateCardProgress,
+  filterRecordedEventsByAcceptedAt,
   type CardCell,
   type CompletionMode,
   type RecordedEvent,
@@ -15,6 +16,7 @@ type RecomputeInput = {
 
 type CardRow = {
   player_id: string;
+  accepted_at: string | null;
   card_cells: CardCell[];
 };
 
@@ -28,7 +30,7 @@ type ScoredEventRow = {
 export async function recomputeGameCompletions(input: RecomputeInput): Promise<void> {
   const { data: cardsData, error: cardsError } = await input.supabase
     .from("cards")
-    .select("player_id, card_cells(order_index, event_key, team_key, point_value)")
+    .select("player_id, accepted_at, card_cells(order_index, event_key, team_key, point_value)")
     .eq("game_id", input.gameId);
 
   const { data: scoredEventsData, error: scoredEventsError } = await input.supabase
@@ -61,14 +63,24 @@ export async function recomputeGameCompletions(input: RecomputeInput): Promise<v
       const beforeEvents: RecordedEvent[] = scoredEvents.slice(0, idx).map((event) => ({
         event_key: event.event_key,
         team_key: event.team_key,
+        created_at: event.created_at,
       }));
       const afterEvents: RecordedEvent[] = scoredEvents.slice(0, idx + 1).map((event) => ({
         event_key: event.event_key,
         team_key: event.team_key,
+        created_at: event.created_at,
       }));
 
-      const beforeProgress = calculateCardProgress(beforeEvents, card.card_cells ?? [], input.completionMode);
-      const afterProgress = calculateCardProgress(afterEvents, card.card_cells ?? [], input.completionMode);
+      const beforeProgress = calculateCardProgress(
+        filterRecordedEventsByAcceptedAt(beforeEvents, card.accepted_at),
+        card.card_cells ?? [],
+        input.completionMode,
+      );
+      const afterProgress = calculateCardProgress(
+        filterRecordedEventsByAcceptedAt(afterEvents, card.accepted_at),
+        card.card_cells ?? [],
+        input.completionMode,
+      );
 
       if (!beforeProgress.is_complete && afterProgress.is_complete) {
         completionEventId = scoredEvents[idx]?.id ?? null;

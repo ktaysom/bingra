@@ -98,6 +98,7 @@ export async function generateCardAction(
     }
 
     let cardId = existingCards?.[0]?.id as string | undefined;
+    const acceptedAt = new Date().toISOString();
 
     if (!cardId) {
       const resolvedTargetCount = parsed.data.targetCount ?? acceptedEvents.length;
@@ -108,6 +109,7 @@ export async function generateCardAction(
           player_id: cookiePlayerId,
           target_count: resolvedTargetCount,
           selection_mode: parsed.data.selectionMode ?? "custom",
+          accepted_at: acceptedAt,
         })
         .select("id")
         .maybeSingle<{ id: string }>();
@@ -152,6 +154,20 @@ export async function generateCardAction(
 
     if (insertCellsError) {
       throw insertCellsError;
+    }
+
+    const { error: updateCardError } = await supabase
+      .from("cards")
+      .update({
+        target_count: parsed.data.targetCount ?? acceptedEvents.length,
+        selection_mode: parsed.data.selectionMode ?? "custom",
+        accepted_at: acceptedAt,
+      })
+      .eq("id", cardId)
+      .limit(1);
+
+    if (updateCardError) {
+      throw updateCardError;
     }
 
     const slug = playerRecord?.games?.slug;

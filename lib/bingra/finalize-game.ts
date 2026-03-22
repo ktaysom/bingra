@@ -24,6 +24,7 @@ type PlayerRow = {
 
 type CardRow = {
   player_id: string;
+  accepted_at: string | null;
   card_cells: CardCell[];
 };
 
@@ -35,6 +36,7 @@ type CompletionRow = {
 type ScoredEventRow = {
   event_key: string | null;
   team_key: string | null;
+  created_at: string | null;
 };
 
 type GameRow = {
@@ -213,7 +215,7 @@ export async function finalizeGameAndSetWinner(input: FinalizeInput): Promise<Fi
 
   const { data: cardsData, error: cardsError } = await input.supabase
     .from("cards")
-    .select("player_id, card_cells(order_index, event_key, team_key, point_value)")
+    .select("player_id, accepted_at, card_cells(order_index, event_key, team_key, point_value)")
     .eq("game_id", input.gameId);
 
   const { data: completionsData, error: completionsError } = await input.supabase
@@ -223,7 +225,7 @@ export async function finalizeGameAndSetWinner(input: FinalizeInput): Promise<Fi
 
   const { data: scoredEventsData, error: scoredEventsError } = await input.supabase
     .from("scored_events")
-    .select("event_key, team_key")
+    .select("event_key, team_key, created_at")
     .eq("game_id", input.gameId)
     .order("created_at", { ascending: true })
     .order("id", { ascending: true });
@@ -252,6 +254,7 @@ export async function finalizeGameAndSetWinner(input: FinalizeInput): Promise<Fi
   const recordedEvents: RecordedEvent[] = scoredEvents.map((event) => ({
     event_key: event.event_key,
     team_key: event.team_key,
+    created_at: event.created_at,
   }));
 
   const scoreboard = buildGameScores({
@@ -262,6 +265,7 @@ export async function finalizeGameAndSetWinner(input: FinalizeInput): Promise<Fi
     })),
     cards: cards.map((card) => ({
       player_id: card.player_id,
+      accepted_at: card.accepted_at,
       card_cells: card.card_cells ?? [],
     })),
     recordedEvents,

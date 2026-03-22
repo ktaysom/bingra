@@ -1,5 +1,6 @@
 import {
   calculateCardProgress,
+  filterRecordedEventsByAcceptedAt,
   type CardCell,
   type CompletionMode,
   type RecordedEvent,
@@ -14,6 +15,7 @@ export type ScorePlayer = {
 
 export type ScoreCard = {
   player_id: string;
+  accepted_at?: string | null;
   card_cells: CardCell[];
 };
 
@@ -41,13 +43,24 @@ type BuildGameScoresInput = {
 export function buildGameScores(input: BuildGameScoresInput): GameScoreEntry[] {
   const cardsByPlayerId = new Map(input.cards.map((card) => [card.player_id, card]));
 
-  const entries = input.players.map((player, joinOrder) => {
-    const cardCells = cardsByPlayerId.get(player.id)?.card_cells ?? [];
-    const progress = calculateCardProgress(input.recordedEvents, cardCells, input.completionMode);
+  const entries = input.players.flatMap((player, joinOrder) => {
+    const playerCard = cardsByPlayerId.get(player.id);
+    const acceptedAt = playerCard?.accepted_at ?? null;
+
+    if (!acceptedAt) {
+      return [];
+    }
+
+    const cardCells = playerCard?.card_cells ?? [];
+    const eligibleRecordedEvents = filterRecordedEventsByAcceptedAt(
+      input.recordedEvents,
+      acceptedAt,
+    );
+    const progress = calculateCardProgress(eligibleRecordedEvents, cardCells, input.completionMode);
     const hasBingra = input.bingraPlayerIds.has(player.id);
     const scoreBreakdown = buildScoreBreakdown(progress.score, hasBingra);
 
-    return {
+    return [{
       player_id: player.id,
       player_name: player.display_name,
       join_order: joinOrder,
@@ -60,7 +73,7 @@ export function buildGameScores(input: BuildGameScoresInput): GameScoreEntry[] {
       player_created_at: player.created_at ?? null,
       completed_cells_count: progress.completed_cells_count,
       is_one_away: progress.is_one_away,
-    };
+    }];
   });
 
   return rankScoreEntries(entries);

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   calculateCompletedCellFlags,
   calculateCardProgress,
+  filterRecordedEventsByAcceptedAt,
   type CardCell,
   type RecordedEvent,
 } from "../lib/bingra/card-progress.ts";
@@ -120,4 +121,26 @@ test("duplicate card event key guard throws when two cells collapse to same key"
       ]),
     /Duplicate card cell event keys are not allowed/,
   );
+});
+
+test("accepted_at gating includes only events at/after accepted_at", () => {
+  const acceptedAt = "2026-03-22T11:00:00.123Z";
+  const events: RecordedEvent[] = [
+    { event_key: "A", created_at: "2026-03-22T11:00:00.122Z" },
+    { event_key: "B", created_at: "2026-03-22T11:00:00.123Z" },
+    { event_key: "C", created_at: "2026-03-22T11:00:00.124Z" },
+  ];
+
+  const eligible = filterRecordedEventsByAcceptedAt(events, acceptedAt);
+  assert.deepEqual(eligible.map((event) => event.event_key), ["B", "C"]);
+});
+
+test("accepted_at gating safely handles invalid timestamps", () => {
+  const acceptedAt = "not-a-time";
+  const events: RecordedEvent[] = [
+    { event_key: "A", created_at: "2026-03-22T11:00:00.123Z" },
+  ];
+
+  const eligible = filterRecordedEventsByAcceptedAt(events, acceptedAt);
+  assert.deepEqual(eligible, []);
 });

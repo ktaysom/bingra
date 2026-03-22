@@ -8,6 +8,7 @@ import {
 } from "../../lib/bingra/event-logic";
 import {
   calculateCardProgress,
+  filterRecordedEventsByAcceptedAt,
   type CompletionMode,
   type CardCell as ProgressCardCell,
   type RecordedEvent,
@@ -146,6 +147,7 @@ export async function recordEventAction(
     event_key: validation.event.id,
     event_label: validation.event.label,
     source: "manual",
+    created_at: new Date().toISOString(),
   };
 
   if (parsed.data.team) {
@@ -202,12 +204,23 @@ export async function recordEventAction(
     return { error: formatError(scoredEventsAfterError), completedAt: new Date().toISOString() };
   }
 
-  const allEventsAfter: Array<{ id: string; event_key: string | null; team_key: string | null }> =
-    (scoredEventsAfter as Array<{ id: string; event_key: string | null; team_key: string | null }> | null) ?? [];
+  const allEventsAfter: Array<{
+    id: string;
+    event_key: string | null;
+    team_key: string | null;
+    created_at: string | null;
+  }> =
+    (scoredEventsAfter as Array<{
+      id: string;
+      event_key: string | null;
+      team_key: string | null;
+      created_at: string | null;
+    }> | null) ?? [];
 
   const recordedEventsAfter: RecordedEvent[] = allEventsAfter.map((event) => ({
     event_key: event.event_key,
     team_key: event.team_key,
+    created_at: event.created_at,
   }));
 
   const recordedEventsBefore: RecordedEvent[] = allEventsAfter
@@ -215,13 +228,14 @@ export async function recordEventAction(
     .map((event) => ({
       event_key: event.event_key,
       team_key: event.team_key,
+      created_at: event.created_at,
     }));
 
   const cardsReadStartedAt = Date.now();
   console.info("[recordEventAction][perf] cards read start", { gameId: game.id });
   const { data: cards, error: cardsError } = await supabase
     .from("cards")
-    .select("id, player_id, card_cells(order_index, event_key, team_key, point_value)")
+    .select("id, player_id, accepted_at, card_cells(order_index, event_key, team_key, point_value)")
     .eq("game_id", game.id);
   console.info("[recordEventAction][perf] cards read end", {
     durationMs: Date.now() - cardsReadStartedAt,
@@ -239,7 +253,15 @@ export async function recordEventAction(
 
   for (const card of cards ?? []) {
     const playerId = typeof card.player_id === "string" ? card.player_id : null;
+    const acceptedAt = typeof (card as { accepted_at?: string | null }).accepted_at === "string"
+      ? (card as { accepted_at?: string | null }).accepted_at
+      : null;
+
     if (!playerId) {
+      continue;
+    }
+
+    if (!acceptedAt) {
       continue;
     }
 
@@ -251,12 +273,12 @@ export async function recordEventAction(
     }));
 
     const beforeProgress = calculateCardProgress(
-      recordedEventsBefore,
+      filterRecordedEventsByAcceptedAt(recordedEventsBefore, acceptedAt),
       progressCells,
       game.completion_mode,
     );
     const afterProgress = calculateCardProgress(
-      recordedEventsAfter,
+      filterRecordedEventsByAcceptedAt(recordedEventsAfter, acceptedAt),
       progressCells,
       game.completion_mode,
     );
