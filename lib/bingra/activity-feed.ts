@@ -13,6 +13,7 @@ import {
 import { resolveBaseEventKey } from "./card-event-key";
 import {
   DEFAULT_SPORT_PROFILE,
+  getSportProfileDefinition,
   type SportProfileKey,
 } from "./sport-profiles";
 
@@ -288,6 +289,80 @@ function rarityToLabel(rarity: 1 | 2 | 3 | 4 | 5): string {
   if (rarity === 3) return "Rare";
   if (rarity === 4) return "Epic";
   return "Legendary";
+}
+
+function formatSoccerCompatibilityEventName(input: {
+  baseEventKey: string | null;
+  fallbackLabel: string;
+  teamLabel: string | null;
+}): string {
+  const { baseEventKey, fallbackLabel, teamLabel } = input;
+
+  if (!baseEventKey) {
+    return fallbackLabel;
+  }
+
+  if (!teamLabel) {
+    return fallbackLabel;
+  }
+
+  switch (baseEventKey) {
+    case "OUT_OF_BOUNDS_THROW_IN":
+      return `Throw-in for ${teamLabel}`;
+    case "OUT_OF_BOUNDS_GOAL_KICK":
+      return `Goal kick for ${teamLabel}`;
+    case "OUT_OF_BOUNDS_CORNER":
+      return `Corner kick for ${teamLabel}`;
+    case "FOUL":
+      return `Foul on ${teamLabel}`;
+    case "HANDBALL_CALL":
+      return `Handball against ${teamLabel}`;
+    case "LIVE_BALL_TURNOVER":
+      return `Turnover won by ${teamLabel}`;
+    case "SHOT_ON_GOAL_SAVE":
+      return `Save by ${teamLabel}`;
+    case "SHOT_ON_GOAL_BLOCKED":
+      return `Shot blocked by ${teamLabel}`;
+    case "SHOT_ON_GOAL_GOAL":
+      return `Goal by ${teamLabel}`;
+    case "SHOT_OFF_TARGET":
+      return `Shot off target by ${teamLabel}`;
+    case "YELLOW_CARD":
+      return `Yellow card to ${teamLabel}`;
+    case "RED_CARD":
+      return `Red card to ${teamLabel}`;
+    default:
+      return `${teamLabel}: ${fallbackLabel}`;
+  }
+}
+
+export function resolveRecordedEventDisplayName(input: {
+  eventKey: string | null;
+  eventLabel: string | null;
+  teamKey: string | null;
+  teamNames: Record<TeamKey, string>;
+  sportProfile?: SportProfileKey;
+}): string {
+  const { eventKey, eventLabel, teamKey, teamNames, sportProfile } = input;
+  const baseEventKey = resolveBaseEventKey(eventKey);
+  const eventBaseLabel = baseEventKey ? getEventById(baseEventKey)?.label : null;
+  const fallbackLabel = eventBaseLabel ?? eventLabel ?? baseEventKey ?? "Event";
+  const teamLabel =
+    teamKey === "A" ? teamNames.A : teamKey === "B" ? teamNames.B : null;
+
+  const resolvedSport = getSportProfileDefinition(
+    sportProfile ?? DEFAULT_SPORT_PROFILE,
+  ).sport;
+
+  if (resolvedSport === "soccer") {
+    return formatSoccerCompatibilityEventName({
+      baseEventKey,
+      fallbackLabel,
+      teamLabel,
+    });
+  }
+
+  return [teamLabel, fallbackLabel].filter(Boolean).join(": ");
 }
 
 export function formatRecordedEventFeedItem(input: {
@@ -625,20 +700,13 @@ export function buildEventRecordedItems(input: {
       }
     }
 
-    const baseEventKey = resolveBaseEventKey(event.event_key);
-    const eventBaseLabel = baseEventKey ? getEventById(baseEventKey)?.label : null;
-    const teamLabel =
-      event.team_key === "A"
-        ? teamNames.A
-        : event.team_key === "B"
-          ? teamNames.B
-          : null;
-    const resolvedEventName = [
-      teamLabel,
-      eventBaseLabel ?? event.event_label ?? baseEventKey ?? "Event",
-    ]
-      .filter(Boolean)
-      .join(": ");
+    const resolvedEventName = resolveRecordedEventDisplayName({
+      eventKey: event.event_key,
+      eventLabel: event.event_label,
+      teamKey: event.team_key,
+      teamNames,
+      sportProfile,
+    });
 
     const primaryPlayerName = [...playerDeltas.entries()]
       .sort((a, b) => {

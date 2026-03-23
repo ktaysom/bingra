@@ -13,6 +13,7 @@ import {
   SPORT_PROFILES,
   type SportProfileKey,
 } from "../../lib/bingra/sport-profiles";
+import { resolveCreateGameSport } from "../../lib/bingra/create-game-payload";
 
 export type CreateGameFormState = {
   error?: string;
@@ -113,9 +114,11 @@ export async function createGameAction(
 
     console.log("[createGameAction] SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
+    const selectedSport = resolveCreateGameSport(parsed.data.sport_profile);
+
     const rpcPayload = {
       p_title: parsed.data.title,
-      p_sport: "basketball" as const,
+      p_sport: selectedSport,
       p_mode: parsed.data.mode,
       p_host_display_name: parsed.data.hostDisplayName,
       p_allow_custom_cards: parsed.data.allowCustomCards,

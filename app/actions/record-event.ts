@@ -6,7 +6,15 @@ import {
   validateRecordedEvent,
   type TeamSelection,
 } from "../../lib/bingra/event-logic";
-import { resolveSportProfileKey } from "../../lib/bingra/sport-profiles";
+import {
+  getSportProfileDefinition,
+  resolveSportProfileKey,
+} from "../../lib/bingra/sport-profiles";
+import {
+  SOCCER_CAUSE_TYPES,
+  SOCCER_OUTCOME_TYPES,
+  interpretSoccerScoringInput,
+} from "../../lib/bingra/soccer-scoring";
 import {
   calculateCardProgress,
   filterRecordedEventsByAcceptedAt,
@@ -28,8 +36,12 @@ export type RecordEventFormState = {
 
 const recordEventSchema = z.object({
   slug: z.string().min(1, "Missing game slug"),
-  eventKey: z.string().min(1, "Missing event key"),
+  eventKey: z.string().min(1).optional(),
   sportProfile: z.string().optional(),
+  causeType: z.enum(SOCCER_CAUSE_TYPES).optional(),
+  outcomeType: z.enum(SOCCER_OUTCOME_TYPES).optional(),
+  causingTeam: z.union([z.literal("A"), z.literal("B"), z.null()]).optional(),
+  beneficiaryTeam: z.union([z.literal("A"), z.literal("B"), z.null()]).optional(),
   team: z.union([
     z.literal("A"),
     z.literal("B"),
@@ -58,6 +70,10 @@ export async function recordEventAction(
   const rawEventKey = formData.get("eventKey");
   const rawSportProfile = formData.get("sportProfile");
   const rawTeam = formData.get("team");
+  const rawCauseType = formData.get("causeType");
+  const rawOutcomeType = formData.get("outcomeType");
+  const rawCausingTeam = formData.get("causingTeam");
+  const rawBeneficiaryTeam = formData.get("beneficiaryTeam");
 
   console.info("[recordEventAction][perf] action start", {
     startedAt: new Date(actionStartedAt).toISOString(),
@@ -74,8 +90,19 @@ export async function recordEventAction(
 
   const parsed = recordEventSchema.safeParse({
     slug: typeof rawSlug === "string" ? rawSlug.trim() : "",
-    eventKey: typeof rawEventKey === "string" ? rawEventKey.trim() : "",
+    eventKey:
+      typeof rawEventKey === "string" && rawEventKey.trim().length > 0
+        ? rawEventKey.trim()
+        : undefined,
     sportProfile: typeof rawSportProfile === "string" ? rawSportProfile : undefined,
+    causeType:
+      typeof rawCauseType === "string" ? rawCauseType : undefined,
+    outcomeType:
+      typeof rawOutcomeType === "string" ? rawOutcomeType : undefined,
+    causingTeam:
+      rawCausingTeam === "A" || rawCausingTeam === "B" ? rawCausingTeam : null,
+    beneficiaryTeam:
+      rawBeneficiaryTeam === "A" || rawBeneficiaryTeam === "B" ? rawBeneficiaryTeam : null,
     team:
       rawTeam === "A" || rawTeam === "B" ? rawTeam : null,
   });
@@ -137,10 +164,46 @@ export async function recordEventAction(
     };
   }
 
+  const resolvedProfile = resolveSportProfileKey(parsed.data.sportProfile ?? game.sport_profile);
+  const resolvedSport = getSportProfileDefinition(resolvedProfile).sport;
+
+  let compatibleEventKey = parsed.data.eventKey;
+  let compatibleTeam = parsed.data.team as TeamSelection | undefined;
+
+  if (resolvedSport === "soccer" && parsed.data.causeType) {
+    try {
+      const interpreted = interpretSoccerScoringInput({
+        legacyEventKey: parsed.data.eventKey,
+        legacyTeamKey: (parsed.data.team as TeamSelection) ?? null,
+        causeType: parsed.data.causeType,
+        outcomeType: parsed.data.outcomeType,
+        causingTeamKey: (parsed.data.causingTeam as TeamSelection) ?? null,
+        beneficiaryTeamKey: (parsed.data.beneficiaryTeam as TeamSelection) ?? null,
+      });
+
+      compatibleEventKey = interpreted.eventKey;
+      compatibleTeam = interpreted.compatibilityTeamKey;
+    } catch (error) {
+      logTotalDuration();
+      return {
+        error: formatError(error),
+        completedAt: new Date().toISOString(),
+      };
+    }
+  }
+
+  if (!compatibleEventKey) {
+    logTotalDuration();
+    return {
+      error: "Missing event key",
+      completedAt: new Date().toISOString(),
+    };
+  }
+
   const validation = validateRecordedEvent({
-    eventId: parsed.data.eventKey,
-    team: parsed.data.team as TeamSelection | undefined,
-    profile: resolveSportProfileKey(parsed.data.sportProfile ?? game.sport_profile),
+    eventId: compatibleEventKey,
+    team: compatibleTeam,
+    profile: resolvedProfile,
   });
 
   if (!validation.valid) {
@@ -157,8 +220,8 @@ export async function recordEventAction(
     created_at: new Date().toISOString(),
   };
 
-  if (parsed.data.team) {
-    insertPayload.team_key = parsed.data.team;
+  if (compatibleTeam) {
+    insertPayload.team_key = compatibleTeam;
   }
 
   const scoredEventInsertStartedAt = Date.now();

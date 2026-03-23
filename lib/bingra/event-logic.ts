@@ -7,6 +7,7 @@ import {
 } from "./event-catalog";
 import {
   DEFAULT_SPORT_PROFILE,
+  getSportProfileDefinition,
   type SportProfileKey,
 } from "./sport-profiles";
 
@@ -59,15 +60,33 @@ export type ScorerSubtypeOption = {
   event: GameEventType;
 };
 
-const SCORER_PARENT_OPTIONS: ScorerParentOption[] = [
-  { id: "change-of-possession", label: "Change of possession" },
-  { id: "score", label: "Score" },
-  { id: "misc", label: "Time Out" },
+const SCORER_PARENT_OPTION_IDS: ScorerParentCategory[] = [
+  "change-of-possession",
+  "score",
+  "misc",
 ];
 
 const SCORER_SUBTYPE_FLOW_LABELS: Partial<Record<ScorerSubtypeGroup, string>> = {
   "free-throw": "Made free throw",
+  "soccer-shot-on-goal": "Shot on goal",
+  "soccer-out-of-bounds": "Out of bounds",
 };
+
+function getScorerParentLabel(
+  parent: ScorerParentCategory,
+  profile: SportProfileKey,
+): string {
+  if (parent === "change-of-possession") {
+    return "Change of possession";
+  }
+
+  if (parent === "score") {
+    return "Score";
+  }
+
+  const sport = getSportProfileDefinition(profile).sport;
+  return sport === "basketball" ? "Time Out" : "Misc";
+}
 
 export function isEventEnabledForProfile(
   event: GameEventType,
@@ -512,7 +531,12 @@ export function getScorerParentOptions(
       .filter((value): value is ScorerParentCategory => Boolean(value)),
   );
 
-  return SCORER_PARENT_OPTIONS.filter((option) => availableParents.has(option.id));
+  return SCORER_PARENT_OPTION_IDS
+    .filter((parentId) => availableParents.has(parentId))
+    .map((parentId) => ({
+      id: parentId,
+      label: getScorerParentLabel(parentId, profile),
+    }));
 }
 
 export function getScorerEventsForParent(

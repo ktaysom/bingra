@@ -8,6 +8,8 @@ import { AuthEntryPoint } from "../../components/auth/AuthEntryPoint";
 import {
   DEFAULT_SPORT_PROFILE,
   SPORT_PROFILES,
+  getSportProfileDefinition,
+  getSportProfileLabel,
   type SportProfileKey,
 } from "../../lib/bingra/sport-profiles";
 
@@ -114,6 +116,8 @@ export default function CreatePage() {
   const safeTeamAName = teamAName.trim() || "Team A";
   const safeTeamBName = teamBName.trim() || "Team B";
   const safeTitle = title.trim() || "Untitled room";
+  const selectedSport = getSportProfileDefinition(sportProfile).sport;
+  const sportProfileLabel = getSportProfileLabel(sportProfile);
 
   const scopeLabel =
     teamScope === "team_a_only"
@@ -123,6 +127,90 @@ export default function CreatePage() {
         : "Both teams";
 
   const previewPool = useMemo(() => {
+    if (selectedSport === "soccer") {
+      if (completionMode === "streak") {
+        if (teamScope === "team_a_only") {
+          return [
+            "Shot off target",
+            "Shot on goal - save",
+            "Live ball turnover",
+            "Out of bounds - throw-in",
+            "Foul",
+            "Out of bounds - corner",
+            "Yellow card",
+            "Goalie punt past midfield",
+            "Shot on goal - goal",
+          ];
+        }
+
+        if (teamScope === "team_b_only") {
+          return [
+            "Out of bounds - throw-in",
+            "Live ball turnover",
+            "Shot off target",
+            "Shot on goal - blocked",
+            "Foul",
+            "Out of bounds - goal kick",
+            "Yellow card",
+            "Shot on goal - goal",
+            "Handball",
+          ];
+        }
+
+        return [
+          "Shot off target",
+          "Live ball turnover",
+          "Out of bounds - throw-in",
+          "Foul",
+          "Shot on goal - save",
+          "Out of bounds - corner",
+          "Yellow card",
+          "Shot on goal - goal",
+          "Handball",
+        ];
+      }
+
+      if (teamScope === "team_a_only") {
+        return [
+          "Shot off target",
+          "Live ball turnover",
+          "Out of bounds - throw-in",
+          "Foul",
+          "Shot on goal - save",
+          "Out of bounds - corner",
+          "Yellow card",
+          "Goalie punt past midfield",
+          "Shot on goal - goal",
+        ];
+      }
+
+      if (teamScope === "team_b_only") {
+        return [
+          "Out of bounds - goal kick",
+          "Shot on goal - blocked",
+          "Live ball turnover",
+          "Shot off target",
+          "Foul",
+          "Out of bounds - corner",
+          "Handball",
+          "Yellow card",
+          "Shot on goal - goal",
+        ];
+      }
+
+      return [
+        "Shot off target",
+        "Live ball turnover",
+        "Out of bounds - throw-in",
+        "Foul",
+        "Shot on goal - save",
+        "Out of bounds - corner",
+        "Yellow card",
+        "Shot on goal - goal",
+        "Handball",
+      ];
+    }
+
     if (completionMode === "streak") {
       if (teamScope === "team_a_only") {
         return [
@@ -216,7 +304,7 @@ export default function CreatePage() {
       "Banked shot",
       "And-1",
     ];
-  }, [completionMode, teamScope]);
+  }, [completionMode, selectedSport, teamScope]);
 
   const previewCardEvents = useMemo(() => {
     return Array.from({ length: eventsPerCard }, (_, index) => previewPool[index % previewPool.length]);
@@ -243,7 +331,7 @@ export default function CreatePage() {
               <br />
               game before
               <br />
-              tip-off.
+              game time.
             </h1>
 
             <p className="mt-6 max-w-xl text-base leading-7 text-[#6b6159]">
@@ -293,7 +381,7 @@ export default function CreatePage() {
                 <SectionHeader
                   eyebrow="Sport profile"
                   title="League rules"
-                  description="Choose which basketball ruleset to use for scoring and event balancing."
+                  description="Choose which sport ruleset to use for scoring and event balancing."
                 />
 
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -532,6 +620,9 @@ export default function CreatePage() {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-[#f4ece3] px-3 py-1 text-xs font-semibold text-[#5d534b]">
+                        {sportProfileLabel}
+                      </span>
                       <span className="rounded-full bg-[#f4ece3] px-3 py-1 text-xs font-semibold text-[#5d534b]">
                         {scopeLabel}
                       </span>

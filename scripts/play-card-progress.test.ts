@@ -81,6 +81,46 @@ test("team B recorded event marks only EVENT:B cell", () => {
   assert.deepEqual(flags, [false, true]);
 });
 
+test("ANY_GOAL cell is completed by soccer goal outcome subtypes", () => {
+  const cells: CardCell[] = [
+    { event_key: "ANY_GOAL", team_key: null, point_value: 1, threshold: 1 },
+  ];
+
+  const assistedGoal: RecordedEvent[] = [{ event_key: "SHOT_ON_GOAL_ASSISTED_GOAL", team_key: "A" }];
+  const reboundGoal: RecordedEvent[] = [{ event_key: "SHOT_ON_GOAL_GOAL_OFF_REBOUND", team_key: "A" }];
+  const directGoal: RecordedEvent[] = [{ event_key: "SHOT_ON_GOAL_GOAL", team_key: "A" }];
+
+  assert.deepEqual(calculateCompletedCellFlags(assistedGoal, cells, "BLACKOUT"), [true]);
+  assert.deepEqual(calculateCompletedCellFlags(reboundGoal, cells, "BLACKOUT"), [true]);
+  assert.deepEqual(calculateCompletedCellFlags(directGoal, cells, "BLACKOUT"), [true]);
+});
+
+test("ANY_GOAL team-qualified cell still requires matching team", () => {
+  const cells: CardCell[] = [
+    { event_key: "ANY_GOAL", team_key: "A", point_value: 1, threshold: 1 },
+  ];
+
+  const matchingTeam: RecordedEvent[] = [{ event_key: "SHOT_ON_GOAL_GOAL", team_key: "A" }];
+  const nonMatchingTeam: RecordedEvent[] = [{ event_key: "SHOT_ON_GOAL_GOAL", team_key: "B" }];
+
+  assert.deepEqual(calculateCompletedCellFlags(matchingTeam, cells, "BLACKOUT"), [true]);
+  assert.deepEqual(calculateCompletedCellFlags(nonMatchingTeam, cells, "BLACKOUT"), [false]);
+});
+
+test("ANY_GOAL does not match non-goal soccer outcomes", () => {
+  const cells: CardCell[] = [
+    { event_key: "ANY_GOAL", team_key: null, point_value: 1, threshold: 1 },
+  ];
+
+  const notGoalEvents: RecordedEvent[] = [
+    { event_key: "SHOT_ON_GOAL_SAVE", team_key: "B" },
+    { event_key: "SHOT_ON_GOAL_BLOCKED", team_key: "B" },
+    { event_key: "SHOT_OFF_TARGET", team_key: "A" },
+  ];
+
+  assert.deepEqual(calculateCompletedCellFlags(notGoalEvents, cells, "BLACKOUT"), [false]);
+});
+
 test("non-team-scoped event behavior remains unchanged", () => {
   const cells: CardCell[] = [
     { event_key: "JUMP_BALL_CALL", team_key: null, point_value: 2, threshold: 1 },

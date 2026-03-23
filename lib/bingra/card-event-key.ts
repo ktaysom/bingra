@@ -12,6 +12,21 @@ type EventWithTeam = {
 
 const QUALIFIED_EVENT_KEY_SEPARATOR = ":";
 
+const SOCCER_ANY_GOAL_MATCH_KEYS = new Set<string>([
+  "ANY_GOAL",
+  "SHOT_ON_GOAL_GOAL",
+  "SHOT_ON_GOAL_GOAL_OFF_REBOUND",
+  "SHOT_ON_GOAL_ASSISTED_GOAL",
+]);
+
+function matchesBaseEventKey(cardBaseEventKey: string, recordedBaseEventKey: string): boolean {
+  if (cardBaseEventKey === "ANY_GOAL") {
+    return SOCCER_ANY_GOAL_MATCH_KEYS.has(recordedBaseEventKey);
+  }
+
+  return cardBaseEventKey === recordedBaseEventKey;
+}
+
 export function buildCardCellEventKey(
   baseEventKey: string,
   teamKey: TeamKey | null | undefined,
@@ -84,7 +99,7 @@ export function cardCellEventMatchesRecordedEvent(input: {
     return false;
   }
 
-  if (cardBaseEventKey !== recordedBaseEventKey) {
+  if (!matchesBaseEventKey(cardBaseEventKey, recordedBaseEventKey)) {
     return false;
   }
 

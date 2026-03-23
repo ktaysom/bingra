@@ -1,11 +1,13 @@
 export type SportProfileKey =
   | "basketball_high_school"
   | "basketball_college"
-  | "basketball_pro";
+  | "basketball_pro"
+  | "soccer_youth"
+  | "soccer_high_school";
 
-export type SportKey = "basketball";
+export type SportKey = "basketball" | "soccer";
 
-export type SportLevel = "high_school" | "college" | "pro";
+export type SportLevel = "youth" | "high_school" | "college" | "pro";
 
 export type SportProfileDefinition = {
   key: SportProfileKey;
@@ -34,6 +36,18 @@ export const SPORT_PROFILES: SportProfileDefinition[] = [
     label: "Professional Basketball",
     sport: "basketball",
     level: "pro",
+  },
+  {
+    key: "soccer_youth",
+    label: "Youth Soccer",
+    sport: "soccer",
+    level: "youth",
+  },
+  {
+    key: "soccer_high_school",
+    label: "High School Soccer",
+    sport: "soccer",
+    level: "high_school",
   },
 ];
 
