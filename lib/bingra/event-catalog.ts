@@ -109,24 +109,34 @@ type ProfilePointsByKey = Partial<Record<SportProfileKey, number>>;
 type ProfileRarityByKey = Partial<Record<SportProfileKey, 1 | 2 | 3 | 4 | 5>>;
 
 type BasketballLevelPointsInput = {
+  youth?: number;
   hs?: number;
   college?: number;
   pro?: number;
 };
 
 type BasketballLevelRarityInput = {
+  youth?: 1 | 2 | 3 | 4 | 5;
   hs?: 1 | 2 | 3 | 4 | 5;
   college?: 1 | 2 | 3 | 4 | 5;
   pro?: 1 | 2 | 3 | 4 | 5;
 };
 
 const BASKETBALL_PROFILES: SportProfileKey[] = [
+  "basketball_youth",
   "basketball_high_school",
   "basketball_college",
   "basketball_pro",
 ];
 
-const SOCCER_PROFILES: SportProfileKey[] = ["soccer_youth", "soccer_high_school"];
+const SOCCER_PROFILES: SportProfileKey[] = [
+  "soccer_youth",
+  "soccer_high_school",
+  "soccer_college",
+  "soccer_pro",
+];
+
+const BASKETBALL_YOUTH_PROFILES: SportProfileKey[] = ["basketball_youth"];
 
 const BASKETBALL_HIGH_SCHOOL_PROFILES: SportProfileKey[] = ["basketball_high_school"];
 
@@ -156,10 +166,15 @@ function sameRarityForProfiles(
 }
 
 function profilePoints(input: BasketballLevelPointsInput | ProfilePointsByKey): ProfilePointsByKey {
-  if ("hs" in input || "college" in input || "pro" in input) {
+  if ("youth" in input || "hs" in input || "college" in input || "pro" in input) {
     const basketballInput = input as BasketballLevelPointsInput;
 
     return {
+      ...(basketballInput.youth !== undefined
+        ? { basketball_youth: basketballInput.youth }
+        : basketballInput.hs !== undefined
+          ? { basketball_youth: basketballInput.hs }
+          : {}),
       ...(basketballInput.hs !== undefined
         ? { basketball_high_school: basketballInput.hs }
         : {}),
@@ -176,10 +191,15 @@ function profilePoints(input: BasketballLevelPointsInput | ProfilePointsByKey): 
 }
 
 function profileRarity(input: BasketballLevelRarityInput | ProfileRarityByKey): ProfileRarityByKey {
-  if ("hs" in input || "college" in input || "pro" in input) {
+  if ("youth" in input || "hs" in input || "college" in input || "pro" in input) {
     const basketballInput = input as BasketballLevelRarityInput;
 
     return {
+      ...(basketballInput.youth !== undefined
+        ? { basketball_youth: basketballInput.youth }
+        : basketballInput.hs !== undefined
+          ? { basketball_youth: basketballInput.hs }
+          : {}),
       ...(basketballInput.hs !== undefined
         ? { basketball_high_school: basketballInput.hs }
         : {}),
@@ -202,7 +222,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "FT Made",
     description: "A made free throw.",
     category: "score",
-    scoringByProfile: samePointsForProfiles(BASKETBALL_PROFILES, 5),
+    scoringByProfile: profilePoints({ youth: 6, hs: 5, college: 5, pro: 5 }),
     rarityByProfile: sameRarityForProfiles(BASKETBALL_PROFILES, 1),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -221,7 +241,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "3PT Made",
     description: "A made shot from beyond the 3-point line.",
     category: "score",
-    scoringByProfile: profilePoints({ hs: 20, college: 18, pro: 15 }),
+    scoringByProfile: profilePoints({ youth: 22, hs: 20, college: 18, pro: 15 }),
     rarityByProfile: profileRarity({ hs: 2, college: 2, pro: 2 }),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -240,7 +260,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "And-1",
     description: "A made basket plus foul and the free throw is converted.",
     category: "score",
-    scoringByProfile: profilePoints({ hs: 35, college: 30, pro: 25 }),
+    scoringByProfile: profilePoints({ youth: 40, hs: 35, college: 30, pro: 25 }),
     rarityByProfile: profileRarity({ hs: 3, college: 3, pro: 3 }),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -261,7 +281,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Dunk",
     description: "A made dunk.",
     category: "score",
-    scoringByProfile: profilePoints({ hs: 100, college: 65, pro: 40 }),
+    scoringByProfile: profilePoints({ youth: 120, hs: 100, college: 65, pro: 40 }),
     rarityByProfile: profileRarity({ hs: 5, college: 4, pro: 3 }),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -324,7 +344,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Steal",
     description: "A defender cleanly takes possession from the offense.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ hs: 25, college: 22, pro: 20 }),
+    scoringByProfile: profilePoints({ youth: 28, hs: 25, college: 22, pro: 20 }),
     rarityByProfile: profileRarity({ hs: 2, college: 2, pro: 2 }),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -343,7 +363,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Block",
     description: "A blocked shot that changes possession.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ hs: 30, college: 25, pro: 22 }),
+    scoringByProfile: profilePoints({ youth: 35, hs: 30, college: 25, pro: 22 }),
     rarityByProfile: profileRarity({ hs: 3, college: 3, pro: 2 }),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -362,7 +382,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Charge",
     description: "A defender legally draws an offensive foul.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ hs: 40, college: 35, pro: 30 }),
+    scoringByProfile: profilePoints({ youth: 45, hs: 40, college: 35, pro: 30 }),
     rarityByProfile: profileRarity({ hs: 4, college: 3, pro: 3 }),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -381,7 +401,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Carry",
     description: "A carrying / palming violation called on the offense.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ hs: 20, college: 18, pro: 15 }),
+    scoringByProfile: profilePoints({ youth: 22, hs: 20, college: 18, pro: 15 }),
     rarityByProfile: profileRarity({ hs: 2, college: 2, pro: 2 }),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -400,7 +420,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Travel",
     description: "A travel violation called on the offense.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ hs: 20, college: 18, pro: 15 }),
+    scoringByProfile: profilePoints({ youth: 22, hs: 20, college: 18, pro: 15 }),
     rarityByProfile: profileRarity({ hs: 2, college: 2, pro: 2 }),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -419,7 +439,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Double Drib.",
     description: "A double dribble violation called on the offense.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ hs: 20, college: 18, pro: 15 }),
+    scoringByProfile: profilePoints({ youth: 22, hs: 20, college: 18, pro: 15 }),
     rarityByProfile: profileRarity({ hs: 2, college: 2, pro: 2 }),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -438,7 +458,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Illegal Scr.",
     description: "An illegal screen called on the offense.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ hs: 20, college: 18, pro: 15 }),
+    scoringByProfile: profilePoints({ youth: 22, hs: 20, college: 18, pro: 15 }),
     rarityByProfile: profileRarity({ hs: 2, college: 2, pro: 2 }),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -457,7 +477,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "OOB",
     description: "Turnover due to ball or player out of bounds.",
     category: "change_of_possession",
-    scoringByProfile: samePointsForProfiles(BASKETBALL_PROFILES, 12),
+    scoringByProfile: profilePoints({ youth: 14, hs: 12, college: 12, pro: 12 }),
     rarityByProfile: sameRarityForProfiles(BASKETBALL_PROFILES, 1),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -476,7 +496,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Jump Ball",
     description: "An in-game held-ball / jump-ball call.",
     category: "change_of_possession",
-    scoringByProfile: samePointsForProfiles(BASKETBALL_PROFILES, 15),
+    scoringByProfile: profilePoints({ youth: 18, hs: 15, college: 15, pro: 15 }),
     rarityByProfile: sameRarityForProfiles(BASKETBALL_PROFILES, 2),
     enabledProfiles: BASKETBALL_PROFILES,
     enabled: true,
@@ -611,7 +631,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "8 Sec",
     description: "An 8-second backcourt violation called on the offense.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ college: 35, pro: 30 }),
+    scoringByProfile: profilePoints({ youth: 35, college: 35, pro: 30 }),
     rarityByProfile: profileRarity({ college: 4, pro: 3 }),
     enabledProfiles: BASKETBALL_COLLEGE_AND_PRO_PROFILES,
     enabled: true,
@@ -630,7 +650,7 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Shot Clock",
     description: "A shot clock violation called on the offense.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ college: 30, pro: 25 }),
+    scoringByProfile: profilePoints({ youth: 30, college: 30, pro: 25 }),
     rarityByProfile: profileRarity({ college: 3, pro: 3 }),
     enabledProfiles: BASKETBALL_COLLEGE_AND_PRO_PROFILES,
     enabled: true,
@@ -650,8 +670,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Goal",
     description: "Any goal scored in open play or set play.",
     category: "score",
-    scoringByProfile: profilePoints({ soccer_youth: 70, soccer_high_school: 65 }),
-    rarityByProfile: profileRarity({ soccer_youth: 4, soccer_high_school: 4 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 60,
+      soccer_high_school: 65,
+      soccer_college: 80,
+      soccer_pro: 95,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 4,
+      soccer_high_school: 4,
+      soccer_college: 4,
+      soccer_pro: 5,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -673,8 +703,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Goal",
     description: "A shot on target that results in a goal.",
     category: "score",
-    scoringByProfile: profilePoints({ soccer_youth: 70, soccer_high_school: 65 }),
-    rarityByProfile: profileRarity({ soccer_youth: 4, soccer_high_school: 4 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 60,
+      soccer_high_school: 65,
+      soccer_college: 80,
+      soccer_pro: 95,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 4,
+      soccer_high_school: 4,
+      soccer_college: 4,
+      soccer_pro: 5,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -697,8 +737,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Ast Goal",
     description: "A shot on target scored directly from an assisted buildup.",
     category: "score",
-    scoringByProfile: profilePoints({ soccer_youth: 90, soccer_high_school: 85 }),
-    rarityByProfile: profileRarity({ soccer_youth: 5, soccer_high_school: 5 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 80,
+      soccer_high_school: 85,
+      soccer_college: 105,
+      soccer_pro: 125,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 5,
+      soccer_high_school: 5,
+      soccer_college: 5,
+      soccer_pro: 5,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -721,8 +771,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Rebound Goal",
     description: "A goal scored after a rebound from an initial on-target attempt.",
     category: "score",
-    scoringByProfile: profilePoints({ soccer_youth: 80, soccer_high_school: 75 }),
-    rarityByProfile: profileRarity({ soccer_youth: 4, soccer_high_school: 4 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 70,
+      soccer_high_school: 75,
+      soccer_college: 95,
+      soccer_pro: 110,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 4,
+      soccer_high_school: 4,
+      soccer_college: 4,
+      soccer_pro: 5,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -745,8 +805,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Save",
     description: "A shot on target that is saved by the goalkeeper.",
     category: "score",
-    scoringByProfile: profilePoints({ soccer_youth: 45, soccer_high_school: 40 }),
-    rarityByProfile: profileRarity({ soccer_youth: 3, soccer_high_school: 3 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 40,
+      soccer_high_school: 40,
+      soccer_college: 50,
+      soccer_pro: 60,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 3,
+      soccer_high_school: 3,
+      soccer_college: 3,
+      soccer_pro: 4,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -767,8 +837,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Blocked",
     description: "A shot on target that is blocked by a defender.",
     category: "score",
-    scoringByProfile: profilePoints({ soccer_youth: 35, soccer_high_school: 30 }),
-    rarityByProfile: profileRarity({ soccer_youth: 2, soccer_high_school: 2 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 30,
+      soccer_high_school: 30,
+      soccer_college: 38,
+      soccer_pro: 45,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 2,
+      soccer_high_school: 2,
+      soccer_college: 3,
+      soccer_pro: 3,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -789,8 +869,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Post/Crossbar",
     description: "A shot on target that hits the post or crossbar.",
     category: "score",
-    scoringByProfile: profilePoints({ soccer_youth: 55, soccer_high_school: 50 }),
-    rarityByProfile: profileRarity({ soccer_youth: 4, soccer_high_school: 4 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 50,
+      soccer_high_school: 50,
+      soccer_college: 65,
+      soccer_pro: 80,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 4,
+      soccer_high_school: 4,
+      soccer_college: 4,
+      soccer_pro: 5,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -811,8 +901,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Shot Off",
     description: "A shot attempt that misses the goal frame.",
     category: "score",
-    scoringByProfile: profilePoints({ soccer_youth: 20, soccer_high_school: 18 }),
-    rarityByProfile: profileRarity({ soccer_youth: 1, soccer_high_school: 1 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 18,
+      soccer_high_school: 18,
+      soccer_college: 22,
+      soccer_pro: 28,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 1,
+      soccer_high_school: 1,
+      soccer_college: 2,
+      soccer_pro: 3,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -836,8 +936,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Throw-in",
     description: "Play restarts with a throw-in after the ball goes out of bounds.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ soccer_youth: 8, soccer_high_school: 8 }),
-    rarityByProfile: profileRarity({ soccer_youth: 1, soccer_high_school: 1 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 6,
+      soccer_high_school: 8,
+      soccer_college: 10,
+      soccer_pro: 12,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 1,
+      soccer_high_school: 1,
+      soccer_college: 2,
+      soccer_pro: 2,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -860,8 +970,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Corner",
     description: "Play restarts with a corner kick after a defensive touch out of bounds.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ soccer_youth: 25, soccer_high_school: 25 }),
-    rarityByProfile: profileRarity({ soccer_youth: 2, soccer_high_school: 2 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 22,
+      soccer_high_school: 25,
+      soccer_college: 32,
+      soccer_pro: 40,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 2,
+      soccer_high_school: 2,
+      soccer_college: 3,
+      soccer_pro: 3,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -884,8 +1004,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Goal Kick",
     description: "Play restarts with a goal kick after an attacking touch out of bounds.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ soccer_youth: 8, soccer_high_school: 8 }),
-    rarityByProfile: profileRarity({ soccer_youth: 1, soccer_high_school: 1 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 6,
+      soccer_high_school: 8,
+      soccer_college: 10,
+      soccer_pro: 12,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 1,
+      soccer_high_school: 1,
+      soccer_college: 2,
+      soccer_pro: 2,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -908,8 +1038,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Foul",
     description: "A foul is called.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ soccer_youth: 20, soccer_high_school: 20 }),
-    rarityByProfile: profileRarity({ soccer_youth: 2, soccer_high_school: 2 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 18,
+      soccer_high_school: 20,
+      soccer_college: 25,
+      soccer_pro: 30,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 2,
+      soccer_high_school: 2,
+      soccer_college: 3,
+      soccer_pro: 3,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -931,8 +1071,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Handball",
     description: "A handball offense is called.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ soccer_youth: 30, soccer_high_school: 30 }),
-    rarityByProfile: profileRarity({ soccer_youth: 3, soccer_high_school: 3 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 25,
+      soccer_high_school: 30,
+      soccer_college: 38,
+      soccer_pro: 45,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 3,
+      soccer_high_school: 3,
+      soccer_college: 4,
+      soccer_pro: 4,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -954,8 +1104,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Live TO",
     description: "Possession is lost in live play without a stoppage.",
     category: "change_of_possession",
-    scoringByProfile: profilePoints({ soccer_youth: 25, soccer_high_school: 22 }),
-    rarityByProfile: profileRarity({ soccer_youth: 2, soccer_high_school: 2 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 22,
+      soccer_high_school: 22,
+      soccer_college: 28,
+      soccer_pro: 35,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 2,
+      soccer_high_school: 2,
+      soccer_college: 3,
+      soccer_pro: 3,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -978,8 +1138,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Yellow",
     description: "A caution is issued to a player.",
     category: "other",
-    scoringByProfile: profilePoints({ soccer_youth: 35, soccer_high_school: 35 }),
-    rarityByProfile: profileRarity({ soccer_youth: 3, soccer_high_school: 3 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 30,
+      soccer_high_school: 35,
+      soccer_college: 45,
+      soccer_pro: 55,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 3,
+      soccer_high_school: 3,
+      soccer_college: 4,
+      soccer_pro: 4,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -999,8 +1169,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Red",
     description: "A player is sent off with a red card.",
     category: "other",
-    scoringByProfile: profilePoints({ soccer_youth: 80, soccer_high_school: 80 }),
-    rarityByProfile: profileRarity({ soccer_youth: 5, soccer_high_school: 5 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 70,
+      soccer_high_school: 80,
+      soccer_college: 100,
+      soccer_pro: 120,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 5,
+      soccer_high_school: 5,
+      soccer_college: 5,
+      soccer_pro: 5,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
@@ -1020,8 +1200,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Ball Handler Down",
     description: "The player in possession falls, disrupting the play.",
     category: "other",
-    scoringByProfile: profilePoints({ soccer_youth: 15, soccer_high_school: 12 }),
-    rarityByProfile: profileRarity({ soccer_youth: 2, soccer_high_school: 2 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 11,
+      soccer_high_school: 12,
+      soccer_college: 15,
+      soccer_pro: 18,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 2,
+      soccer_high_school: 2,
+      soccer_college: 2,
+      soccer_pro: 3,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: false,
     allowedModes: ["classic", "streak"],
@@ -1041,8 +1231,18 @@ export const EVENT_CATALOG: GameEventType[] = [
     shortLabel: "Punt Midfield",
     description: "A goalkeeper punt travels past midfield.",
     category: "other",
-    scoringByProfile: profilePoints({ soccer_youth: 10, soccer_high_school: 10 }),
-    rarityByProfile: profileRarity({ soccer_youth: 2, soccer_high_school: 2 }),
+    scoringByProfile: profilePoints({
+      soccer_youth: 9,
+      soccer_high_school: 10,
+      soccer_college: 13,
+      soccer_pro: 15,
+    }),
+    rarityByProfile: profileRarity({
+      soccer_youth: 2,
+      soccer_high_school: 2,
+      soccer_college: 2,
+      soccer_pro: 3,
+    }),
     enabledProfiles: SOCCER_PROFILES,
     enabled: false,
     allowedModes: ["classic", "streak"],

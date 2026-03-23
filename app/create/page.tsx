@@ -10,12 +10,75 @@ import {
   SPORT_PROFILES,
   getSportProfileDefinition,
   getSportProfileLabel,
+  type SportKey,
+  type SportLevel,
   type SportProfileKey,
 } from "../../lib/bingra/sport-profiles";
 
 const initialState: CreateGameFormState = {};
 
 const DEFAULT_TITLE = "Game On";
+
+type SelectableSport = SportKey;
+type SelectableLevel = SportLevel;
+
+const SPORT_OPTIONS: Array<{ key: SelectableSport; label: string; icon: string }> = [
+  { key: "basketball", label: "Basketball", icon: "🏀" },
+  { key: "soccer", label: "Soccer", icon: "⚽" },
+];
+
+const LEVEL_ORDER: SelectableLevel[] = ["youth", "high_school", "college", "pro"];
+
+const LEVEL_LABELS: Record<SelectableLevel, string> = {
+  youth: "Youth",
+  high_school: "High School",
+  college: "College",
+  pro: "Professional",
+};
+
+const SPORT_LEVEL_PROFILE_MAP: Record<
+  SelectableSport,
+  Array<{ level: SelectableLevel; label: string; profile: SportProfileKey }>
+> = SPORT_OPTIONS.reduce((acc, sportOption) => {
+  acc[sportOption.key] = SPORT_PROFILES
+    .filter((profile) => profile.sport === sportOption.key)
+    .sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level))
+    .map((profile) => ({
+      level: profile.level,
+      label: LEVEL_LABELS[profile.level],
+      profile: profile.key,
+    }));
+
+  return acc;
+}, {} as Record<SelectableSport, Array<{ level: SelectableLevel; label: string; profile: SportProfileKey }>>);
+
+function resolveSportLevelSelection(profile: SportProfileKey): {
+  sport: SelectableSport;
+  level: SelectableLevel;
+} {
+  const profileDefinition = getSportProfileDefinition(profile);
+  const sportFromProfile = profileDefinition.sport as SelectableSport;
+  const levelFromProfile = profileDefinition.level;
+
+  const sportOptions = SPORT_LEVEL_PROFILE_MAP[sportFromProfile] ?? [];
+  const hasLevel = sportOptions.some((option) => option.level === levelFromProfile);
+  const fallbackOption = sportOptions[0] ?? SPORT_LEVEL_PROFILE_MAP.basketball[0];
+
+  return {
+    sport: sportFromProfile,
+    level: hasLevel ? levelFromProfile : fallbackOption.level,
+  };
+}
+
+function resolveProfileFromSelection(
+  sport: SelectableSport,
+  level: SelectableLevel,
+): SportProfileKey {
+  return (
+    SPORT_LEVEL_PROFILE_MAP[sport].find((option) => option.level === level)?.profile ??
+    SPORT_LEVEL_PROFILE_MAP[sport][0].profile
+  );
+}
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -107,6 +170,10 @@ export default function CreatePage() {
   );
   const [eventsPerCard, setEventsPerCard] = useState(5);
   const [sportProfile, setSportProfile] = useState<SportProfileKey>(DEFAULT_SPORT_PROFILE);
+
+  const { sport: selectedSportForPicker, level: selectedLevelForPicker } =
+    resolveSportLevelSelection(sportProfile);
+  const selectedLevelOptions = SPORT_LEVEL_PROFILE_MAP[selectedSportForPicker];
 
   const completionModeDb = completionMode === "streak" ? "STREAK" : "BLACKOUT";
   const endConditionDb =
@@ -384,28 +451,67 @@ export default function CreatePage() {
                   description="Choose which sport ruleset to use for scoring and event balancing."
                 />
 
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {SPORT_PROFILES.map((profile) => (
-                    <label key={profile.key} className="block">
-                      <input
-                        type="radio"
-                        name="sport_profile_selector"
-                        value={profile.key}
-                        checked={sportProfile === profile.key}
-                        onChange={() => setSportProfile(profile.key)}
-                        className="sr-only"
-                      />
-                      <div
-                        className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${
-                          sportProfile === profile.key
-                            ? "border-[#8f7f71] bg-[#f7f0e8] text-[#2f2925]"
-                            : "border-[#ddd2c7] bg-[#faf7f3] text-[#5c544d]"
-                        }`}
-                      >
-                        {profile.label}
-                      </div>
-                    </label>
-                  ))}
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#8a7d71]">
+                    1) Choose sport
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {SPORT_OPTIONS.map((sport) => {
+                      const selected = selectedSportForPicker === sport.key;
+
+                      return (
+                        <button
+                          key={sport.key}
+                          type="button"
+                          onClick={() => {
+                            const nextProfile = resolveProfileFromSelection(
+                              sport.key,
+                              selectedLevelForPicker,
+                            );
+                            setSportProfile(nextProfile);
+                          }}
+                          className={`rounded-2xl border px-4 py-3 text-left transition ${
+                            selected
+                              ? "border-[#8f7f71] bg-[#f7f0e8] text-[#2f2925] shadow-sm"
+                              : "border-[#ddd2c7] bg-[#faf7f3] text-[#5c544d] hover:border-[#c5b8ab] hover:bg-white"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl" aria-hidden>
+                              {sport.icon}
+                            </span>
+                            <span className="text-base font-semibold">{sport.label}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#8a7d71]">
+                    2) Choose level
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4">
+                    {selectedLevelOptions.map((option) => {
+                      const selected = sportProfile === option.profile;
+
+                      return (
+                        <button
+                          key={option.profile}
+                          type="button"
+                          onClick={() => setSportProfile(option.profile)}
+                          className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${
+                            selected
+                              ? "border-[#8f7f71] bg-[#f7f0e8] text-[#2f2925]"
+                              : "border-[#ddd2c7] bg-[#faf7f3] text-[#5c544d] hover:border-[#c5b8ab] hover:bg-white"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </section>
 
