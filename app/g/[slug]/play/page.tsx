@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
+import { createSupabaseServerClient } from "../../../../lib/supabase/server";
+import { ensurePlayerLinkedToAuthenticatedUser } from "../../../../lib/auth/link-player";
 import type { CompletionMode } from "../../../../lib/bingra/card-progress";
 import { PlayPageContent } from "./PlayPageContent";
 
@@ -35,6 +37,7 @@ export const metadata: Metadata = {
 export default async function PlayPage(props: PlayPageProps) {
   const { slug } = await props.params;
   const supabase = createSupabaseAdminClient();
+  const supabaseServer = await createSupabaseServerClient();
   const cookieStore = await cookies();
 
   const { data: game, error: gameError } = await supabase
@@ -72,6 +75,27 @@ export default async function PlayPage(props: PlayPageProps) {
 
   if (sessionPlayerError || !sessionPlayer || sessionPlayer.game_id !== game.id) {
     redirect(`/g/${slug}`);
+  }
+
+  const {
+    data: { user },
+  } = await supabaseServer.auth.getUser();
+
+  if (user?.id) {
+    try {
+      await ensurePlayerLinkedToAuthenticatedUser({
+        playerId: sessionPlayer.id,
+        authUserId: user.id,
+        context: "play/page",
+      });
+    } catch (error) {
+      console.error("[play/page] failed to ensure authenticated player linkage", {
+        slug,
+        playerId: sessionPlayer.id,
+        userId: user.id,
+        error,
+      });
+    }
   }
 
   return <PlayPageContent game={game} currentPlayerId={sessionPlayer.id} slug={slug} />;

@@ -7,7 +7,11 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
-import { getOrCreateProfileByAuthUserId } from "../../lib/auth/profiles";
+import {
+  resolveCanonicalAccountIdForAuthUserId,
+  resolveProfileDefaultDisplayName,
+} from "../../lib/auth/profiles";
+import { ensurePlayerLinkedToAuthenticatedUser } from "../../lib/auth/link-player";
 
 export type JoinGameFormState = {
   error?: string;
@@ -15,10 +19,7 @@ export type JoinGameFormState = {
 
 const formSchema = z.object({
   slug: z.string().min(1, "Missing game identifier"),
-  displayName: z
-    .string()
-    .trim()
-    .min(1, "Display name is required"),
+  displayName: z.string().optional(),
 });
 
 function formatError(error: unknown): string {
@@ -42,8 +43,7 @@ export async function joinGameAction(
 
   const parsed = formSchema.safeParse({
     slug: typeof rawSlug === "string" ? rawSlug.trim() : "",
-    displayName:
-      typeof rawDisplayName === "string" ? rawDisplayName.trim() : "",
+    displayName: typeof rawDisplayName === "string" ? rawDisplayName.trim() : "",
   });
 
   if (!parsed.success) {
@@ -58,9 +58,21 @@ export async function joinGameAction(
   } = await supabaseServer.auth.getUser();
 
   let profileId: string | null = null;
+  let resolvedAuthenticatedDisplayName: string | null = null;
   if (user?.id) {
-    const profile = await getOrCreateProfileByAuthUserId(user.id);
-    profileId = profile.id;
+    // Compatibility-phase canonical write identity:
+    // players.profile_id now stores canonical accounts.id for new authenticated writes.
+    profileId = await resolveCanonicalAccountIdForAuthUserId(user.id);
+    resolvedAuthenticatedDisplayName = await resolveProfileDefaultDisplayName(user.id);
+  }
+
+  const submittedDisplayName = parsed.data.displayName?.trim() ?? "";
+  const playerDisplayName = profileId
+    ? (submittedDisplayName || resolvedAuthenticatedDisplayName || "")
+    : submittedDisplayName;
+
+  if (!playerDisplayName) {
+    return { error: "Display name is required" };
   }
 
   try {
@@ -76,6 +88,30 @@ export async function joinGameAction(
 
     if (!game) {
       return { error: "Game not found" };
+    }
+
+    const cookiePlayerId = (await cookies()).get("bingra-player-id")?.value ?? null;
+
+    if (profileId && user?.id && cookiePlayerId) {
+      const { data: cookiePlayer, error: cookiePlayerError } = await supabase
+        .from("players")
+        .select("id, game_id")
+        .eq("id", cookiePlayerId)
+        .maybeSingle<{ id: string; game_id: string }>();
+
+      if (cookiePlayerError) {
+        throw cookiePlayerError;
+      }
+
+      if (cookiePlayer?.id && cookiePlayer.game_id === game.id) {
+        await ensurePlayerLinkedToAuthenticatedUser({
+          playerId: cookiePlayer.id,
+          authUserId: user.id,
+          context: "join-game/cookie-player",
+        });
+
+        redirect(`/g/${parsed.data.slug}/play`);
+      }
     }
 
     if (profileId) {
@@ -109,7 +145,7 @@ export async function joinGameAction(
 
     const insertPayload = {
       game_id: game.id,
-      display_name: parsed.data.displayName,
+      display_name: playerDisplayName,
       role: "player" as const,
       join_token: randomUUID(),
       profile_id: profileId,

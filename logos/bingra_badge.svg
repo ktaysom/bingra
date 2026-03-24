@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <!-- Shield only -->
+  <path d="M300 50 L480 135 L440 390 L300 520 L160 390 L120 135 Z" fill="#0f172a"/>
+  <path d="M300 75 L455 145 L420 375 L300 490 L180 375 L145 145 Z" fill="#22c55e"/>
+  <path d="M300 95 L435 160 L405 360 L300 465 L195 360 L165 160 Z" fill="#0f172a"/>
+
+  <!-- Card -->
+  <rect x="240" y="185" width="120" height="170" rx="14" fill="#ffffff"/>
+  <rect x="255" y="205" width="28" height="28" rx="5" fill="#22c55e"/>
+  <rect x="255" y="245" width="28" height="28" rx="5" fill="#22c55e"/>
+  <rect x="255" y="285" width="28" height="28" rx="5" fill="#22c55e"/>
+
+  <path d="M260 220 L270 230 L285 210" stroke="#ffffff" stroke-width="4.5" fill="none"/>
+  <path d="M260 260 L270 270 L285 250" stroke="#ffffff" stroke-width="4.5" fill="none"/>
+  <path d="M260 300 L270 310 L285 290" stroke="#ffffff" stroke-width="4.5" fill="none"/>
+
+  <rect x="300" y="205" width="42" height="28" rx="5" fill="#e5e7eb"/>
+  <rect x="300" y="245" width="42" height="28" rx="5" fill="#e5e7eb"/>
+  <rect x="300" y="285" width="42" height="28" rx="5" fill="#22c55e"/>
+
+  <path d="M160 355 Q300 430 440 335" stroke="#ffffff" stroke-width="11" fill="none"/>
+  <path d="M170 365 Q300 440 430 350" stroke="#22c55e" stroke-width="6" fill="none"/>
+</svg>

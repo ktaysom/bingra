@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:play-logic": "node --loader ./scripts/ts-extension-loader.mjs --experimental-strip-types --test scripts/play-card-progress.test.ts"
+    "test:play-logic": "node --loader ./scripts/ts-extension-loader.mjs --experimental-strip-types --test scripts/play-card-progress.test.ts",
+    "test:auth-link-intent": "node --loader ./scripts/ts-extension-loader.mjs --experimental-strip-types --test scripts/account-link-intent.test.ts",
+    "repair:profile-links-and-career-stats": "node --loader ./scripts/ts-extension-loader.mjs --experimental-strip-types scripts/repair-profile-links-and-career-stats.ts",
+    "merge:accounts": "node --loader ./scripts/ts-extension-loader.mjs --experimental-strip-types scripts/merge-accounts.ts",
+    "inspect:account": "node --loader ./scripts/ts-extension-loader.mjs --experimental-strip-types scripts/inspect-account.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",

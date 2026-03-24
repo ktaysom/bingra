@@ -44,12 +44,17 @@ export function EndGameSaveStatsPrompt({
       if (user.id) {
         const { data } = await supabase
           .from("profiles")
-          .select("display_name")
+          .select("username, display_name")
           .or(`id.eq.${user.id},auth_user_id.eq.${user.id}`)
           .maybeSingle();
 
-        const profile = data as { display_name?: string | null } | null;
+        const profile = data as { username?: string | null; display_name?: string | null } | null;
+        const profileUsername = profile?.username?.trim() ?? "";
         profileDisplayName = profile?.display_name?.trim() ?? "";
+
+        if (profileUsername) {
+          return profileUsername;
+        }
       }
 
       const metadataDisplayName =

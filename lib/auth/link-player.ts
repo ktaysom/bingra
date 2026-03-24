@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "../supabase/admin";
+import { resolveCanonicalAccountIdForAuthUserId } from "./profiles";
 
 type LinkGuestPlayerResult = {
   linked: boolean;
@@ -88,4 +89,29 @@ export async function linkGuestPlayerToProfile(params: {
   }
 
   return { linked: true, reason: "linked" };
+}
+
+export async function ensurePlayerLinkedToAuthenticatedUser(params: {
+  playerId: string;
+  authUserId: string;
+  context: string;
+}): Promise<LinkGuestPlayerResult> {
+  const { playerId, authUserId, context } = params;
+  const accountId = await resolveCanonicalAccountIdForAuthUserId(authUserId);
+  const result = await linkGuestPlayerToProfile({
+    playerId,
+    profileId: accountId,
+  });
+
+  if (!result.linked) {
+    console.warn("[ensurePlayerLinkedToAuthenticatedUser] unable to link player", {
+      context,
+      playerId,
+      authUserId,
+      accountId,
+      reason: result.reason,
+    });
+  }
+
+  return result;
 }

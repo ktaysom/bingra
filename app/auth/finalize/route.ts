@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateProfileByAuthUserId } from "../../../lib/auth/profiles";
-import { linkGuestPlayerToProfile } from "../../../lib/auth/link-player";
+import { ensurePlayerLinkedToAuthenticatedUser } from "../../../lib/auth/link-player";
+import { readAccountLinkIntentFromRequest, clearAccountLinkIntentCookie } from "../../../lib/auth/account-link-intent";
+import { linkAuthUserToAccount } from "../../../lib/auth/account-auth-methods";
 
 function normalizeNextPath(input: string | null): string {
   if (!input) {
@@ -19,9 +21,11 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const nextPath = normalizeNextPath(requestUrl.searchParams.get("next"));
   const linkPlayerId = requestUrl.searchParams.get("link_player_id");
+  const expectedLink = requestUrl.searchParams.get("expected_link") === "1";
 
   const redirectUrl = new URL(nextPath, request.url);
   const response = NextResponse.redirect(redirectUrl);
+  const linkIntent = readAccountLinkIntentFromRequest(request);
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key =
@@ -51,18 +55,55 @@ export async function GET(request: NextRequest) {
 
   if (user?.id) {
     try {
-      const profile = await getOrCreateProfileByAuthUserId(user.id);
+      if (linkIntent?.accountId) {
+        await linkAuthUserToAccount({
+          accountId: linkIntent.accountId,
+          authUserId: user.id,
+        });
+        console.info("[auth/finalize] linked auth method to account", {
+          accountId: linkIntent.accountId,
+        });
+      } else if (expectedLink) {
+        const fallbackRedirect = new URL("/me", request.url);
+        fallbackRedirect.searchParams.set(
+          "link_error",
+          "Your verification completed, but linking expired. Please try adding the sign-in method again.",
+        );
+        const errorResponse = NextResponse.redirect(fallbackRedirect);
+        clearAccountLinkIntentCookie(errorResponse);
+        console.warn("[auth/finalize] expected account link intent but none was present");
+        return errorResponse;
+      }
+
+      // Keep compatibility provisioning in place for profile/account/link rows.
+      await getOrCreateProfileByAuthUserId(user.id);
 
       if (linkPlayerId) {
-        await linkGuestPlayerToProfile({
+        await ensurePlayerLinkedToAuthenticatedUser({
           playerId: linkPlayerId,
-          profileId: profile.id,
+          authUserId: user.id,
+          context: "auth/finalize",
+        });
+      } else if (nextPath.includes("/play")) {
+        console.warn("[auth/finalize] expected link_player_id for play redirect but none was provided", {
+          userId: user.id,
+          nextPath,
         });
       }
     } catch (error) {
       console.error("[auth/finalize] player link failed", error);
+      const fallbackRedirect = new URL("/me", request.url);
+      fallbackRedirect.searchParams.set(
+        "link_error",
+        error instanceof Error ? error.message : "Unable to link sign-in method",
+      );
+      const errorResponse = NextResponse.redirect(fallbackRedirect);
+      clearAccountLinkIntentCookie(errorResponse);
+      return errorResponse;
     }
   }
+
+  clearAccountLinkIntentCookie(response);
 
   return response;
 }

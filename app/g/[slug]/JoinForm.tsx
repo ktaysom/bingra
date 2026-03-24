@@ -6,6 +6,7 @@ import type { JoinGameFormState } from "../../actions/join-game";
 
 type JoinFormProps = {
   slug: string;
+  initialDisplayName?: string;
   action: (
     prevState: JoinGameFormState,
     formData: FormData
@@ -28,7 +29,7 @@ function SubmitButton() {
   );
 }
 
-export function JoinForm({ slug, action }: JoinFormProps) {
+export function JoinForm({ slug, initialDisplayName = "", action }: JoinFormProps) {
   const [state, formAction] = useActionState(action, initialState);
 
   return (
@@ -43,6 +44,7 @@ export function JoinForm({ slug, action }: JoinFormProps) {
           id="displayName"
           name="displayName"
           type="text"
+          defaultValue={initialDisplayName}
           placeholder="Ada Lovelace"
           aria-invalid={Boolean(state?.error)}
           aria-describedby={state?.error ? "displayName-error" : undefined}

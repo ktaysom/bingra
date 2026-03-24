@@ -6,10 +6,11 @@ import { createGameAction, CreateGameFormState } from "../actions/create-game";
 import { generateGameName } from "../../lib/bingra/game-name-generator";
 import { AuthEntryPoint } from "../../components/auth/AuthEntryPoint";
 import {
-  chooseRandomEvents,
-  chooseRandomThresholdForEvent,
+  getEventMaxThreshold,
+  getEventsForMode,
   type TeamKey,
 } from "../../lib/bingra/event-logic";
+import type { GameEventType } from "../../lib/bingra/event-catalog";
 import {
   DEFAULT_SPORT_PROFILE,
   SPORT_PROFILES,
@@ -156,6 +157,59 @@ function ChoiceCard({
   );
 }
 
+function formatPreviewItem(input: {
+  event: GameEventType;
+  index: number;
+  teamScope: "both_teams" | "team_a_only" | "team_b_only";
+  safeTeamAName: string;
+  safeTeamBName: string;
+}): string {
+  const { event, index, teamScope, safeTeamAName, safeTeamBName } = input;
+
+  const threshold = (index % Math.max(1, getEventMaxThreshold(event))) + 1;
+
+  let teamKey: TeamKey | null = null;
+  if (event.teamScope === "team") {
+    if (teamScope === "team_a_only") {
+      teamKey = "A";
+    } else if (teamScope === "team_b_only") {
+      teamKey = "B";
+    } else {
+      teamKey = index % 2 === 0 ? "A" : "B";
+    }
+  }
+
+  const teamPrefix = teamKey ? `${teamKey === "A" ? safeTeamAName : safeTeamBName}: ` : "";
+
+  return `${threshold}+ ${teamPrefix}${event.label}`;
+}
+
+function getDeterministicPreviewItems(input: {
+  events: GameEventType[];
+  count: number;
+  teamScope: "both_teams" | "team_a_only" | "team_b_only";
+  safeTeamAName: string;
+  safeTeamBName: string;
+}): string[] {
+  const { events, count, teamScope, safeTeamAName, safeTeamBName } = input;
+
+  if (events.length === 0 || count <= 0) {
+    return [];
+  }
+
+  return Array.from({ length: count }, (_, index) => {
+    const event = events[index % events.length];
+
+    return formatPreviewItem({
+      event,
+      index,
+      teamScope,
+      safeTeamAName,
+      safeTeamBName,
+    });
+  });
+}
+
 export default function CreatePage() {
   const [state, formAction] = useActionState(createGameAction, initialState);
 
@@ -199,44 +253,19 @@ export default function CreatePage() {
         ? `${safeTeamBName} only`
         : "Both teams";
 
+  // IMPORTANT: Must remain deterministic for SSR hydration
   const previewCardEvents = useMemo(() => {
-    const resolveTeamKey = (teamScoped: boolean, index: number): TeamKey | null => {
-      if (!teamScoped) {
-        return null;
-      }
+    const availableEvents = getEventsForMode(mapPlayModeToGameMode(legacyMode), sportProfile)
+      .filter((event) => (teamScope === "both_teams" ? true : event.teamScope === "team"))
+      .slice()
+      .sort((a, b) => a.id.localeCompare(b.id));
 
-      if (teamScope === "team_a_only") {
-        return "A";
-      }
-
-      if (teamScope === "team_b_only") {
-        return "B";
-      }
-
-      return index % 2 === 0 ? "A" : "B";
-    };
-
-    const randomEvents = chooseRandomEvents(eventsPerCard, {
-      mode: mapPlayModeToGameMode(legacyMode),
-      riskLevel: 3,
-      uniqueByEventId: true,
-      includeGameScopedEvents: teamScope === "both_teams",
-      profile: sportProfile,
-    });
-
-    if (randomEvents.length === 0) {
-      return [];
-    }
-
-    return Array.from({ length: eventsPerCard }, (_, index) => {
-      const event = randomEvents[index % randomEvents.length];
-      const threshold = chooseRandomThresholdForEvent(event);
-      const teamKey = resolveTeamKey(event.teamScope === "team", index);
-      const teamPrefix = teamKey
-        ? `${teamKey === "A" ? safeTeamAName : safeTeamBName}: `
-        : "";
-
-      return `${threshold}+ ${teamPrefix}${event.label}`;
+    return getDeterministicPreviewItems({
+      events: availableEvents,
+      count: eventsPerCard,
+      teamScope,
+      safeTeamAName,
+      safeTeamBName,
     });
   }, [eventsPerCard, legacyMode, safeTeamAName, safeTeamBName, sportProfile, teamScope]);
 

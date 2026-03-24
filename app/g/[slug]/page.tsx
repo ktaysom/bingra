@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { createSupabaseAdminClient } from "../../../lib/supabase/admin";
+import { createSupabaseServerClient } from "../../../lib/supabase/server";
 import { JoinForm } from "./JoinForm";
 import { joinGameAction } from "../../actions/join-game";
 import { AuthEntryPoint } from "../../../components/auth/AuthEntryPoint";
@@ -34,6 +35,11 @@ export const metadata: Metadata = {
 export default async function JoinGamePage(props: JoinPageProps) {
   const { slug } = await props.params;
   const supabase = createSupabaseAdminClient();
+  const supabaseServer = await createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabaseServer.auth.getUser();
 
   const { data: game, error } = await supabase
     .from("games")
@@ -69,6 +75,18 @@ export default async function JoinGamePage(props: JoinPageProps) {
   const hostName = host?.display_name?.trim() || "Host";
   const sportProfileLabel = getSportProfileLabel(resolveSportProfileKey(game.sport_profile));
 
+  let initialDisplayName = "";
+
+  if (user?.id) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("username, display_name")
+      .or(`id.eq.${user.id},auth_user_id.eq.${user.id}`)
+      .maybeSingle<{ username?: string | null; display_name?: string | null }>();
+
+    initialDisplayName = profile?.username?.trim() || profile?.display_name?.trim() || "";
+  }
+
   return (
     <main className="mx-auto flex min-h-[70vh] w-full max-w-6xl flex-col justify-center px-4 py-12 sm:px-6">
       <section className="mx-auto w-full max-w-3xl rounded-2xl bg-white/90 p-8 shadow-md">
@@ -87,7 +105,7 @@ export default async function JoinGamePage(props: JoinPageProps) {
           {game.title ? <p className="text-xs text-slate-400">Game: {game.title}</p> : null}
         </div>
 
-        <JoinForm slug={slug} action={joinGameAction} />
+        <JoinForm slug={slug} initialDisplayName={initialDisplayName} action={joinGameAction} />
       </section>
     </main>
   );

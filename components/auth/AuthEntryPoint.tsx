@@ -49,14 +49,15 @@ export function AuthEntryPoint({ nextPath, linkPlayerId, subtle = true }: AuthEn
 
       const { data } = await supabase
         .from("profiles")
-        .select("display_name")
+        .select("username, display_name")
         // Canonical profile key is profiles.id === auth.users.id.
         // Keep a backward-compatible fallback while older schemas may still include auth_user_id.
         .or(`id.eq.${user.id},auth_user_id.eq.${user.id}`)
         .maybeSingle();
 
-      const profile = data as { display_name?: string | null } | null;
+      const profile = data as { username?: string | null; display_name?: string | null } | null;
 
+      const profileUsername = profile?.username?.trim();
       const profileDisplayName = profile?.display_name?.trim();
       const metadataDisplayName =
         typeof user.user_metadata?.display_name === "string"
@@ -67,7 +68,7 @@ export function AuthEntryPoint({ nextPath, linkPlayerId, subtle = true }: AuthEn
               ? user.user_metadata.name.trim()
               : "";
 
-      return profileDisplayName || metadataDisplayName || user.email || user.phone || null;
+      return profileUsername || profileDisplayName || metadataDisplayName || user.email || user.phone || null;
     };
 
     const hydrateAccountState = async (user: User | null) => {

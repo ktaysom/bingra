@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateProfileByAuthUserId } from "../../../lib/auth/profiles";
-import { linkGuestPlayerToProfile } from "../../../lib/auth/link-player";
+import { ensurePlayerLinkedToAuthenticatedUser } from "../../../lib/auth/link-player";
+import { readAccountLinkIntentFromRequest, clearAccountLinkIntentCookie } from "../../../lib/auth/account-link-intent";
+import { linkAuthUserToAccount } from "../../../lib/auth/account-auth-methods";
 
 function normalizeNextPath(input: string | null): string {
   if (!input) {
@@ -20,9 +22,11 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get("code");
   const nextPath = normalizeNextPath(requestUrl.searchParams.get("next"));
   const linkPlayerId = requestUrl.searchParams.get("link_player_id");
+  const expectedLink = requestUrl.searchParams.get("expected_link") === "1";
 
   const redirectUrl = new URL(nextPath, request.url);
   const response = NextResponse.redirect(redirectUrl);
+  const linkIntent = readAccountLinkIntentFromRequest(request);
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key =
@@ -56,22 +60,55 @@ export async function GET(request: NextRequest) {
 
   if (user?.id) {
     try {
-      // Multi-identity note:
-      // We treat auth.users.id as the stable account key and create exactly one profile per auth user.
-      // Future email+phone support should link both credentials to this SAME auth user/profile,
-      // rather than creating a second auth user (which would create a second profile).
-      const profile = await getOrCreateProfileByAuthUserId(user.id);
+      if (linkIntent?.accountId) {
+        await linkAuthUserToAccount({
+          accountId: linkIntent.accountId,
+          authUserId: user.id,
+        });
+        console.info("[auth/callback] linked auth method to account", {
+          accountId: linkIntent.accountId,
+        });
+      } else if (expectedLink) {
+        const fallbackRedirect = new URL("/me", request.url);
+        fallbackRedirect.searchParams.set(
+          "link_error",
+          "Your verification completed, but linking expired. Please try adding the sign-in method again.",
+        );
+        const errorResponse = NextResponse.redirect(fallbackRedirect);
+        clearAccountLinkIntentCookie(errorResponse);
+        console.warn("[auth/callback] expected account link intent but none was present");
+        return errorResponse;
+      }
+
+      // Keep compatibility provisioning in place for profile/account/link rows.
+      await getOrCreateProfileByAuthUserId(user.id);
 
       if (linkPlayerId) {
-        await linkGuestPlayerToProfile({
+        await ensurePlayerLinkedToAuthenticatedUser({
           playerId: linkPlayerId,
-          profileId: profile.id,
+          authUserId: user.id,
+          context: "auth/callback",
+        });
+      } else if (nextPath.includes("/play")) {
+        console.warn("[auth/callback] expected link_player_id for play redirect but none was provided", {
+          userId: user.id,
+          nextPath,
         });
       }
     } catch (error) {
       console.error("[auth/callback] player link failed", error);
+      const fallbackRedirect = new URL("/me", request.url);
+      fallbackRedirect.searchParams.set(
+        "link_error",
+        error instanceof Error ? error.message : "Unable to link sign-in method",
+      );
+      const errorResponse = NextResponse.redirect(fallbackRedirect);
+      clearAccountLinkIntentCookie(errorResponse);
+      return errorResponse;
     }
   }
+
+  clearAccountLinkIntentCookie(response);
 
   return response;
 }

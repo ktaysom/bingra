@@ -7,7 +7,10 @@ import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
-import { getOrCreateProfileByAuthUserId } from "../../lib/auth/profiles";
+import {
+  resolveCanonicalAccountIdForAuthUserId,
+  resolveProfileDefaultDisplayName,
+} from "../../lib/auth/profiles";
 import {
   DEFAULT_SPORT_PROFILE,
   SPORT_PROFILES,
@@ -107,9 +110,15 @@ export async function createGameAction(
     } = await supabaseServer.auth.getUser();
 
     let profileId: string | null = null;
+    let resolvedHostDisplayName = parsed.data.hostDisplayName;
     if (user?.id) {
-      const profile = await getOrCreateProfileByAuthUserId(user.id);
-      profileId = profile.id;
+      // Compatibility-phase canonical write identity:
+      // players.profile_id uses canonical accounts.id for new authenticated writes.
+      profileId = await resolveCanonicalAccountIdForAuthUserId(user.id);
+
+      if (!resolvedHostDisplayName.trim() || resolvedHostDisplayName.trim().toLowerCase() === "host") {
+        resolvedHostDisplayName = await resolveProfileDefaultDisplayName(user.id);
+      }
     }
 
     console.log("[createGameAction] SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
@@ -120,7 +129,7 @@ export async function createGameAction(
       p_title: parsed.data.title,
       p_sport: selectedSport,
       p_mode: parsed.data.mode,
-      p_host_display_name: parsed.data.hostDisplayName,
+      p_host_display_name: resolvedHostDisplayName,
       p_allow_custom_cards: parsed.data.allowCustomCards,
       p_visibility: parsed.data.visibility,
       p_event_keys: null,
@@ -197,6 +206,8 @@ export async function createGameAction(
           events_per_card: parsed.data.eventsPerCard,
           sport_profile: parsed.data.sport_profile,
           catalog_version: "v1",
+          ...(user?.id ? { auth_user_id: user.id } : {}),
+          ...(profileId ? { account_id: profileId } : {}),
         })
         .eq("id", verifyRow.id)
         .limit(1);
@@ -214,12 +225,12 @@ export async function createGameAction(
       });
       const { data: existingHostPlayer, error: hostPlayerLookupError } = await supabase
         .from("players")
-        .select("id")
+        .select("id, profile_id")
         .eq("game_id", verifyRow.id)
         .eq("role", "host")
         .order("created_at", { ascending: true })
         .limit(1)
-        .maybeSingle<{ id: string }>();
+        .maybeSingle<{ id: string; profile_id: string | null }>();
       console.info("[createGameAction][perf] host player check end", {
         durationMs: Date.now() - hostPlayerLookupStartedAt,
         foundExistingHost: Boolean(existingHostPlayer?.id),
@@ -230,6 +241,19 @@ export async function createGameAction(
       }
 
       if (existingHostPlayer?.id) {
+        if (profileId && !existingHostPlayer.profile_id) {
+          const { error: hostBackfillError } = await supabase
+            .from("players")
+            .update({ profile_id: profileId })
+            .eq("id", existingHostPlayer.id)
+            .is("profile_id", null)
+            .limit(1);
+
+          if (hostBackfillError) {
+            throw hostBackfillError;
+          }
+        }
+
         hostPlayerId = existingHostPlayer.id;
       } else {
         const hostPlayerCreateStartedAt = Date.now();
@@ -240,7 +264,7 @@ export async function createGameAction(
           .from("players")
           .insert({
             game_id: verifyRow.id,
-            display_name: parsed.data.hostDisplayName,
+            display_name: resolvedHostDisplayName,
             role: "host",
             join_token: randomUUID(),
             profile_id: profileId,
