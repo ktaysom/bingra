@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   icons: {
-    icon: "/logos/bingra-badge.svg",
-    shortcut: "/logos/bingra-badge.svg",
+    icon: "/logos/bingra-favicon.svg",
+    shortcut: "/logos/bingra-favicon.svg",
   },
 };
 

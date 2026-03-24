@@ -275,7 +275,7 @@ export default function CreatePage() {
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-8 sm:px-6 md:py-10">
         <header className="mb-10 rounded-2xl bg-bingra-dark px-4 py-3 shadow-sm sm:px-5 sm:py-3.5">
           <div className="flex items-center justify-between gap-3">
-            <BingraLogo variant="horizontal" className="h-10 w-auto sm:h-11" />
+            <BingraLogo variant="horizontal" className="h-16 w-auto" />
             <AuthEntryPoint nextPath="/create" subtle />
           </div>
         </header>

@@ -3,7 +3,7 @@ type BingraLogoVariant = "vertical" | "horizontal" | "badge";
 const LOGO_SRC_BY_VARIANT: Record<BingraLogoVariant, string> = {
   horizontal: "/logos/bingra-horizontal.svg",
   vertical: "/logos/bingra-vertical.svg",
-  badge: "/logos/bingra-badge.svg",
+  badge: "/logos/bingra-favicon.svg",
 };
 
 type BingraLogoProps = {
