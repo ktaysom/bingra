@@ -102,16 +102,16 @@ export function LeaderboardCardPreview({
       <section
         id={scoreboardTargetId}
         tabIndex={-1}
-        className="rounded-2xl bg-white/90 p-6 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+        className="surface-card p-6 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
       >
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Leaderboard</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-bingra-gray-medium">Leaderboard</p>
             <h2 className="text-xl font-semibold text-slate-900">Players</h2>
           </div>
-          <span className="text-sm text-slate-500">{playerCount} joined</span>
+          <span className="text-sm text-bingra-gray-medium">{playerCount} joined</span>
         </div>
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-bingra-gray-medium">
           {isLive
             ? "Points update live. Bingra badge means this player gets a 2x multiplier when the game ends."
             : "Final score = raw points ×2 with Bingra, otherwise raw points."}
@@ -147,7 +147,9 @@ export function LeaderboardCardPreview({
                 <p className="mt-0.5 text-[11px] font-medium text-slate-500 sm:hidden">Tap to view card</p>
               </div>
               <div className="ml-3 flex shrink-0 items-center gap-2 sm:gap-3">
-                <span className="text-right text-xs font-medium text-slate-500">
+                <span className={`text-right text-xs font-medium ${
+                  !entry.is_active ? "event-state-inactive rounded-full px-2 py-0.5" : "text-bingra-gray-medium"
+                }`}>
                   {!entry.is_active
                     ? entry.status_label ?? "No card accepted"
                     : entry.has_bingra
@@ -197,7 +199,7 @@ export function LeaderboardCardPreview({
                       {selectedCard.completed_cells_count}/{selectedCard.total_cells_count} complete
                     </p>
                     {selectedCard.has_bingra ? (
-                      <p className="mt-1 text-xs font-semibold text-emerald-700">Bingra completed</p>
+                      <p className="event-state-completed mt-1 inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-semibold">Bingra completed</p>
                     ) : selectedCard.is_one_away ? (
                       <p className="mt-1 text-xs font-semibold text-violet-700">1 away from Bingra</p>
                     ) : null}

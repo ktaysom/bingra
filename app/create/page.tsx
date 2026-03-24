@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { createGameAction, CreateGameFormState } from "../actions/create-game";
 import { generateGameName } from "../../lib/bingra/game-name-generator";
 import { AuthEntryPoint } from "../../components/auth/AuthEntryPoint";
+import { BingraLogo } from "../../components/BingraLogo";
 import {
   getEventMaxThreshold,
   getEventsForMode,
@@ -94,7 +95,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex h-14 w-full items-center justify-center rounded-2xl bg-[#2f6df6] px-6 text-base font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda] disabled:cursor-not-allowed disabled:opacity-50"
+      className="btn-primary h-14 w-full rounded-2xl px-6 text-base"
     >
       {pending ? "Creating game..." : "Create game"}
     </button>
@@ -272,9 +273,9 @@ export default function CreatePage() {
   return (
     <main className="min-h-screen text-[#2f2925]">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-8 sm:px-6 md:py-10">
-        <header className="mb-10">
+        <header className="mb-10 rounded-2xl bg-bingra-dark px-4 py-3 shadow-sm sm:px-5 sm:py-3.5">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-2xl font-black tracking-[-0.04em] text-[#2c2622]">Bingra</div>
+            <BingraLogo variant="horizontal" className="h-10 w-auto sm:h-11" />
             <AuthEntryPoint nextPath="/create" subtle />
           </div>
         </header>

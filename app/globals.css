@@ -1,1 +1,42 @@
 @import "tailwindcss";
+
+@theme {
+  --color-bingra-green: #22c55e;
+  --color-bingra-dark: #0f172a;
+  --color-bingra-white: #ffffff;
+  --color-bingra-gray-light: #e5e7eb;
+  --color-bingra-gray-medium: #6b7280;
+  --color-bingra-gray-dark: #374151;
+  --color-bingra-blue: #2563eb;
+  --color-bingra-orange: #f97316;
+
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-xl bg-bingra-green px-5 py-2.5 text-sm font-semibold text-bingra-white transition-all duration-150 hover:scale-[1.01] hover:bg-[#16a34a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bingra-green/40 focus-visible:ring-offset-2 focus-visible:ring-offset-bingra-white disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-xl border border-bingra-gray-light bg-bingra-white px-4 py-2 text-sm font-semibold text-bingra-dark transition-all duration-150 hover:scale-[1.01] hover:bg-bingra-gray-light/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bingra-dark/20 focus-visible:ring-offset-2 focus-visible:ring-offset-bingra-white;
+}
+
+.surface-card {
+  @apply rounded-2xl border border-bingra-gray-light/80 bg-bingra-white shadow-sm;
+}
+
+.event-state-completed {
+  @apply border border-bingra-green/40 bg-bingra-green/10 text-bingra-gray-dark;
+}
+
+.event-state-inactive {
+  @apply border border-bingra-gray-light bg-bingra-gray-light/70 text-bingra-gray-medium;
+}
+
+.event-state-active {
+  @apply border border-bingra-blue/30 bg-bingra-white ring-1 ring-bingra-blue/20;
+}

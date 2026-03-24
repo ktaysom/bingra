@@ -527,15 +527,15 @@ export function HostScoringPanel({
     (isSoccer ? stage !== "soccer-parent" : stage !== "parent");
 
   return (
-    <section className="rounded-2xl bg-white/90 p-4 shadow-sm sm:p-6">
+    <section className="surface-card p-4 sm:p-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-bingra-gray-medium">
             Host scoring
           </p>
           <h2 className="text-xl font-semibold text-slate-900">{getTitle()}</h2>
           {teamScope !== "both_teams" && (
-            <p className="mt-1 text-xs font-medium text-slate-500">
+            <p className="mt-1 text-xs font-medium text-bingra-gray-medium">
               Scoring for: {teamScope === "team_a_only" ? teamNames.A : teamNames.B}
             </p>
           )}
@@ -545,7 +545,7 @@ export function HostScoringPanel({
           <button
             type="button"
             onClick={handleBack}
-            className="rounded-2xl bg-white/90 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm"
+            className="btn-secondary rounded-2xl px-3 py-1.5 text-sm font-medium"
           >
             Back
           </button>
@@ -554,7 +554,7 @@ export function HostScoringPanel({
 
       {recordState.error && <p className="mt-3 text-xs text-red-600">{recordState.error}</p>}
       {deleteState.error && <p className="mt-3 text-xs text-red-600">{deleteState.error}</p>}
-      {recordState.success && <p className="mt-3 text-xs text-emerald-600">Recorded.</p>}
+      {recordState.success && <p className="mt-3 text-xs text-bingra-green">Recorded.</p>}
 
       {lockReason && (
         <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -617,7 +617,7 @@ export function HostScoringPanel({
                   key={team}
                   type="button"
                   onClick={() => handleTeamSelect(team)}
-                  className="min-h-20 rounded-2xl bg-[#2f6df6] px-4 py-5 text-center text-base font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda]"
+                  className="btn-primary min-h-20 w-full rounded-2xl px-4 py-5 text-center text-base"
                 >
                   {teamNames[team]}
                 </button>
@@ -677,7 +677,7 @@ export function HostScoringPanel({
                   key={team}
                   type="button"
                   onClick={() => handleTeamSelect(team)}
-                  className="min-h-20 rounded-2xl bg-[#2f6df6] px-4 py-5 text-center text-base font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda]"
+                  className="btn-primary min-h-20 w-full rounded-2xl px-4 py-5 text-center text-base"
                 >
                   {teamNames[team]}
                 </button>
@@ -695,8 +695,8 @@ export function HostScoringPanel({
       )}
 
       {recentEvents.length > 0 && (
-        <div className="mt-6 rounded-2xl bg-white/90 p-4 text-xs text-slate-600 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent</p>
+        <div className="surface-card mt-6 p-4 text-xs text-bingra-gray-medium">
+          <p className="text-xs font-semibold uppercase tracking-wide text-bingra-gray-medium">Recent</p>
           <ul className="mt-3 space-y-2">
             {recentEvents.map((entry, index) => {
               const baseEventKey = resolveBaseEventKey(entry.eventKey);
@@ -724,7 +724,7 @@ export function HostScoringPanel({
                       <button
                         type="button"
                         onClick={() => undoRecent(entry.recordedEventId)}
-                        className="rounded-2xl bg-white/90 px-3 py-1 text-xs font-medium text-red-600 shadow-sm"
+                        className="btn-secondary rounded-2xl px-3 py-1 text-xs font-medium text-red-600"
                       >
                         Undo
                       </button>

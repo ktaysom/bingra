@@ -34,6 +34,7 @@ import {
 } from "../../../../lib/bingra/sport-profiles";
 import { AuthEntryPoint } from "../../../../components/auth/AuthEntryPoint";
 import { EndGameSaveStatsPrompt } from "../../../../components/auth/EndGameSaveStatsPrompt";
+import { BingraLogo } from "../../../../components/BingraLogo";
 
 type GameRecord = {
   id: string;
@@ -649,12 +650,13 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
         scoreboardTargetId={scoreboardTargetId}
       />
 
-      <header className="rounded-2xl bg-white/90 p-6 shadow-sm">
+      <header className="rounded-2xl bg-bingra-dark px-5 py-4 shadow-sm sm:px-6 sm:py-4.5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{matchupHeadline}</h1>
-            <p className="mt-1 text-sm text-slate-500">Hosted by {displayHostName}</p>
-            <p className="mt-1 text-xs text-slate-500">{sportProfileLabel}</p>
+            <BingraLogo variant="horizontal" className="h-10.5 w-auto sm:h-12" />
+            <h1 className="mt-2.5 text-2xl font-bold text-bingra-white sm:text-3xl">{matchupHeadline}</h1>
+            <p className="mt-1 text-sm text-bingra-white/85">Hosted by {displayHostName}</p>
+            <p className="mt-1 text-xs text-bingra-white/70">{sportProfileLabel}</p>
           </div>
           <div className="flex items-center gap-2 sm:pt-1">
             <AuthEntryPoint
@@ -701,7 +703,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
         </section>
       )}
 
-      <section className="rounded-2xl bg-white/90 p-6 shadow-sm">
+      <section className="surface-card p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -881,7 +883,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
         </section>
       )}
 
-      <section className="rounded-2xl bg-white/90 p-4 shadow-sm sm:p-6">
+      <section className="surface-card p-4 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">

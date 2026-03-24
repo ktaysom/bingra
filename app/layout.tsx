@@ -1,4 +1,12 @@
 import "./globals.css";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  icons: {
+    icon: "/logos/bingra-badge.svg",
+    shortcut: "/logos/bingra-badge.svg",
+  },
+};
 
 export default function RootLayout({
   children,
@@ -7,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-[#f6efe7]">{children}</body>
+      <body className="bg-bingra-gray-light text-bingra-dark">{children}</body>
     </html>
   );
 }

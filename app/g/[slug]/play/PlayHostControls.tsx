@@ -102,7 +102,7 @@ export function ShareGameControl({ slug, title, teamA, teamB, hostName }: ShareG
   });
 
   return (
-    <section className="rounded-2xl bg-white/90 p-4 shadow-sm sm:p-6">
+    <section className="surface-card p-4 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Share game</p>
@@ -111,7 +111,7 @@ export function ShareGameControl({ slug, title, teamA, teamB, hostName }: ShareG
         <button
           type="button"
           onClick={handleShare}
-          className="inline-flex items-center justify-center rounded-2xl bg-[#2f6df6] px-5 py-2.5 text-sm font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda]"
+          className="btn-primary rounded-2xl"
         >
           Share game
         </button>
@@ -133,7 +133,7 @@ export function InlineShareButton({ slug, title, teamA, teamB, hostName }: Inlin
       <button
         type="button"
         onClick={handleShare}
-        className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-all duration-150 hover:scale-[1.02]"
+        className="btn-secondary px-3 py-1.5 text-xs"
       >
         Share
       </button>
@@ -178,7 +178,7 @@ export function GameStatusActionButton({ slug, intent, children, className }: Ga
         type="button"
         onClick={handleClick}
         disabled={isPending}
-        className={`inline-flex items-center justify-center rounded-2xl bg-[#2f6df6] px-5 py-2.5 text-sm font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda] disabled:cursor-not-allowed disabled:opacity-60 ${className ?? ""}`}
+        className={`btn-primary rounded-2xl ${className ?? ""}`}
       >
         {isPending ? "Saving..." : children}
       </button>
@@ -199,7 +199,7 @@ export function EndGameControl({ slug }: EndGameControlProps) {
       <button
         type="button"
         onClick={() => setIsConfirming(true)}
-        className="inline-flex items-center justify-center rounded-2xl bg-[#2f6df6] px-5 py-2.5 text-sm font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda]"
+        className="btn-primary rounded-2xl"
       >
         End game
       </button>
@@ -207,7 +207,7 @@ export function EndGameControl({ slug }: EndGameControlProps) {
   }
 
   return (
-    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm sm:p-6">
+    <section className="surface-card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:p-6">
       <p className="font-semibold">Ending the game cannot be undone.</p>
       <p className="mt-1 text-xs text-amber-800">
         Are you sure you want to end it now? Winner will be based on highest final score (Bingra doubles points), not who got first Bingra.
@@ -216,7 +216,7 @@ export function EndGameControl({ slug }: EndGameControlProps) {
         <button
           type="button"
           onClick={() => setIsConfirming(false)}
-          className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition-all duration-150 hover:scale-[1.02]"
+          className="btn-secondary rounded-2xl px-4 py-2 text-xs"
         >
           Cancel
         </button>
