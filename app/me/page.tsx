@@ -19,7 +19,7 @@ export default async function AccountPage() {
             Sign in to attach games to your account and unlock upcoming career stats.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-2">
-            <AuthDialog label="Continue with email" nextPath="/me" emphasis="prominent" />
+            <AuthDialog label="Sign in" nextPath="/me" emphasis="prominent" />
             <Link
               href="/"
               className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"

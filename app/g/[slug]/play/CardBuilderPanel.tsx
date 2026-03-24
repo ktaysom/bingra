@@ -3,12 +3,10 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  chooseRandomEvents,
-  estimateCardRiskLabel,
+  chooseRiskCalibratedCardCells,
   getEventMaxThreshold,
   getEventPointsForProfile,
   getEventsForMode,
-  summarizeCardPoints,
   type TeamKey,
   type RiskLevel,
 } from "../../../../lib/bingra/event-logic";
@@ -56,6 +54,7 @@ type AddableEvent = {
   teamName: string | null;
   cardTeamKey: TeamKey | null;
   groupLabel: string;
+  basePoints: number;
   event: GameEventType;
 };
 
@@ -117,6 +116,18 @@ function getThresholdPreviewPoints(event: CardBuilderEvent, sportProfile: SportP
   const basePoints = toSafePoints(getEventPointsForProfile(event, sportProfile));
 
   return Math.round(basePoints * getThresholdScoreMultiplier(threshold));
+}
+
+function getRiskLevelLabel(riskLevel: RiskLevel): string {
+  if (riskLevel >= 4) {
+    return "High Risk";
+  }
+
+  if (riskLevel <= 2) {
+    return "Low Risk";
+  }
+
+  return "Medium Risk";
 }
 
 function moveItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
@@ -184,13 +195,14 @@ function generateCardEvents(
   teamNames: Record<TeamKey, string>,
   sportProfile: SportProfileKey,
 ): CardBuilderEvent[] {
-  return chooseRandomEvents(eventsPerCard, {
+  return chooseRiskCalibratedCardCells(eventsPerCard, {
     mode: mapPlayModeToGameMode(mode),
     riskLevel,
     uniqueByEventId: true,
     includeGameScopedEvents: teamScope === "both_teams",
     profile: sportProfile,
-  }).map((event, index) => {
+  }).map((cell, index) => {
+    const event = cell.event;
     const cardTeamKey = resolveTeamKey(teamScope, event, index);
 
     return {
@@ -198,7 +210,7 @@ function generateCardEvents(
       label: getDisplayLabel(event),
       shortLabel: getDisplayLabel(event),
       cardTeamKey,
-      threshold: 1,
+      threshold: cell.threshold,
     };
   });
 }
@@ -251,14 +263,11 @@ export function CardBuilderPanel({
   const isTemporarilyAccepted = isAccepted && gameStatus === "lobby";
   const shouldRenderLockedPreview = isPermanentlyLocked || isTemporarilyAccepted;
 
-  const cardSummary = useMemo(
-    () => summarizeCardPoints(cardEvents, sportProfile),
+  const cardTotalPoints = useMemo(
+    () => cardEvents.reduce((sum, event) => sum + getThresholdPreviewPoints(event, sportProfile), 0),
     [cardEvents, sportProfile],
   );
-  const cardRiskLabel = useMemo(
-    () => estimateCardRiskLabel(cardEvents, sportProfile),
-    [cardEvents, sportProfile],
-  );
+  const cardRiskLabel = useMemo(() => getRiskLevelLabel(riskLevel), [riskLevel]);
 
   const addableEvents = useMemo<AddableEvent[]>(() => {
     const modeEvents = getEventsForMode(mapPlayModeToGameMode(mode), sportProfile);
@@ -274,6 +283,7 @@ export function CardBuilderPanel({
               teamName: teamNames[teamKey],
               cardTeamKey: teamKey,
               groupLabel: `${teamNames[teamKey]} events`,
+              basePoints: getEventPointsForProfile(event, sportProfile),
               event,
             });
           }
@@ -287,6 +297,7 @@ export function CardBuilderPanel({
           teamName: teamNames[scopedTeam],
           cardTeamKey: scopedTeam,
           groupLabel: `${teamNames[scopedTeam]} events`,
+          basePoints: getEventPointsForProfile(event, sportProfile),
           event,
         });
         continue;
@@ -298,6 +309,7 @@ export function CardBuilderPanel({
         teamName: null,
         cardTeamKey: null,
         groupLabel: "Neutral events",
+        basePoints: getEventPointsForProfile(event, sportProfile),
         event,
       });
     }
@@ -312,6 +324,8 @@ export function CardBuilderPanel({
     return items.sort((a, b) => {
       const groupDelta = groupOrder(a.groupLabel) - groupOrder(b.groupLabel);
       if (groupDelta !== 0) return groupDelta;
+      const basePointDelta = a.basePoints - b.basePoints;
+      if (basePointDelta !== 0) return basePointDelta;
       return a.eventName.localeCompare(b.eventName);
     });
   }, [mode, teamScope, teamNames, sportProfile]);
@@ -765,7 +779,7 @@ export function CardBuilderPanel({
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Card Builder</p>
         <h2 className="text-2xl font-semibold text-slate-900">Build card</h2>
         <p className="text-xs text-slate-600">
-          {mode === "streak" ? "Streak order" : "Blackout"} • Risk {riskLevel}/5 • {Math.round(cardSummary.totalBasePoints)} raw pts • {endCondition === "FIRST_COMPLETION" ? "auto-ends on first Bingra (host can also end manually)" : "host ends game"}
+          {mode === "streak" ? "Streak order" : "Blackout"} • Risk {riskLevel}/5 • {cardTotalPoints} card pts • {endCondition === "FIRST_COMPLETION" ? "auto-ends on first Bingra (host can also end manually)" : "host ends game"}
         </p>
         <p className="text-xs text-slate-500">
           Bingra = full card completion and applies a 2x multiplier to total raw points at game end.
@@ -790,7 +804,7 @@ export function CardBuilderPanel({
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Card points</p>
-            <p className="text-lg font-semibold text-slate-900">{Math.round(cardSummary.totalBasePoints)} pts</p>
+            <p className="text-lg font-semibold text-slate-900">{cardTotalPoints} pts</p>
             <p className="text-xs text-slate-500">{cardRiskLabel}</p>
           </div>
         </div>
@@ -1002,7 +1016,7 @@ export function CardBuilderPanel({
                                 {event.teamName && (
                                   <p className="text-[11px] text-slate-500">{event.teamName}</p>
                                 )}
-                                <p className="text-xs text-slate-500">{getEventPointsForProfile(event.event, sportProfile)} pts</p>
+                                <p className="text-xs text-slate-500">{event.basePoints} pts</p>
                               </div>
                               <span className="rounded-2xl bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm">
                                 {alreadyOnCard ? "Added" : isExpanded ? "Hide" : "Choose"}

@@ -148,7 +148,7 @@ export function EndGameSaveStatsPrompt({
 
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <AuthDialog
-                label="Continue with email"
+                label="Sign in"
                 nextPath={`/g/${slug}/play`}
                 linkPlayerId={playerId}
                 emphasis="prominent"

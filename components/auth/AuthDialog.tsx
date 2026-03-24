@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
+import { PhoneAuthForm } from "./PhoneAuthForm";
 
 type AuthDialogProps = {
   label?: string;
@@ -32,16 +32,13 @@ function buildAuthCallbackUrl(nextPath: string, linkPlayerId?: string): string {
 }
 
 export function AuthDialog({
-  label = "Continue with email",
+  label = "Sign in",
   nextPath,
   linkPlayerId,
   emphasis = "subtle",
 }: AuthDialogProps) {
-  // Temporary local-dev toggle for Twilio phone-consent page setup.
-  const isPhoneOtpDevEnabled =
-    process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_ENABLE_PHONE_OTP_DEV === "true";
-
   const [isOpen, setIsOpen] = useState(false);
+  const [method, setMethod] = useState<"email" | "phone">("email");
   const [email, setEmail] = useState("");
   const [pendingMagicLink, setPendingMagicLink] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -57,6 +54,7 @@ export function AuthDialog({
 
   const open = () => {
     setIsOpen(true);
+    setMethod("email");
     setMessage(null);
     setError(null);
   };
@@ -124,43 +122,69 @@ export function AuthDialog({
               Guest play stays available. Sign in to save stats and unlock history.
             </p>
 
-            {/*
-              TODO(phase-3-phone-auth):
-              - A single Supabase user may have multiple credentials (email + phone).
-              - Prefer authenticated "add phone" / identity-linking flows so both credentials map
-                to one auth.users.id and one profile, instead of creating a second account.
-            */}
+            <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setMethod("email");
+                  setMessage(null);
+                  setError(null);
+                }}
+                className={`inline-flex h-9 flex-1 items-center justify-center rounded-lg px-3 text-sm font-semibold transition ${
+                  method === "email"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-600 hover:bg-white/70 hover:text-slate-800"
+                }`}
+              >
+                Continue with email
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMethod("phone");
+                  setMessage(null);
+                  setError(null);
+                }}
+                className={`inline-flex h-9 flex-1 items-center justify-center rounded-lg px-3 text-sm font-semibold transition ${
+                  method === "phone"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-600 hover:bg-white/70 hover:text-slate-800"
+                }`}
+              >
+                Continue with phone
+              </button>
+            </div>
 
-            <p className="mt-4 text-sm text-slate-600">
-              Enter your email and we&apos;ll send you a secure login link.
-            </p>
-            <input
-              id="magic-link-email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-slate-400"
-            />
-            <button
-              type="button"
-              onClick={handleMagicLink}
-              disabled={pendingMagicLink}
-              className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
-            >
-              {pendingMagicLink ? "Sending..." : "Continue with email"}
-            </button>
-
-            {isPhoneOtpDevEnabled && (
+            {method === "email" ? (
               <>
-                <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">or</p>
-                <Link
-                  href="/auth/phone"
-                  className="mt-2 inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                <p className="mt-4 text-sm text-slate-600">
+                  Enter your email and we&apos;ll send you a secure login link.
+                </p>
+                <input
+                  id="magic-link-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleMagicLink}
+                  disabled={pendingMagicLink}
+                  className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
                 >
-                  Continue with phone (dev only)
-                </Link>
+                  {pendingMagicLink ? "Sending..." : "Send magic link"}
+                </button>
               </>
+            ) : (
+              <PhoneAuthForm
+                nextPath={nextPath}
+                linkPlayerId={linkPlayerId}
+                onUseEmailInstead={() => {
+                  setMethod("email");
+                }}
+              />
             )}
 
             {message && <p className="mt-3 text-xs font-medium text-emerald-700">{message}</p>}

@@ -10,6 +10,13 @@ import {
   getSportProfileDefinition,
   type SportProfileKey,
 } from "./sport-profiles";
+import {
+  RISK_TARGETS,
+  estimateCardCompletionProbability,
+  generateCardForRisk,
+  getEventBaseProbability as getEventBaseProbabilityFromModel,
+  getThresholdProbability,
+} from "./probability";
 
 export type TeamKey = "A" | "B";
 export type TeamSelection = TeamKey | null;
@@ -115,6 +122,95 @@ export function getEventRarityForProfile(
 
 export function getEventMaxThreshold(event: GameEventType): number {
   return typeof event.maxThreshold === "number" ? event.maxThreshold : 5;
+}
+
+export type CardProbabilityCell = {
+  event: GameEventType;
+  threshold: number;
+};
+
+export function getRiskCompletionProbabilityBand(riskLevel: RiskLevel): {
+  min: number;
+  max: number;
+} {
+  return RISK_TARGETS[riskLevel];
+}
+
+export function getEventBaseProbability(
+  event: GameEventType,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): number {
+  return getEventBaseProbabilityFromModel(event, profile);
+}
+
+export function getEventThresholdProbability(
+  event: GameEventType,
+  threshold: number,
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): number {
+  return getThresholdProbability(event, threshold, profile);
+}
+
+export function calculateCardCompletionProbability(
+  cells: CardProbabilityCell[],
+  profile: SportProfileKey = DEFAULT_SPORT_PROFILE,
+): number {
+  return estimateCardCompletionProbability(cells, profile);
+}
+
+export function chooseRiskCalibratedCardCells(
+  count: number,
+  options?: {
+    mode?: GameMode;
+    riskLevel?: RiskLevel;
+    uniqueByEventId?: boolean;
+    includeGameScopedEvents?: boolean;
+    profile?: SportProfileKey;
+  },
+): CardProbabilityCell[] {
+  return generateCardForRisk(options?.profile ?? DEFAULT_SPORT_PROFILE, options?.riskLevel ?? 3, {
+    count,
+    mode: options?.mode,
+    uniqueByEventId: options?.uniqueByEventId,
+    includeGameScopedEvents: options?.includeGameScopedEvents,
+  });
+}
+
+export function chooseRiskAdjustedThresholdForEvent(
+  event: GameEventType,
+  riskLevel: RiskLevel,
+): number {
+  const maxThreshold = Math.max(1, getEventMaxThreshold(event));
+
+  if (maxThreshold <= 1) {
+    return 1;
+  }
+
+  const normalizedRisk = Math.min(Math.max(riskLevel, 1), 5) as RiskLevel;
+  const band = getRiskCompletionProbabilityBand(normalizedRisk);
+  const targetPerCellProbability = Math.pow((band.min + band.max) / 2, 1 / 5);
+  const baseProbability = getEventBaseProbability(event);
+  const targetThreshold = Math.min(
+    maxThreshold,
+    Math.max(1, Math.log(targetPerCellProbability) / Math.log(baseProbability)),
+  );
+
+  const weightedThresholds: number[] = [];
+
+  for (let threshold = 1; threshold <= maxThreshold; threshold += 1) {
+    const distance = Math.abs(threshold - targetThreshold);
+    const copies = Math.max(1, Math.round(8 - distance * 3));
+
+    for (let index = 0; index < copies; index += 1) {
+      weightedThresholds.push(threshold);
+    }
+  }
+
+  return weightedThresholds[Math.floor(Math.random() * weightedThresholds.length)] ?? 1;
+}
+
+export function chooseRandomThresholdForEvent(event: GameEventType): number {
+  return chooseRiskAdjustedThresholdForEvent(event, 3);
 }
 
 export function getEnabledEvents(): GameEventType[] {

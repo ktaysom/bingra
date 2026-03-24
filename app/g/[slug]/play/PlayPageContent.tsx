@@ -7,7 +7,7 @@ import { PlayRealtimeBridgeMount } from "./PlayRealtimeBridgeMount";
 import { LeaderboardCardPreview } from "./LeaderboardCardPreview";
 import { mapPlayModeToGameMode } from "../../../../lib/bingra/types";
 import {
-  chooseRandomEvents,
+  chooseRiskCalibratedCardCells,
   getEventPointsForProfile,
   getEventById,
   getEventRarityForProfile,
@@ -175,13 +175,14 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     game.team_a_name?.trim() && game.team_b_name?.trim()
       ? `${game.team_a_name} vs ${game.team_b_name}`
       : game.title?.trim() || "Untitled game";
-  const initialCardEvents = chooseRandomEvents(game.events_per_card, {
+  const initialCardEvents = chooseRiskCalibratedCardCells(game.events_per_card, {
     mode: mapPlayModeToGameMode(playMode),
     riskLevel: initialRiskLevel,
     uniqueByEventId: true,
     includeGameScopedEvents: game.team_scope === "both_teams",
     profile: sportProfile,
-  }).map((event, index) => {
+  }).map((cell, index) => {
+    const event = cell.event;
     const teamKey: TeamKey | null =
       event.teamScope === "team"
         ? game.team_scope === "team_a_only"
@@ -198,7 +199,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       label: teamKey ? `${teamNames[teamKey]}: ${event.label}` : event.label,
       shortLabel: teamKey ? `${teamNames[teamKey]}: ${event.shortLabel}` : event.shortLabel,
       cardTeamKey: teamKey,
-      threshold: 1,
+      threshold: cell.threshold,
     };
   });
 

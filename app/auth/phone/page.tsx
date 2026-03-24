@@ -1,34 +1,40 @@
-import { AuthDialog } from "../../../components/auth/AuthDialog";
 import { PhoneAuthForm } from "../../../components/auth/PhoneAuthForm";
+import Link from "next/link";
 
-export default function PhoneAuthPage() {
-  // Temporary local-dev gate for Twilio consent-page setup.
-  const isPhoneOtpDevEnabled =
-    process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_ENABLE_PHONE_OTP_DEV === "true";
+function normalizeNextPath(input: string | string[] | undefined): string {
+  if (typeof input !== "string" || !input.startsWith("/")) {
+    return "/me";
+  }
+
+  return input;
+}
+
+type PhoneAuthPageProps = {
+  searchParams?: Promise<{
+    next?: string;
+    link_player_id?: string;
+  }>;
+};
+
+export default async function PhoneAuthPage({ searchParams }: PhoneAuthPageProps) {
+  const params = searchParams ? await searchParams : undefined;
+  const nextPath = normalizeNextPath(params?.next);
+  const linkPlayerId = params?.link_player_id;
 
   return (
     <main className="mx-auto flex min-h-[70vh] w-full max-w-2xl flex-col justify-center px-4 py-12 sm:px-6">
       <section className="rounded-2xl bg-white/90 p-6 shadow-sm sm:p-8">
-        {isPhoneOtpDevEnabled ? (
-          <>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Continue with phone</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Local dev preview for phone OTP and Twilio consent-page setup.
-            </p>
-            <PhoneAuthForm />
-          </>
-        ) : (
-          <>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Continue with email</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Phone sign-in is temporarily unavailable. Enter your email and we&apos;ll send you a secure login link.
-            </p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Continue with phone</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Enter your phone number and we&apos;ll text you a secure one-time code.
+        </p>
 
-            <div className="mt-5">
-              <AuthDialog label="Continue with email" nextPath="/me" emphasis="prominent" />
-            </div>
-          </>
-        )}
+        <PhoneAuthForm nextPath={nextPath} linkPlayerId={linkPlayerId} />
+
+        <p className="mt-4 text-xs text-slate-500">
+          Prefer email? Open the <Link href="/me" className="underline">sign-in dialog</Link> and choose Continue with
+          email.
+        </p>
       </section>
     </main>
   );

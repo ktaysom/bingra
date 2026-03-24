@@ -6,6 +6,11 @@ import { createGameAction, CreateGameFormState } from "../actions/create-game";
 import { generateGameName } from "../../lib/bingra/game-name-generator";
 import { AuthEntryPoint } from "../../components/auth/AuthEntryPoint";
 import {
+  chooseRandomEvents,
+  chooseRandomThresholdForEvent,
+  type TeamKey,
+} from "../../lib/bingra/event-logic";
+import {
   DEFAULT_SPORT_PROFILE,
   SPORT_PROFILES,
   getSportProfileDefinition,
@@ -14,6 +19,7 @@ import {
   type SportLevel,
   type SportProfileKey,
 } from "../../lib/bingra/sport-profiles";
+import { mapPlayModeToGameMode } from "../../lib/bingra/types";
 
 const initialState: CreateGameFormState = {};
 
@@ -193,189 +199,46 @@ export default function CreatePage() {
         ? `${safeTeamBName} only`
         : "Both teams";
 
-  const previewPool = useMemo(() => {
-    if (selectedSport === "soccer") {
-      if (completionMode === "streak") {
-        if (teamScope === "team_a_only") {
-          return [
-            "Shot off target",
-            "Shot on goal - save",
-            "Live ball turnover",
-            "Out of bounds - throw-in",
-            "Foul",
-            "Out of bounds - corner",
-            "Yellow card",
-            "Goalie punt past midfield",
-            "Shot on goal - goal",
-          ];
-        }
-
-        if (teamScope === "team_b_only") {
-          return [
-            "Out of bounds - throw-in",
-            "Live ball turnover",
-            "Shot off target",
-            "Shot on goal - blocked",
-            "Foul",
-            "Out of bounds - goal kick",
-            "Yellow card",
-            "Shot on goal - goal",
-            "Handball",
-          ];
-        }
-
-        return [
-          "Shot off target",
-          "Live ball turnover",
-          "Out of bounds - throw-in",
-          "Foul",
-          "Shot on goal - save",
-          "Out of bounds - corner",
-          "Yellow card",
-          "Shot on goal - goal",
-          "Handball",
-        ];
-      }
-
-      if (teamScope === "team_a_only") {
-        return [
-          "Shot off target",
-          "Live ball turnover",
-          "Out of bounds - throw-in",
-          "Foul",
-          "Shot on goal - save",
-          "Out of bounds - corner",
-          "Yellow card",
-          "Goalie punt past midfield",
-          "Shot on goal - goal",
-        ];
-      }
-
-      if (teamScope === "team_b_only") {
-        return [
-          "Out of bounds - goal kick",
-          "Shot on goal - blocked",
-          "Live ball turnover",
-          "Shot off target",
-          "Foul",
-          "Out of bounds - corner",
-          "Handball",
-          "Yellow card",
-          "Shot on goal - goal",
-        ];
-      }
-
-      return [
-        "Shot off target",
-        "Live ball turnover",
-        "Out of bounds - throw-in",
-        "Foul",
-        "Shot on goal - save",
-        "Out of bounds - corner",
-        "Yellow card",
-        "Shot on goal - goal",
-        "Handball",
-      ];
-    }
-
-    if (completionMode === "streak") {
-      if (teamScope === "team_a_only") {
-        return [
-          "3PT made",
-          "Steal",
-          "Assist",
-          "Block",
-          "Bonus FT made",
-          "Offensive rebound",
-          "Charge taken",
-          "Banked shot",
-          "And-1",
-          "Jump ball won",
-          "Fast break finish",
-        ];
-      }
-
-      if (teamScope === "team_b_only") {
-        return [
-          "Defensive rebound",
-          "Block",
-          "Steal",
-          "3PT made",
-          "Free throw made",
-          "Fast break finish",
-          "Charge taken",
-          "Banked shot",
-          "And-1",
-          "Jump ball won",
-          "Bonus FT made",
-        ];
-      }
-
-      return [
-        "3PT made",
-        "Steal",
-        "Assist",
-        "Bonus FT made",
-        "Defensive rebound",
-        "Blocked shot",
-        "Charge taken",
-        "Banked shot",
-        "And-1",
-        "Jump ball",
-        "Free throw made",
-      ];
-    }
-
-    if (teamScope === "team_a_only") {
-      return [
-        "3PT made",
-        "Steal",
-        "Defensive rebound",
-        "Bonus FT made",
-        "Blocked shot",
-        "Charge taken",
-        "Assist",
-        "Banked shot",
-        "And-1",
-        "Jump ball won",
-        "Fast break finish",
-      ];
-    }
-
-    if (teamScope === "team_b_only") {
-      return [
-        "Blocked shot",
-        "Fast break finish",
-        "Free throw made",
-        "3PT made",
-        "Steal",
-        "Offensive rebound",
-        "Assist",
-        "Charge taken",
-        "And-1",
-        "Jump ball won",
-        "Banked shot",
-      ];
-    }
-
-    return [
-      "3PT made",
-      "Assist",
-      "Steal",
-      "Bonus FT made",
-      "Rebound",
-      "Jump ball",
-      "Blocked shot",
-      "Charge taken",
-      "Free throw made",
-      "Banked shot",
-      "And-1",
-    ];
-  }, [completionMode, selectedSport, teamScope]);
-
   const previewCardEvents = useMemo(() => {
-    return Array.from({ length: eventsPerCard }, (_, index) => previewPool[index % previewPool.length]);
-  }, [eventsPerCard, previewPool]);
+    const resolveTeamKey = (teamScoped: boolean, index: number): TeamKey | null => {
+      if (!teamScoped) {
+        return null;
+      }
+
+      if (teamScope === "team_a_only") {
+        return "A";
+      }
+
+      if (teamScope === "team_b_only") {
+        return "B";
+      }
+
+      return index % 2 === 0 ? "A" : "B";
+    };
+
+    const randomEvents = chooseRandomEvents(eventsPerCard, {
+      mode: mapPlayModeToGameMode(legacyMode),
+      riskLevel: 3,
+      uniqueByEventId: true,
+      includeGameScopedEvents: teamScope === "both_teams",
+      profile: sportProfile,
+    });
+
+    if (randomEvents.length === 0) {
+      return [];
+    }
+
+    return Array.from({ length: eventsPerCard }, (_, index) => {
+      const event = randomEvents[index % randomEvents.length];
+      const threshold = chooseRandomThresholdForEvent(event);
+      const teamKey = resolveTeamKey(event.teamScope === "team", index);
+      const teamPrefix = teamKey
+        ? `${teamKey === "A" ? safeTeamAName : safeTeamBName}: `
+        : "";
+
+      return `${threshold}+ ${teamPrefix}${event.label}`;
+    });
+  }, [eventsPerCard, legacyMode, safeTeamAName, safeTeamBName, sportProfile, teamScope]);
 
   return (
     <main className="min-h-screen text-[#2f2925]">
