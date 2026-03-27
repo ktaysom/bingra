@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
-import { PhoneAuthForm } from "./PhoneAuthForm";
 
 type AuthDialogProps = {
   label?: string;
@@ -38,7 +37,6 @@ export function AuthDialog({
   emphasis = "subtle",
 }: AuthDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [method, setMethod] = useState<"email" | "phone">("email");
   const [email, setEmail] = useState("");
   const [pendingMagicLink, setPendingMagicLink] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -54,7 +52,6 @@ export function AuthDialog({
 
   const open = () => {
     setIsOpen(true);
-    setMethod("email");
     setMessage(null);
     setError(null);
   };
@@ -122,70 +119,25 @@ export function AuthDialog({
               Guest play stays available. Sign in to save stats and unlock history.
             </p>
 
-            <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setMethod("email");
-                  setMessage(null);
-                  setError(null);
-                }}
-                className={`inline-flex h-9 flex-1 items-center justify-center rounded-lg px-3 text-sm font-semibold transition ${
-                  method === "email"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:bg-white/70 hover:text-slate-800"
-                }`}
-              >
-                Continue with email
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMethod("phone");
-                  setMessage(null);
-                  setError(null);
-                }}
-                className={`inline-flex h-9 flex-1 items-center justify-center rounded-lg px-3 text-sm font-semibold transition ${
-                  method === "phone"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:bg-white/70 hover:text-slate-800"
-                }`}
-              >
-                Continue with phone
-              </button>
-            </div>
-
-            {method === "email" ? (
-              <>
-                <p className="mt-4 text-sm text-slate-600">
-                  Enter your email and we&apos;ll send you a secure login link.
-                </p>
-                <input
-                  id="magic-link-email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
-                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-slate-400"
-                />
-                <button
-                  type="button"
-                  onClick={handleMagicLink}
-                  disabled={pendingMagicLink}
-                  className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                >
-                  {pendingMagicLink ? "Sending..." : "Send magic link"}
-                </button>
-              </>
-            ) : (
-              <PhoneAuthForm
-                nextPath={nextPath}
-                linkPlayerId={linkPlayerId}
-                onUseEmailInstead={() => {
-                  setMethod("email");
-                }}
-              />
-            )}
+            <p className="mt-4 text-sm text-slate-600">
+              Enter your email and we&apos;ll send you a secure login link.
+            </p>
+            <input
+              id="magic-link-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-slate-400"
+            />
+            <button
+              type="button"
+              onClick={handleMagicLink}
+              disabled={pendingMagicLink}
+              className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              {pendingMagicLink ? "Sending..." : "Send magic link"}
+            </button>
 
             {message && <p className="mt-3 text-xs font-medium text-emerald-700">{message}</p>}
             {error && <p className="mt-3 text-xs font-medium text-red-600">{error}</p>}

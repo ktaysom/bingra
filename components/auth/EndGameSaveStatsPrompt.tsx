@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AuthDialog } from "./AuthDialog";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 
@@ -21,6 +21,11 @@ export function EndGameSaveStatsPrompt({
   const [mode, setMode] = useState<"hidden" | "guest" | "saved">("hidden");
   const [isLoading, setIsLoading] = useState(true);
   const [accountLabel, setAccountLabel] = useState<string | null>(null);
+  const dismissedRef = useRef(dismissed);
+
+  useEffect(() => {
+    dismissedRef.current = dismissed;
+  }, [dismissed]);
 
   useEffect(() => {
     let mounted = true;
@@ -76,14 +81,23 @@ export function EndGameSaveStatsPrompt({
       }
 
       if (data.user?.id) {
-        setAccountLabel(await resolveAccountLabel(data.user));
-        setMode("saved");
+        const label = await resolveAccountLabel(data.user);
+        if (!mounted) {
+          return;
+        }
+
+        if (dismissedRef.current) {
+          setMode("hidden");
+        } else {
+          setAccountLabel(label);
+          setMode("saved");
+        }
 
         setIsLoading(false);
         return;
       }
 
-      setMode(dismissed ? "hidden" : "guest");
+      setMode(dismissedRef.current ? "hidden" : "guest");
 
       setIsLoading(false);
     };
@@ -99,10 +113,19 @@ export function EndGameSaveStatsPrompt({
         }
 
         if (session?.user?.id) {
-          setAccountLabel(await resolveAccountLabel(session.user));
-          setMode("saved");
+          const label = await resolveAccountLabel(session.user);
+          if (!mounted) {
+            return;
+          }
+
+          if (dismissedRef.current) {
+            setMode("hidden");
+          } else {
+            setAccountLabel(label);
+            setMode("saved");
+          }
         } else {
-          setMode(dismissed ? "hidden" : "guest");
+          setMode(dismissedRef.current ? "hidden" : "guest");
         }
       })();
     });
@@ -111,7 +134,7 @@ export function EndGameSaveStatsPrompt({
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [dismissed, gameId, isFinished, playerId]);
+  }, [gameId, isFinished, playerId]);
 
   if (!isFinished || isLoading || mode === "hidden") {
     return null;
