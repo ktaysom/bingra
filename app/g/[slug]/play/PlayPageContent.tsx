@@ -647,6 +647,9 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
           rawPoints: entry.raw_points,
           hasBingra: entry.has_bingra,
         }))}
+        topPlayerCards={playerCardPreviews}
+        teamNames={teamNames}
+        mode={playMode === "streak" ? "streak" : "blackout"}
         scoreboardTargetId={scoreboardTargetId}
       />
 

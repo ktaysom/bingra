@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { AuthDialog } from "./AuthDialog";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 
@@ -9,6 +10,22 @@ type EndGameSaveStatsPromptProps = {
   slug: string;
   playerId: string;
   isFinished: boolean;
+};
+
+type CareerStatsSnapshot = {
+  gamesPlayed: number;
+  wins: number;
+  bingras: number;
+  bestFinish: number | null;
+  bestScore: number | null;
+  milestones: string[];
+};
+
+type ProfileGameResultRow = {
+  game_id: string;
+  rank: number;
+  bingra_completed: boolean;
+  final_score: number;
 };
 
 export function EndGameSaveStatsPrompt({
@@ -21,6 +38,8 @@ export function EndGameSaveStatsPrompt({
   const [mode, setMode] = useState<"hidden" | "guest" | "saved">("hidden");
   const [isLoading, setIsLoading] = useState(true);
   const [accountLabel, setAccountLabel] = useState<string | null>(null);
+  const [careerStats, setCareerStats] = useState<CareerStatsSnapshot | null>(null);
+  const [isCareerLoading, setIsCareerLoading] = useState(false);
   const dismissedRef = useRef(dismissed);
 
   useEffect(() => {
@@ -37,6 +56,113 @@ export function EndGameSaveStatsPrompt({
     }
 
     const supabase = createSupabaseBrowserClient();
+
+    const countWins = (rows: ProfileGameResultRow[]) => rows.filter((row) => row.rank === 1).length;
+    const countBingras = (rows: ProfileGameResultRow[]) =>
+      rows.filter((row) => row.bingra_completed).length;
+
+    const buildMilestones = (beforeRows: ProfileGameResultRow[], afterRows: ProfileGameResultRow[]) => {
+      const beforeGamesPlayed = beforeRows.length;
+      const afterGamesPlayed = afterRows.length;
+      const beforeWins = countWins(beforeRows);
+      const afterWins = countWins(afterRows);
+      const beforeBingras = countBingras(beforeRows);
+      const afterBingras = countBingras(afterRows);
+
+      const milestones: string[] = [];
+
+      if (beforeGamesPlayed < 1 && afterGamesPlayed >= 1) {
+        milestones.push("First game played");
+      }
+
+      if (beforeWins < 1 && afterWins >= 1) {
+        milestones.push("First win");
+      }
+
+      if (beforeBingras < 1 && afterBingras >= 1) {
+        milestones.push("First Bingra");
+      }
+
+      for (const threshold of [5, 10, 25]) {
+        if (beforeGamesPlayed < threshold && afterGamesPlayed >= threshold) {
+          milestones.push(`${threshold} games played`);
+        }
+      }
+
+      return milestones;
+    };
+
+    const hydrateCareerStats = async (userId: string) => {
+      setIsCareerLoading(true);
+
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("id")
+          .or(`id.eq.${userId},auth_user_id.eq.${userId}`)
+          .maybeSingle<{ id: string }>();
+
+        const profileId = profile?.id ?? userId;
+
+        const [statsResult, gameResultsResult] = await Promise.all([
+          supabase
+            .from("profile_stats")
+            .select("games_played, games_won, bingras_completed, best_finish_position")
+            .eq("profile_id", profileId)
+            .maybeSingle<{
+              games_played: number;
+              games_won: number;
+              bingras_completed: number;
+              best_finish_position: number | null;
+            }>(),
+          supabase
+            .from("profile_game_results")
+            .select("game_id, rank, bingra_completed, final_score")
+            .eq("profile_id", profileId)
+            .order("finished_at", { ascending: true })
+            .returns<ProfileGameResultRow[]>(),
+        ]);
+
+        if (!mounted) {
+          return;
+        }
+
+        if (statsResult.error || gameResultsResult.error) {
+          setCareerStats(null);
+          return;
+        }
+
+        const gameRows = gameResultsResult.data ?? [];
+        const currentGameIncluded = gameRows.some((row) => row.game_id === gameId);
+
+        if (!currentGameIncluded) {
+          setCareerStats(null);
+          return;
+        }
+
+        const beforeRows = gameRows.filter((row) => row.game_id !== gameId);
+        const bestScore = gameRows.reduce<number | null>((best, row) => {
+          if (best == null) {
+            return row.final_score;
+          }
+
+          return Math.max(best, row.final_score);
+        }, null);
+
+        setCareerStats({
+          gamesPlayed: statsResult.data?.games_played ?? gameRows.length,
+          wins: statsResult.data?.games_won ?? countWins(gameRows),
+          bingras: statsResult.data?.bingras_completed ?? countBingras(gameRows),
+          bestFinish: statsResult.data?.best_finish_position ?? null,
+          bestScore,
+          milestones: buildMilestones(beforeRows, gameRows),
+        });
+      } finally {
+        if (mounted) {
+          setIsCareerLoading(false);
+        }
+      }
+    };
 
     const resolveAccountLabel = async (user: {
       id?: string;
@@ -91,6 +217,7 @@ export function EndGameSaveStatsPrompt({
         } else {
           setAccountLabel(label);
           setMode("saved");
+          void hydrateCareerStats(data.user.id);
         }
 
         setIsLoading(false);
@@ -123,9 +250,12 @@ export function EndGameSaveStatsPrompt({
           } else {
             setAccountLabel(label);
             setMode("saved");
+            void hydrateCareerStats(session.user.id);
           }
         } else {
           setMode(dismissedRef.current ? "hidden" : "guest");
+          setCareerStats(null);
+          setIsCareerLoading(false);
         }
       })();
     });
@@ -154,7 +284,67 @@ export function EndGameSaveStatsPrompt({
               <p className="mt-2 text-xs font-semibold text-slate-500">Signed in as {accountLabel}</p>
             ) : null}
 
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Career snapshot</p>
+              {isCareerLoading ? (
+                <p className="mt-2 text-xs text-slate-600">Updating your career with this game...</p>
+              ) : careerStats ? (
+                <>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <dt className="text-slate-500">Games</dt>
+                      <dd className="font-semibold text-slate-900">{careerStats.gamesPlayed}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Wins</dt>
+                      <dd className="font-semibold text-slate-900">{careerStats.wins}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Bingras</dt>
+                      <dd className="font-semibold text-slate-900">{careerStats.bingras}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Best finish</dt>
+                      <dd className="font-semibold text-slate-900">
+                        {careerStats.bestFinish != null ? `#${careerStats.bestFinish}` : "—"}
+                      </dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-slate-500">Best score</dt>
+                      <dd className="font-semibold text-slate-900">
+                        {careerStats.bestScore != null ? careerStats.bestScore : "—"}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {careerStats.milestones.length > 0 ? (
+                    <div className="mt-2">
+                      <p className="text-[11px] font-semibold text-violet-700">New milestone{careerStats.milestones.length > 1 ? "s" : ""}!</p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {careerStats.milestones.map((milestone) => (
+                          <span
+                            key={milestone}
+                            className="inline-flex rounded-full border border-violet-200 bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700"
+                          >
+                            🎉 {milestone}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p className="mt-2 text-xs text-slate-600">Career stats are syncing. Check your account page in a moment.</p>
+              )}
+            </div>
+
             <div className="mt-5 flex flex-wrap items-center gap-2">
+              <Link
+                href="/create"
+                className="inline-flex h-10 items-center justify-center rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white transition hover:bg-violet-500"
+              >
+                Create your own Bingra
+              </Link>
               <button
                 type="button"
                 onClick={() => {
@@ -181,6 +371,12 @@ export function EndGameSaveStatsPrompt({
                 linkPlayerId={playerId}
                 emphasis="prominent"
               />
+              <Link
+                href="/create"
+                className="inline-flex h-10 items-center justify-center rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white transition hover:bg-violet-500"
+              >
+                Create your own Bingra
+              </Link>
               <button
                 type="button"
                 onClick={() => {
