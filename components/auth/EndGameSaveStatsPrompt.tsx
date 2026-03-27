@@ -96,11 +96,13 @@ export function EndGameSaveStatsPrompt({
       setIsCareerLoading(true);
 
       try {
-        const { data: profile } = await supabase
+        const profileResult = await supabase
           .from("profiles")
           .select("id")
           .or(`id.eq.${userId},auth_user_id.eq.${userId}`)
-          .maybeSingle<{ id: string }>();
+          .maybeSingle();
+
+        const profile = profileResult.data as { id: string } | null;
 
         const profileId = profile?.id ?? userId;
 
@@ -109,19 +111,21 @@ export function EndGameSaveStatsPrompt({
             .from("profile_stats")
             .select("games_played, games_won, bingras_completed, best_finish_position")
             .eq("profile_id", profileId)
-            .maybeSingle<{
-              games_played: number;
-              games_won: number;
-              bingras_completed: number;
-              best_finish_position: number | null;
-            }>(),
+            .maybeSingle(),
           supabase
             .from("profile_game_results")
             .select("game_id, rank, bingra_completed, final_score")
             .eq("profile_id", profileId)
-            .order("finished_at", { ascending: true })
-            .returns<ProfileGameResultRow[]>(),
+            .order("finished_at", { ascending: true }),
         ]);
+
+        const statsData = statsResult.data as {
+          games_played: number;
+          games_won: number;
+          bingras_completed: number;
+          best_finish_position: number | null;
+        } | null;
+        const gameRows = (gameResultsResult.data as ProfileGameResultRow[] | null) ?? [];
 
         if (!mounted) {
           return;
@@ -132,7 +136,6 @@ export function EndGameSaveStatsPrompt({
           return;
         }
 
-        const gameRows = gameResultsResult.data ?? [];
         const currentGameIncluded = gameRows.some((row) => row.game_id === gameId);
 
         if (!currentGameIncluded) {
@@ -150,10 +153,10 @@ export function EndGameSaveStatsPrompt({
         }, null);
 
         setCareerStats({
-          gamesPlayed: statsResult.data?.games_played ?? gameRows.length,
-          wins: statsResult.data?.games_won ?? countWins(gameRows),
-          bingras: statsResult.data?.bingras_completed ?? countBingras(gameRows),
-          bestFinish: statsResult.data?.best_finish_position ?? null,
+          gamesPlayed: statsData?.games_played ?? gameRows.length,
+          wins: statsData?.games_won ?? countWins(gameRows),
+          bingras: statsData?.bingras_completed ?? countBingras(gameRows),
+          bestFinish: statsData?.best_finish_position ?? null,
           bestScore,
           milestones: buildMilestones(beforeRows, gameRows),
         });
