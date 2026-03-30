@@ -50,11 +50,17 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
   const code = requestUrl.searchParams.get("code");
   const tokenHash = requestUrl.searchParams.get("token_hash");
   const otpType = requestUrl.searchParams.get("type") ?? "email";
+  const arrivalMethod: "code" | "token_hash" | "neither" = code
+    ? "code"
+    : tokenHash
+      ? "token_hash"
+      : "neither";
   const redirectUrl = new URL(pendingContext.nextPath, request.url);
   const response = NextResponse.redirect(redirectUrl);
   const linkIntent = readAccountLinkIntentFromRequest(request);
 
   console.info(`[${options.context}] callback reached`, {
+    arrivalMethod,
     hasPendingContext,
     nextPath: pendingContext.nextPath,
     hasLinkPlayerId: Boolean(pendingContext.linkPlayerId),
@@ -87,6 +93,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
 
   if (options.requireCodeExchange) {
     let sessionEstablished = false;
+    let verifiedVia: "code" | "token_hash" | null = null;
 
     if (code) {
       const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -97,6 +104,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
         });
       } else {
         sessionEstablished = true;
+        verifiedVia = "code";
         console.info(`[${options.context}] exchangeCodeForSession succeeded`);
       }
     } else {
@@ -118,6 +126,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
         });
       } else {
         sessionEstablished = true;
+        verifiedVia = "token_hash";
         console.info(`[${options.context}] verifyOtp(token_hash) succeeded`, {
           otpType,
         });
@@ -125,12 +134,20 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
     }
 
     if (!sessionEstablished) {
+      console.warn(`[${options.context}] unable to establish session from callback`, {
+        arrivalMethod,
+      });
       return buildAuthErrorResponse(
         request,
         "We couldn't complete sign-in from that link. Please request a fresh sign-in email or use the email code.",
         pendingContext,
       );
     }
+
+    console.info(`[${options.context}] session established from callback`, {
+      arrivalMethod,
+      verifiedVia,
+    });
   }
 
   const {
@@ -188,6 +205,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
 
   clearAccountLinkIntentCookie(response);
   console.info(`[${options.context}] redirecting to final destination`, {
+    arrivalMethod,
     hasPendingContext,
     finalPath: pendingContext.nextPath,
   });

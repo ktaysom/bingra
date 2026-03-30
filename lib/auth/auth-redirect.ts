@@ -171,6 +171,9 @@ export function buildFinalizePath(params: {
 export function buildAuthConfirmPath(context: PendingAuthContext): string {
   const normalized = normalizePendingAuthContext(context, "/");
   const confirmUrl = new URL("/auth/confirm", "http://localhost");
+  // Keep `type=email` in the callback query so custom token_hash-based email templates
+  // can route directly to a first-class /auth/confirm verification path.
+  confirmUrl.searchParams.set("type", "email");
   confirmUrl.searchParams.set("next", normalized.nextPath);
 
   if (normalized.linkPlayerId) {
