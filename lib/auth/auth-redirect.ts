@@ -7,6 +7,7 @@ export type PendingAuthContext = {
   linkPlayerId?: string;
   expectedLink?: boolean;
   intent?: PostAuthIntent;
+  email?: string;
 };
 
 const PENDING_AUTH_STORAGE_KEY = "bingra.pending-auth-context.v1";
@@ -37,6 +38,7 @@ export function normalizePendingAuthContext(
     linkPlayerId: context?.linkPlayerId,
     expectedLink: Boolean(context?.expectedLink),
     intent: context?.intent,
+    email: context?.email?.trim() || undefined,
   };
 }
 
@@ -48,6 +50,7 @@ export function readPendingAuthContextFromSearchParams(searchParams: URLSearchPa
       playerId: searchParams.get("player_id") ?? undefined,
       linkPlayerId: searchParams.get("link_player_id") ?? undefined,
       expectedLink: searchParams.get("expected_link") === "1",
+      email: searchParams.get("email") ?? undefined,
       intent:
         searchParams.get("auth_intent") === "save_stats" ||
         searchParams.get("auth_intent") === "account_link" ||
@@ -122,7 +125,9 @@ export function savePendingAuthContext(context: PendingAuthContext) {
     createdAt: Date.now(),
   };
 
-  window.localStorage.setItem(PENDING_AUTH_STORAGE_KEY, JSON.stringify(payload));
+  const serialized = JSON.stringify(payload);
+  window.localStorage.setItem(PENDING_AUTH_STORAGE_KEY, serialized);
+  window.sessionStorage.setItem(PENDING_AUTH_STORAGE_KEY, serialized);
 }
 
 export function readPendingAuthContextFromStorage(): PendingAuthContext | null {
@@ -130,7 +135,9 @@ export function readPendingAuthContextFromStorage(): PendingAuthContext | null {
     return null;
   }
 
-  const raw = window.localStorage.getItem(PENDING_AUTH_STORAGE_KEY);
+  const raw =
+    window.localStorage.getItem(PENDING_AUTH_STORAGE_KEY) ||
+    window.sessionStorage.getItem(PENDING_AUTH_STORAGE_KEY);
   if (!raw) {
     return null;
   }
@@ -144,6 +151,7 @@ export function readPendingAuthContextFromStorage(): PendingAuthContext | null {
     // Expire stale contexts after 6 hours.
     if (parsed.createdAt && Date.now() - parsed.createdAt > 6 * 60 * 60 * 1000) {
       window.localStorage.removeItem(PENDING_AUTH_STORAGE_KEY);
+      window.sessionStorage.removeItem(PENDING_AUTH_STORAGE_KEY);
       return null;
     }
 
@@ -159,4 +167,5 @@ export function clearPendingAuthContextFromStorage() {
   }
 
   window.localStorage.removeItem(PENDING_AUTH_STORAGE_KEY);
+  window.sessionStorage.removeItem(PENDING_AUTH_STORAGE_KEY);
 }

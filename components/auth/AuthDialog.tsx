@@ -2,24 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import {
-  buildAuthConfirmPath,
-  buildFinalizePath,
   normalizePendingAuthContext,
-  savePendingAuthContext,
 } from "../../lib/auth/auth-redirect";
-
-const DEFAULT_EMAIL_OTP_LENGTH = 8;
-
-function getExpectedEmailOtpLength(): number {
-  const configured = Number(process.env.NEXT_PUBLIC_EMAIL_OTP_LENGTH);
-  if (Number.isInteger(configured) && configured >= 4 && configured <= 12) {
-    return configured;
-  }
-
-  return DEFAULT_EMAIL_OTP_LENGTH;
-}
+import {
+  getExpectedEmailOtpLength,
+  sendEmailSignInLink,
+  verifyEmailOtpAndGetFinalizePath,
+} from "../../lib/auth/email-auth-client";
 
 type AuthDialogProps = {
   label?: string;
@@ -91,26 +81,17 @@ export function AuthDialog({
     setMessage(null);
 
     try {
-      savePendingAuthContext(pendingContext);
-      const emailRedirectTo = new URL(buildAuthConfirmPath(pendingContext), getAppBaseUrl()).toString();
-
       console.info("[auth/init] starting email link sign-in", {
         nextPath: pendingContext.nextPath,
         hasLinkPlayerId: Boolean(pendingContext.linkPlayerId),
         intent: pendingContext.intent ?? null,
       });
 
-      const supabase = createSupabaseBrowserClient();
-      const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+      await sendEmailSignInLink({
         email: email.trim(),
-        options: {
-          emailRedirectTo,
-        },
+        appBaseUrl: getAppBaseUrl(),
+        pendingContext,
       });
-
-      if (magicLinkError) {
-        throw magicLinkError;
-      }
 
       setMessage(
         `Email sent. Check your inbox for your secure login link or enter the ${expectedEmailOtpLength}-digit code.`,
@@ -144,23 +125,10 @@ export function AuthDialog({
     setMessage(null);
 
     try {
-      savePendingAuthContext(pendingContext);
-
-      const supabase = createSupabaseBrowserClient();
-      const { error: verifyError } = await supabase.auth.verifyOtp({
+      const { finalizePath } = await verifyEmailOtpAndGetFinalizePath({
         email: email.trim(),
         token,
-        type: "email",
-      });
-
-      if (verifyError) {
-        throw verifyError;
-      }
-
-      const finalizePath = buildFinalizePath({
-        nextPath: pendingContext.nextPath,
-        linkPlayerId: pendingContext.linkPlayerId,
-        expectedLink: pendingContext.expectedLink,
+        pendingContext,
       });
 
       console.info("[auth/otp] verifyOtp(email) succeeded", {

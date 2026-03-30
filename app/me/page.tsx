@@ -6,6 +6,7 @@ import { UsernameForm } from "./UsernameForm";
 import { resolveAccountIdForAuthUserId } from "../../lib/auth/resolve-account";
 import { listAccountAuthMethods } from "../../lib/auth/account-auth-methods";
 import { SignInMethodsManager } from "./SignInMethodsManager";
+import { AuthErrorRecoveryPanel } from "../../components/auth/AuthErrorRecoveryPanel";
 
 type AccountPageProps = {
   searchParams?: Promise<{
@@ -18,6 +19,9 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const params = searchParams ? await searchParams : undefined;
   const linkError = typeof params?.link_error === "string" ? params.link_error : null;
   const authError = typeof params?.auth_error === "string" ? params.auth_error : null;
+  const showAuthRecovery =
+    typeof authError === "string" &&
+    /sign-?in link|complete sign-?in from that link|didn.?t work in this browser/i.test(authError);
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -37,6 +41,8 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               {authError}
             </p>
           ) : null}
+
+          {showAuthRecovery && authError ? <AuthErrorRecoveryPanel authError={authError} /> : null}
           <div className="mt-5 flex flex-wrap items-center gap-2">
             <AuthDialog label="Sign in" nextPath="/me" emphasis="prominent" />
             <Link
@@ -190,6 +196,8 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             {authError}
           </p>
         ) : null}
+
+        {showAuthRecovery && authError ? <AuthErrorRecoveryPanel authError={authError} /> : null}
 
         <dl className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm sm:grid-cols-3">
           <div>
