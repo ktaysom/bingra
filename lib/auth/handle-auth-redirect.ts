@@ -4,7 +4,7 @@ import { getOrCreateProfileByAuthUserId } from "./profiles";
 import { ensurePlayerLinkedToAuthenticatedUser } from "./link-player";
 import { readAccountLinkIntentFromRequest, clearAccountLinkIntentCookie } from "./account-link-intent";
 import { linkAuthUserToAccount } from "./account-auth-methods";
-import { readPendingAuthContextFromSearchParams } from "./auth-redirect";
+import { hasPendingAuthContextInSearchParams, readPendingAuthContextFromSearchParams } from "./auth-redirect";
 
 type HandleAuthRedirectOptions = {
   context: "auth/confirm" | "auth/finalize";
@@ -20,17 +20,22 @@ function buildAuthErrorResponse(request: NextRequest, message: string) {
 export async function handleAuthRedirectRequest(request: NextRequest, options: HandleAuthRedirectOptions) {
   const requestUrl = new URL(request.url);
   const pendingContext = readPendingAuthContextFromSearchParams(requestUrl.searchParams);
+  const hasPendingContext = hasPendingAuthContextInSearchParams(requestUrl.searchParams);
   const code = requestUrl.searchParams.get("code");
+  const tokenHash = requestUrl.searchParams.get("token_hash");
+  const otpType = requestUrl.searchParams.get("type") ?? "email";
   const redirectUrl = new URL(pendingContext.nextPath, request.url);
   const response = NextResponse.redirect(redirectUrl);
   const linkIntent = readAccountLinkIntentFromRequest(request);
 
   console.info(`[${options.context}] callback reached`, {
+    hasPendingContext,
     nextPath: pendingContext.nextPath,
     hasLinkPlayerId: Boolean(pendingContext.linkPlayerId),
     expectedLink: Boolean(pendingContext.expectedLink),
     intent: pendingContext.intent ?? null,
     codePresent: Boolean(code),
+    tokenHashPresent: Boolean(tokenHash),
   });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -55,26 +60,50 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
   });
 
   if (options.requireCodeExchange) {
-    if (!code) {
-      console.warn(`[${options.context}] missing auth code`);
-      return buildAuthErrorResponse(
-        request,
-        "Your sign-in link is missing required data. Please request a new sign-in email.",
-      );
-    }
+    let sessionEstablished = false;
 
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-    if (exchangeError) {
-      console.error(`[${options.context}] exchangeCodeForSession failed`, {
-        message: exchangeError.message,
+    if (code) {
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      if (exchangeError) {
+        console.warn(`[${options.context}] exchangeCodeForSession failed; will try token_hash fallback if available`, {
+          message: exchangeError.message,
+          fallbackAvailable: Boolean(tokenHash),
+        });
+      } else {
+        sessionEstablished = true;
+        console.info(`[${options.context}] exchangeCodeForSession succeeded`);
+      }
+    } else {
+      console.info(`[${options.context}] code missing; will try token_hash fallback if available`, {
+        fallbackAvailable: Boolean(tokenHash),
       });
-      return buildAuthErrorResponse(
-        request,
-        "We couldn't complete sign-in from that link. Please request a fresh sign-in email or use the 6-digit code.",
-      );
     }
 
-    console.info(`[${options.context}] exchangeCodeForSession succeeded`);
+    if (!sessionEstablished && tokenHash) {
+      const { error: verifyTokenHashError } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: otpType as "email" | "recovery" | "invite" | "email_change" | "magiclink" | "signup",
+      });
+
+      if (verifyTokenHashError) {
+        console.error(`[${options.context}] verifyOtp(token_hash) failed`, {
+          message: verifyTokenHashError.message,
+          otpType,
+        });
+      } else {
+        sessionEstablished = true;
+        console.info(`[${options.context}] verifyOtp(token_hash) succeeded`, {
+          otpType,
+        });
+      }
+    }
+
+    if (!sessionEstablished) {
+      return buildAuthErrorResponse(
+        request,
+        "We couldn't complete sign-in from that link. Please request a fresh sign-in email or use the email code.",
+      );
+    }
   }
 
   const {
@@ -132,6 +161,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
 
   clearAccountLinkIntentCookie(response);
   console.info(`[${options.context}] redirecting to final destination`, {
+    hasPendingContext,
     finalPath: pendingContext.nextPath,
   });
 

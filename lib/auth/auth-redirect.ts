@@ -55,7 +55,13 @@ export function readPendingAuthContextFromSearchParams(searchParams: URLSearchPa
           ? (searchParams.get("auth_intent") as PostAuthIntent)
           : undefined,
     },
-    "/",
+    "/me",
+  );
+}
+
+export function hasPendingAuthContextInSearchParams(searchParams: URLSearchParams): boolean {
+  return ["next", "game_slug", "player_id", "link_player_id", "expected_link", "auth_intent"].some((key) =>
+    searchParams.has(key),
   );
 }
 

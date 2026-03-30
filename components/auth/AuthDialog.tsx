@@ -10,6 +10,17 @@ import {
   savePendingAuthContext,
 } from "../../lib/auth/auth-redirect";
 
+const DEFAULT_EMAIL_OTP_LENGTH = 8;
+
+function getExpectedEmailOtpLength(): number {
+  const configured = Number(process.env.NEXT_PUBLIC_EMAIL_OTP_LENGTH);
+  if (Number.isInteger(configured) && configured >= 4 && configured <= 12) {
+    return configured;
+  }
+
+  return DEFAULT_EMAIL_OTP_LENGTH;
+}
+
 type AuthDialogProps = {
   label?: string;
   nextPath: string;
@@ -40,6 +51,7 @@ export function AuthDialog({
   const [pendingEmailOtpVerify, setPendingEmailOtpVerify] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const expectedEmailOtpLength = getExpectedEmailOtpLength();
 
   const pendingContext = normalizePendingAuthContext({
     nextPath,
@@ -100,7 +112,9 @@ export function AuthDialog({
         throw magicLinkError;
       }
 
-      setMessage("Email sent. Check your inbox for your secure login link or enter the 6-digit code.");
+      setMessage(
+        `Email sent. Check your inbox for your secure login link or enter the ${expectedEmailOtpLength}-digit code.`,
+      );
       console.info("[auth/init] email link/otp sent");
     } catch (authError) {
       const nextError = authError instanceof Error ? authError.message : "Unable to send sign-in email";
@@ -119,9 +133,9 @@ export function AuthDialog({
       return;
     }
 
-    const token = emailOtpCode.replace(/\D/g, "").slice(0, 6);
-    if (token.length !== 6) {
-      setError("Enter the 6-digit code from your email.");
+    const token = emailOtpCode.trim().replace(/\s+/g, "");
+    if (token.length !== expectedEmailOtpLength) {
+      setError(`Enter the ${expectedEmailOtpLength}-digit code from your email.`);
       return;
     }
 
@@ -213,16 +227,22 @@ export function AuthDialog({
             </button>
 
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Or enter a 6-digit code</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Or enter a {expectedEmailOtpLength}-digit code
+              </p>
               <input
                 id="email-otp-code"
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                maxLength={6}
+                maxLength={expectedEmailOtpLength}
                 value={emailOtpCode}
-                onChange={(event) => setEmailOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="123456"
+                onChange={(event) =>
+                  setEmailOtpCode(
+                    event.target.value.replace(/\s+/g, "").slice(0, expectedEmailOtpLength),
+                  )
+                }
+                placeholder={"0".repeat(expectedEmailOtpLength)}
                 className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.25em] text-slate-900 outline-none focus:border-slate-400"
               />
               <button
