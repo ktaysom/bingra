@@ -7,6 +7,7 @@ import { resolveAccountIdForAuthUserId } from "../../lib/auth/resolve-account";
 import { listAccountAuthMethods } from "../../lib/auth/account-auth-methods";
 import { SignInMethodsManager } from "./SignInMethodsManager";
 import { AuthErrorRecoveryPanel } from "../../components/auth/AuthErrorRecoveryPanel";
+import type { PostAuthIntent } from "../../lib/auth/auth-redirect";
 
 type AccountPageProps = {
   searchParams?: Promise<{
@@ -28,7 +29,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const showAuthRecovery =
     typeof authError === "string" &&
     /sign-?in link|complete sign-?in from that link|didn.?t work in this browser/i.test(authError);
-  const authIntent =
+  const authIntent: PostAuthIntent | undefined =
     params?.auth_intent === "sign_in" ||
     params?.auth_intent === "save_stats" ||
     params?.auth_intent === "account_link"
