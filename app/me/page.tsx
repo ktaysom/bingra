@@ -8,6 +8,7 @@ import { listAccountAuthMethods } from "../../lib/auth/account-auth-methods";
 import { SignInMethodsManager } from "./SignInMethodsManager";
 import { AuthErrorRecoveryPanel } from "../../components/auth/AuthErrorRecoveryPanel";
 import type { PostAuthIntent } from "../../lib/auth/auth-redirect";
+import { readPendingAuthContextFromCookieValue, getPendingAuthContextCookieKey } from "../../lib/auth/auth-redirect";
 
 type AccountPageProps = {
   searchParams?: Promise<{
@@ -44,6 +45,10 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     email: typeof params?.email === "string" ? params.email : undefined,
   };
   const supabase = await createSupabaseServerClient();
+  const cookieStore = await (await import("next/headers")).cookies();
+  const pendingContextFromCookie = readPendingAuthContextFromCookieValue(
+    cookieStore.get(getPendingAuthContextCookieKey())?.value,
+  );
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -145,6 +150,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       .from("players")
       .select("game_id, games:games(id, title, slug, status)")
       .eq("profile_id", profileId)
+      .order("created_at", { ascending: false })
       .limit(12),
   ]);
 
@@ -207,7 +213,26 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
     accumulator.push(game);
     return accumulator;
-  }, []).slice(0, 6);
+  }, []);
+
+  const contextGameSlug = pendingContextFromCookie?.gameSlug?.trim() || authRecoveryContext.gameSlug?.trim() || null;
+  if (contextGameSlug) {
+    const alreadyPresent = mergedRecentOrActiveGames.some((game) => game.slug?.trim() === contextGameSlug);
+
+    if (!alreadyPresent) {
+      const { data: contextGameRow } = await supabase
+        .from("games")
+        .select("id, title, slug, status")
+        .eq("slug", contextGameSlug)
+        .maybeSingle<{ id: string; title?: string | null; slug?: string | null; status?: string | null }>();
+
+      if (contextGameRow?.id) {
+        mergedRecentOrActiveGames.unshift(contextGameRow);
+      }
+    }
+  }
+
+  const recentOrActiveGamesTop = mergedRecentOrActiveGames.slice(0, 6);
 
   const hasStatsRow = Boolean(stats);
   const hasRecentGames = recentGames.length > 0;
@@ -283,11 +308,11 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             </p>
           )}
 
-          {mergedRecentOrActiveGames.length === 0 ? (
+          {recentOrActiveGamesTop.length === 0 ? (
             <p className="mt-2 text-sm text-slate-600">No active or recent hosted/joined games found yet.</p>
           ) : (
             <ul className="mt-3 space-y-2">
-              {mergedRecentOrActiveGames.map((game) => {
+              {recentOrActiveGamesTop.map((game) => {
                 const gameLabel = game.title?.trim() || game.slug?.trim() || game.id;
                 const gameSlug = game.slug?.trim();
                 const statusLabel = game.status?.trim() || "recent";

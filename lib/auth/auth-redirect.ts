@@ -22,6 +22,72 @@ export function sanitizeNextPath(input: string | null | undefined, fallback = "/
   return input;
 }
 
+function extractInternalPathFromMaybeAbsoluteUrl(input: string | null | undefined): string | null {
+  if (!input) {
+    return null;
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("/")) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+function parsePathToSearchParams(path: string | null | undefined): URLSearchParams | null {
+  if (!path) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(path, "http://localhost");
+    if (
+      parsed.pathname === "/auth/confirm" ||
+      parsed.pathname === "/auth/callback" ||
+      parsed.pathname === "/auth/finalize"
+    ) {
+      return parsed.searchParams;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function readParamWithNestedFallback(
+  searchParams: URLSearchParams,
+  nestedParams: URLSearchParams | null,
+  key: string,
+): string | null {
+  return searchParams.get(key) ?? nestedParams?.get(key) ?? null;
+}
+
+export function resolveNextPathFromSearchParams(searchParams: URLSearchParams): string | undefined {
+  const rawNext = searchParams.get("next");
+  const rawRedirectTo = searchParams.get("redirect_to");
+
+  const candidate = rawNext ?? rawRedirectTo;
+  const extracted = extractInternalPathFromMaybeAbsoluteUrl(candidate);
+
+  const nestedParams = parsePathToSearchParams(extracted);
+  if (nestedParams) {
+    return resolveNextPathFromSearchParams(nestedParams);
+  }
+
+  return extracted ?? undefined;
+}
+
 export function deriveGameSlug(nextPath: string): string | undefined {
   const match = /^\/g\/([^/?#]+)/.exec(nextPath);
   return match?.[1];
@@ -49,19 +115,27 @@ export function normalizePendingAuthContext(
 }
 
 export function readPendingAuthContextFromSearchParams(searchParams: URLSearchParams): PendingAuthContext {
+  const resolvedNextPath = resolveNextPathFromSearchParams(searchParams);
+  const nestedParams = parsePathToSearchParams(
+    extractInternalPathFromMaybeAbsoluteUrl(searchParams.get("next") ?? searchParams.get("redirect_to")),
+  );
+
+  const intentValue =
+    readParamWithNestedFallback(searchParams, nestedParams, "auth_intent") ?? undefined;
+
   return normalizePendingAuthContext(
     {
-      nextPath: searchParams.get("next") ?? undefined,
-      gameSlug: searchParams.get("game_slug") ?? undefined,
-      playerId: searchParams.get("player_id") ?? undefined,
-      linkPlayerId: searchParams.get("link_player_id") ?? undefined,
-      expectedLink: searchParams.get("expected_link") === "1",
-      email: searchParams.get("email") ?? undefined,
+      nextPath: resolvedNextPath,
+      gameSlug: readParamWithNestedFallback(searchParams, nestedParams, "game_slug") ?? undefined,
+      playerId: readParamWithNestedFallback(searchParams, nestedParams, "player_id") ?? undefined,
+      linkPlayerId: readParamWithNestedFallback(searchParams, nestedParams, "link_player_id") ?? undefined,
+      expectedLink: readParamWithNestedFallback(searchParams, nestedParams, "expected_link") === "1",
+      email: readParamWithNestedFallback(searchParams, nestedParams, "email") ?? undefined,
       intent:
-        searchParams.get("auth_intent") === "save_stats" ||
-        searchParams.get("auth_intent") === "account_link" ||
-        searchParams.get("auth_intent") === "sign_in"
-          ? (searchParams.get("auth_intent") as PostAuthIntent)
+        intentValue === "save_stats" ||
+        intentValue === "account_link" ||
+        intentValue === "sign_in"
+          ? (intentValue as PostAuthIntent)
           : undefined,
     },
     "/me",
@@ -69,7 +143,7 @@ export function readPendingAuthContextFromSearchParams(searchParams: URLSearchPa
 }
 
 export function hasPendingAuthContextInSearchParams(searchParams: URLSearchParams): boolean {
-  return ["next", "game_slug", "player_id", "link_player_id", "expected_link", "auth_intent", "email"].some((key) =>
+  return ["next", "redirect_to", "game_slug", "player_id", "link_player_id", "expected_link", "auth_intent", "email"].some((key) =>
     searchParams.has(key),
   );
 }

@@ -10,12 +10,20 @@ import {
   mergePendingAuthContexts,
   readPendingAuthContextFromCookieValue,
   readPendingAuthContextFromSearchParams,
+  resolveNextPathFromSearchParams,
 } from "./auth-redirect";
 
 type HandleAuthRedirectOptions = {
   context: "auth/confirm" | "auth/finalize";
   requireCodeExchange: boolean;
 };
+
+type RedirectSource =
+  | "query_next"
+  | "query_redirect_to"
+  | "query_game_slug_reconstruction"
+  | "cookie_context"
+  | "default_me";
 
 function buildAuthErrorResponse(request: NextRequest, message: string, pendingContext: ReturnType<typeof readPendingAuthContextFromSearchParams>) {
   const fallbackRedirect = new URL("/me", request.url);
@@ -41,11 +49,37 @@ function buildAuthErrorResponse(request: NextRequest, message: string, pendingCo
 
 export async function handleAuthRedirectRequest(request: NextRequest, options: HandleAuthRedirectOptions) {
   const requestUrl = new URL(request.url);
+  const rawNext = requestUrl.searchParams.get("next");
+  const rawRedirectTo = requestUrl.searchParams.get("redirect_to");
+  const resolvedNextPathFromQuery = resolveNextPathFromSearchParams(requestUrl.searchParams);
   const queryContext = readPendingAuthContextFromSearchParams(requestUrl.searchParams);
   const cookieContext = readPendingAuthContextFromCookieValue(
     request.cookies.get(getPendingAuthContextCookieKey())?.value,
   );
-  const pendingContext = mergePendingAuthContexts(queryContext, cookieContext);
+  const hasQueryGameSlug = Boolean(requestUrl.searchParams.get("game_slug"));
+  const hasQueryRedirectSignal = Boolean(resolvedNextPathFromQuery) || hasQueryGameSlug;
+
+  let pendingContext = mergePendingAuthContexts(queryContext, cookieContext);
+  if (!hasQueryRedirectSignal && cookieContext) {
+    pendingContext = mergePendingAuthContexts(
+      {
+        ...queryContext,
+        nextPath: cookieContext.nextPath,
+        gameSlug: queryContext.gameSlug ?? cookieContext.gameSlug,
+      },
+      cookieContext,
+    );
+  }
+
+  const redirectSource: RedirectSource = resolvedNextPathFromQuery
+    ? rawNext
+      ? "query_next"
+      : "query_redirect_to"
+    : hasQueryGameSlug
+      ? "query_game_slug_reconstruction"
+      : cookieContext
+        ? "cookie_context"
+        : "default_me";
   const hasPendingContext = hasPendingAuthContextInSearchParams(requestUrl.searchParams);
   const code = requestUrl.searchParams.get("code");
   const tokenHash = requestUrl.searchParams.get("token_hash");
@@ -61,6 +95,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
 
   console.info(`[${options.context}] callback reached`, {
     arrivalMethod,
+    redirectSource,
     hasPendingContext,
     nextPath: pendingContext.nextPath,
     hasLinkPlayerId: Boolean(pendingContext.linkPlayerId),
@@ -68,6 +103,9 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
     intent: pendingContext.intent ?? null,
     codePresent: Boolean(code),
     tokenHashPresent: Boolean(tokenHash),
+    rawNextPresent: Boolean(rawNext),
+    rawRedirectToPresent: Boolean(rawRedirectTo),
+    resolvedNextPathFromQuery,
   });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -206,6 +244,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
   clearAccountLinkIntentCookie(response);
   console.info(`[${options.context}] redirecting to final destination`, {
     arrivalMethod,
+    redirectSource,
     hasPendingContext,
     finalPath: pendingContext.nextPath,
   });
