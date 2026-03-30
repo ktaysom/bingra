@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
+import { buildAuthConfirmPath, normalizePendingAuthContext, savePendingAuthContext } from "../../lib/auth/auth-redirect";
 import {
   prepareAddEmailSignInMethodAction,
   prepareAddPhoneSignInMethodAction,
@@ -63,13 +64,6 @@ function getAppBaseUrl(): string {
   return window.location.origin;
 }
 
-function buildAuthCallbackUrl(nextPath: string): string {
-  const callbackUrl = new URL("/auth/callback", getAppBaseUrl());
-  callbackUrl.searchParams.set("next", nextPath);
-  callbackUrl.searchParams.set("expected_link", "1");
-  return callbackUrl.toString();
-}
-
 export function SignInMethodsManager({ methods }: Props) {
   const router = useRouter();
   const [emailInput, setEmailInput] = useState("");
@@ -103,11 +97,24 @@ export function SignInMethodsManager({ methods }: Props) {
         return;
       }
 
+      const pendingContext = normalizePendingAuthContext({
+        nextPath: "/me",
+        expectedLink: true,
+        intent: "account_link",
+      });
+      savePendingAuthContext(pendingContext);
+
+      const emailRedirectTo = new URL(buildAuthConfirmPath(pendingContext), getAppBaseUrl()).toString();
+      console.info("[auth/init] starting account-link email sign-in", {
+        nextPath: pendingContext.nextPath,
+        expectedLink: pendingContext.expectedLink,
+      });
+
       const supabase = createSupabaseBrowserClient();
       const { error: authError } = await supabase.auth.signInWithOtp({
         email: emailInput.trim(),
         options: {
-          emailRedirectTo: buildAuthCallbackUrl("/me"),
+          emailRedirectTo,
         },
       });
 
@@ -116,8 +123,13 @@ export function SignInMethodsManager({ methods }: Props) {
       }
 
       setStatus("Magic link sent. Open your email to finish linking this sign-in method.");
+      console.info("[auth/init] account-link email sign-in sent");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to add email sign-in.");
+      const message = e instanceof Error ? e.message : "Unable to add email sign-in.";
+      setError(message);
+      console.error("[auth/init] account-link email sign-in failed", {
+        message,
+      });
     } finally {
       setIsLoading(false);
     }

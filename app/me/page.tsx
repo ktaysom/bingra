@@ -10,11 +10,14 @@ import { SignInMethodsManager } from "./SignInMethodsManager";
 type AccountPageProps = {
   searchParams?: Promise<{
     link_error?: string;
+    auth_error?: string;
   }>;
 };
 
 export default async function AccountPage({ searchParams }: AccountPageProps) {
   const params = searchParams ? await searchParams : undefined;
+  const linkError = typeof params?.link_error === "string" ? params.link_error : null;
+  const authError = typeof params?.auth_error === "string" ? params.auth_error : null;
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -29,6 +32,11 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           <p className="mt-2 text-sm text-slate-600">
             Sign in to attach games to your account and unlock upcoming career stats.
           </p>
+          {authError ? (
+            <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              {authError}
+            </p>
+          ) : null}
           <div className="mt-5 flex flex-wrap items-center gap-2">
             <AuthDialog label="Sign in" nextPath="/me" emphasis="prominent" />
             <Link
@@ -45,8 +53,6 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
   const resolvedAccount = await resolveAccountIdForAuthUserId(user.id);
   const accountId = resolvedAccount.accountId;
-  const linkError = typeof params?.link_error === "string" ? params.link_error : null;
-
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, username, display_name")
@@ -176,6 +182,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
         {linkError ? (
           <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
             {linkError}
+          </p>
+        ) : null}
+
+        {authError ? (
+          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+            {authError}
           </p>
         ) : null}
 

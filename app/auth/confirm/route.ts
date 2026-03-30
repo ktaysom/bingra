@@ -3,7 +3,7 @@ import { handleAuthRedirectRequest } from "../../../lib/auth/handle-auth-redirec
 
 export async function GET(request: NextRequest) {
   return handleAuthRedirectRequest(request, {
-    context: "auth/finalize",
-    requireCodeExchange: false,
+    context: "auth/confirm",
+    requireCodeExchange: true,
   });
 }
