@@ -4,22 +4,48 @@ import { getOrCreateProfileByAuthUserId } from "./profiles";
 import { ensurePlayerLinkedToAuthenticatedUser } from "./link-player";
 import { readAccountLinkIntentFromRequest, clearAccountLinkIntentCookie } from "./account-link-intent";
 import { linkAuthUserToAccount } from "./account-auth-methods";
-import { hasPendingAuthContextInSearchParams, readPendingAuthContextFromSearchParams } from "./auth-redirect";
+import {
+  getPendingAuthContextCookieKey,
+  hasPendingAuthContextInSearchParams,
+  mergePendingAuthContexts,
+  readPendingAuthContextFromCookieValue,
+  readPendingAuthContextFromSearchParams,
+} from "./auth-redirect";
 
 type HandleAuthRedirectOptions = {
   context: "auth/confirm" | "auth/finalize";
   requireCodeExchange: boolean;
 };
 
-function buildAuthErrorResponse(request: NextRequest, message: string) {
+function buildAuthErrorResponse(request: NextRequest, message: string, pendingContext: ReturnType<typeof readPendingAuthContextFromSearchParams>) {
   const fallbackRedirect = new URL("/me", request.url);
   fallbackRedirect.searchParams.set("auth_error", message);
+  fallbackRedirect.searchParams.set("next", pendingContext.nextPath);
+  if (pendingContext.gameSlug) {
+    fallbackRedirect.searchParams.set("game_slug", pendingContext.gameSlug);
+  }
+  if (pendingContext.linkPlayerId) {
+    fallbackRedirect.searchParams.set("link_player_id", pendingContext.linkPlayerId);
+  }
+  if (pendingContext.expectedLink) {
+    fallbackRedirect.searchParams.set("expected_link", "1");
+  }
+  if (pendingContext.intent) {
+    fallbackRedirect.searchParams.set("auth_intent", pendingContext.intent);
+  }
+  if (pendingContext.email) {
+    fallbackRedirect.searchParams.set("email", pendingContext.email);
+  }
   return NextResponse.redirect(fallbackRedirect);
 }
 
 export async function handleAuthRedirectRequest(request: NextRequest, options: HandleAuthRedirectOptions) {
   const requestUrl = new URL(request.url);
-  const pendingContext = readPendingAuthContextFromSearchParams(requestUrl.searchParams);
+  const queryContext = readPendingAuthContextFromSearchParams(requestUrl.searchParams);
+  const cookieContext = readPendingAuthContextFromCookieValue(
+    request.cookies.get(getPendingAuthContextCookieKey())?.value,
+  );
+  const pendingContext = mergePendingAuthContexts(queryContext, cookieContext);
   const hasPendingContext = hasPendingAuthContextInSearchParams(requestUrl.searchParams);
   const code = requestUrl.searchParams.get("code");
   const tokenHash = requestUrl.searchParams.get("token_hash");
@@ -102,6 +128,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
       return buildAuthErrorResponse(
         request,
         "We couldn't complete sign-in from that link. Please request a fresh sign-in email or use the email code.",
+        pendingContext,
       );
     }
   }

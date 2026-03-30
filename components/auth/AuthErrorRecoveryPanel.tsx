@@ -2,7 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { readPendingAuthContextFromStorage, normalizePendingAuthContext } from "../../lib/auth/auth-redirect";
+import {
+  mergePendingAuthContexts,
+  normalizePendingAuthContext,
+  readPendingAuthContextFromStorage,
+  type PendingAuthContext,
+} from "../../lib/auth/auth-redirect";
 import {
   getExpectedEmailOtpLength,
   sendEmailSignInLink,
@@ -20,16 +25,18 @@ function getAppBaseUrl(): string {
 
 type AuthErrorRecoveryPanelProps = {
   authError: string;
+  initialContext?: Partial<PendingAuthContext>;
 };
 
-export function AuthErrorRecoveryPanel({ authError }: AuthErrorRecoveryPanelProps) {
+export function AuthErrorRecoveryPanel({ authError, initialContext }: AuthErrorRecoveryPanelProps) {
   const router = useRouter();
   const expectedEmailOtpLength = getExpectedEmailOtpLength();
 
   const pendingContext = useMemo(() => {
     const fromStorage = readPendingAuthContextFromStorage();
-    return normalizePendingAuthContext(fromStorage ?? { nextPath: "/me" }, "/me");
-  }, []);
+    const fromProps = normalizePendingAuthContext(initialContext, "/me");
+    return mergePendingAuthContexts(fromProps, fromStorage);
+  }, [initialContext]);
 
   const [email, setEmail] = useState(pendingContext.email ?? "");
   const [otpCode, setOtpCode] = useState("");

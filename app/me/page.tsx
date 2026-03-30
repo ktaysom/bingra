@@ -12,6 +12,12 @@ type AccountPageProps = {
   searchParams?: Promise<{
     link_error?: string;
     auth_error?: string;
+    next?: string;
+    game_slug?: string;
+    link_player_id?: string;
+    expected_link?: string;
+    auth_intent?: string;
+    email?: string;
   }>;
 };
 
@@ -22,6 +28,20 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const showAuthRecovery =
     typeof authError === "string" &&
     /sign-?in link|complete sign-?in from that link|didn.?t work in this browser/i.test(authError);
+  const authIntent =
+    params?.auth_intent === "sign_in" ||
+    params?.auth_intent === "save_stats" ||
+    params?.auth_intent === "account_link"
+      ? params.auth_intent
+      : undefined;
+  const authRecoveryContext = {
+    nextPath: typeof params?.next === "string" ? params.next : undefined,
+    gameSlug: typeof params?.game_slug === "string" ? params.game_slug : undefined,
+    linkPlayerId: typeof params?.link_player_id === "string" ? params.link_player_id : undefined,
+    expectedLink: params?.expected_link === "1",
+    intent: authIntent,
+    email: typeof params?.email === "string" ? params.email : undefined,
+  };
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -42,7 +62,9 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             </p>
           ) : null}
 
-          {showAuthRecovery && authError ? <AuthErrorRecoveryPanel authError={authError} /> : null}
+          {showAuthRecovery && authError ? (
+            <AuthErrorRecoveryPanel authError={authError} initialContext={authRecoveryContext} />
+          ) : null}
           <div className="mt-5 flex flex-wrap items-center gap-2">
             <AuthDialog label="Sign in" nextPath="/me" emphasis="prominent" />
             <Link
@@ -99,7 +121,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
   const profileId = accountId;
 
-  const [statsQuery, recentGamesQuery] = await Promise.all([
+  const [statsQuery, recentGamesQuery, hostedGamesQuery, joinedGamesQuery] = await Promise.all([
     supabase
       .from("profile_stats")
       .select(
@@ -113,10 +135,22 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       .eq("profile_id", profileId)
       .order("finished_at", { ascending: false })
       .limit(5),
+    supabase
+      .from("games")
+      .select("id, title, slug, status")
+      .eq("auth_user_id", user.id)
+      .limit(8),
+    supabase
+      .from("players")
+      .select("game_id, games:games(id, title, slug, status)")
+      .eq("profile_id", profileId)
+      .limit(12),
   ]);
 
   const statsErrorMessage = statsQuery.error?.message ?? null;
   const recentGamesErrorMessage = recentGamesQuery.error?.message ?? null;
+  const hostedGamesErrorMessage = hostedGamesQuery.error?.message ?? null;
+  const joinedGamesErrorMessage = joinedGamesQuery.error?.message ?? null;
 
   const stats = (statsQuery.data as {
     games_played?: number;
@@ -134,6 +168,45 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       finished_at: string;
       games?: { title?: string | null; slug?: string | null } | null;
     }> | null) ?? [];
+
+  const hostedGames =
+    (hostedGamesQuery.data as Array<{
+      id: string;
+      title?: string | null;
+      slug?: string | null;
+      status?: string | null;
+    }> | null) ?? [];
+
+  const joinedRows =
+    (joinedGamesQuery.data as Array<{
+      game_id: string;
+      games?: { id?: string; title?: string | null; slug?: string | null; status?: string | null } | null;
+    }> | null) ?? [];
+
+  const joinedGames = joinedRows
+    .map((row) => ({
+      id: row.games?.id ?? row.game_id,
+      title: row.games?.title ?? null,
+      slug: row.games?.slug ?? null,
+      status: row.games?.status ?? null,
+    }))
+    .filter((row) => Boolean(row.id));
+
+  const mergedRecentOrActiveGames = [...hostedGames, ...joinedGames].reduce<
+    Array<{ id: string; title?: string | null; slug?: string | null; status?: string | null }>
+  >((accumulator, game) => {
+    const identity = game.slug?.trim() || game.id;
+    if (!identity) {
+      return accumulator;
+    }
+
+    if (accumulator.some((existing) => (existing.slug?.trim() || existing.id) === identity)) {
+      return accumulator;
+    }
+
+    accumulator.push(game);
+    return accumulator;
+  }, []).slice(0, 6);
 
   const hasStatsRow = Boolean(stats);
   const hasRecentGames = recentGames.length > 0;
@@ -197,7 +270,45 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           </p>
         ) : null}
 
-        {showAuthRecovery && authError ? <AuthErrorRecoveryPanel authError={authError} /> : null}
+        {showAuthRecovery && authError ? (
+          <AuthErrorRecoveryPanel authError={authError} initialContext={authRecoveryContext} />
+        ) : null}
+
+        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-slate-900">Recent / Active games</h2>
+          {(hostedGamesErrorMessage || joinedGamesErrorMessage) && (
+            <p className="mt-2 text-sm text-slate-600">
+              We couldn&apos;t load all game shortcuts right now. You can still use your recent results below.
+            </p>
+          )}
+
+          {mergedRecentOrActiveGames.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-600">No active or recent hosted/joined games found yet.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {mergedRecentOrActiveGames.map((game) => {
+                const gameLabel = game.title?.trim() || game.slug?.trim() || game.id;
+                const gameSlug = game.slug?.trim();
+                const statusLabel = game.status?.trim() || "recent";
+
+                return (
+                  <li key={game.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    {gameSlug ? (
+                      <Link href={`/g/${gameSlug}/play`} className="truncate pr-3 font-medium text-slate-800 underline">
+                        {gameLabel}
+                      </Link>
+                    ) : (
+                      <span className="truncate pr-3 font-medium text-slate-800">{gameLabel}</span>
+                    )}
+                    <span className="whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {statusLabel}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
 
         <dl className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm sm:grid-cols-3">
           <div>

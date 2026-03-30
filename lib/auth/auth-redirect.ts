@@ -11,6 +11,8 @@ export type PendingAuthContext = {
 };
 
 const PENDING_AUTH_STORAGE_KEY = "bingra.pending-auth-context.v1";
+const PENDING_AUTH_COOKIE_KEY = "bingra-pending-auth-context";
+const PENDING_AUTH_MAX_AGE_SECONDS = 6 * 60 * 60;
 
 export function sanitizeNextPath(input: string | null | undefined, fallback = "/"): string {
   if (!input || !input.startsWith("/")) {
@@ -29,7 +31,11 @@ export function normalizePendingAuthContext(
   context: Partial<PendingAuthContext> | undefined,
   fallbackNext = "/",
 ): PendingAuthContext {
-  const nextPath = sanitizeNextPath(context?.nextPath, fallbackNext);
+  let nextPath = sanitizeNextPath(context?.nextPath, fallbackNext);
+
+  if ((nextPath === "/" || nextPath === "/me") && context?.gameSlug) {
+    nextPath = sanitizeNextPath(`/g/${context.gameSlug}/play`, fallbackNext);
+  }
 
   return {
     nextPath,
@@ -63,9 +69,84 @@ export function readPendingAuthContextFromSearchParams(searchParams: URLSearchPa
 }
 
 export function hasPendingAuthContextInSearchParams(searchParams: URLSearchParams): boolean {
-  return ["next", "game_slug", "player_id", "link_player_id", "expected_link", "auth_intent"].some((key) =>
+  return ["next", "game_slug", "player_id", "link_player_id", "expected_link", "auth_intent", "email"].some((key) =>
     searchParams.has(key),
   );
+}
+
+function buildCookiePayload(context: PendingAuthContext) {
+  return {
+    ...normalizePendingAuthContext(context, "/me"),
+    createdAt: Date.now(),
+  };
+}
+
+function readPendingAuthContextFromRawJson(raw: string): PendingAuthContext | null {
+  try {
+    const parsed = JSON.parse(raw) as (PendingAuthContext & { createdAt?: number }) | null;
+    if (!parsed) {
+      return null;
+    }
+
+    if (parsed.createdAt && Date.now() - parsed.createdAt > PENDING_AUTH_MAX_AGE_SECONDS * 1000) {
+      return null;
+    }
+
+    return normalizePendingAuthContext(parsed, "/me");
+  } catch {
+    return null;
+  }
+}
+
+export function readPendingAuthContextFromCookieValue(cookieValue: string | null | undefined): PendingAuthContext | null {
+  if (!cookieValue) {
+    return null;
+  }
+
+  const decoded = decodeURIComponent(cookieValue);
+  return readPendingAuthContextFromRawJson(decoded);
+}
+
+function readPendingAuthCookieValueFromDocument(): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const entry = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${PENDING_AUTH_COOKIE_KEY}=`));
+
+  return entry ? entry.slice(PENDING_AUTH_COOKIE_KEY.length + 1) : null;
+}
+
+export function mergePendingAuthContexts(
+  primary: PendingAuthContext | null | undefined,
+  fallback: PendingAuthContext | null | undefined,
+): PendingAuthContext {
+  if (!primary && fallback) {
+    return normalizePendingAuthContext(fallback, "/me");
+  }
+
+  if (!fallback && primary) {
+    return normalizePendingAuthContext(primary, "/me");
+  }
+
+  return normalizePendingAuthContext(
+    {
+      ...(fallback ?? {}),
+      ...(primary ?? {}),
+    },
+    "/me",
+  );
+}
+
+export function clearPendingAuthContextCookie() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.cookie = `${PENDING_AUTH_COOKIE_KEY}=; Max-Age=0; Path=/; SameSite=Lax`;
 }
 
 export function buildFinalizePath(params: {
@@ -112,6 +193,10 @@ export function buildAuthConfirmPath(context: PendingAuthContext): string {
     confirmUrl.searchParams.set("auth_intent", normalized.intent);
   }
 
+  if (normalized.email) {
+    confirmUrl.searchParams.set("email", normalized.email);
+  }
+
   return `${confirmUrl.pathname}${confirmUrl.search}`;
 }
 
@@ -120,14 +205,12 @@ export function savePendingAuthContext(context: PendingAuthContext) {
     return;
   }
 
-  const payload = {
-    ...normalizePendingAuthContext(context, "/"),
-    createdAt: Date.now(),
-  };
+  const payload = buildCookiePayload(context);
 
   const serialized = JSON.stringify(payload);
   window.localStorage.setItem(PENDING_AUTH_STORAGE_KEY, serialized);
   window.sessionStorage.setItem(PENDING_AUTH_STORAGE_KEY, serialized);
+  document.cookie = `${PENDING_AUTH_COOKIE_KEY}=${encodeURIComponent(serialized)}; Max-Age=${PENDING_AUTH_MAX_AGE_SECONDS}; Path=/; SameSite=Lax`;
 }
 
 export function readPendingAuthContextFromStorage(): PendingAuthContext | null {
@@ -137,28 +220,20 @@ export function readPendingAuthContextFromStorage(): PendingAuthContext | null {
 
   const raw =
     window.localStorage.getItem(PENDING_AUTH_STORAGE_KEY) ||
-    window.sessionStorage.getItem(PENDING_AUTH_STORAGE_KEY);
+    window.sessionStorage.getItem(PENDING_AUTH_STORAGE_KEY) ||
+    readPendingAuthCookieValueFromDocument();
   if (!raw) {
     return null;
   }
 
-  try {
-    const parsed = JSON.parse(raw) as (PendingAuthContext & { createdAt?: number }) | null;
-    if (!parsed) {
-      return null;
-    }
-
-    // Expire stale contexts after 6 hours.
-    if (parsed.createdAt && Date.now() - parsed.createdAt > 6 * 60 * 60 * 1000) {
-      window.localStorage.removeItem(PENDING_AUTH_STORAGE_KEY);
-      window.sessionStorage.removeItem(PENDING_AUTH_STORAGE_KEY);
-      return null;
-    }
-
-    return normalizePendingAuthContext(parsed, "/");
-  } catch {
-    return null;
+  const parsed = readPendingAuthContextFromRawJson(raw);
+  if (!parsed) {
+    window.localStorage.removeItem(PENDING_AUTH_STORAGE_KEY);
+    window.sessionStorage.removeItem(PENDING_AUTH_STORAGE_KEY);
+    clearPendingAuthContextCookie();
   }
+
+  return parsed;
 }
 
 export function clearPendingAuthContextFromStorage() {
@@ -168,4 +243,9 @@ export function clearPendingAuthContextFromStorage() {
 
   window.localStorage.removeItem(PENDING_AUTH_STORAGE_KEY);
   window.sessionStorage.removeItem(PENDING_AUTH_STORAGE_KEY);
+  clearPendingAuthContextCookie();
+}
+
+export function getPendingAuthContextCookieKey(): string {
+  return PENDING_AUTH_COOKIE_KEY;
 }
