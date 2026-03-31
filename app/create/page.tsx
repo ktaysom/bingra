@@ -304,15 +304,6 @@ export default function CreatePage() {
     sportProfile,
   ]);
 
-  useEffect(() => {
-    if (state.error !== AUTH_REQUIRED_CREATE_ERROR) {
-      return;
-    }
-
-    const next = encodeURIComponent("/create");
-    window.location.assign(`/auth/phone?next=${next}`);
-  }, [state.error]);
-
   const { sport: selectedSportForPicker, level: selectedLevelForPicker } =
     resolveSportLevelSelection(sportProfile);
   const selectedLevelOptions = SPORT_LEVEL_PROFILE_MAP[selectedSportForPicker];

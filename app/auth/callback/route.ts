@@ -1,10 +1,12 @@
-import { NextRequest } from "next/server";
-import { handleAuthRedirectRequest } from "../../../lib/auth/handle-auth-redirect";
+import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
-  // Legacy compatibility route; keep behavior equivalent to /auth/confirm.
-  return handleAuthRedirectRequest(request, {
-    context: "auth/confirm",
-    requireCodeExchange: true,
+  // Legacy compatibility route; forward to /auth/confirm interstitial so GET does not consume auth artifacts.
+  const requestUrl = new URL(request.url);
+  const confirmUrl = new URL("/auth/confirm", request.url);
+  requestUrl.searchParams.forEach((value, key) => {
+    confirmUrl.searchParams.append(key, value);
   });
+
+  return NextResponse.redirect(confirmUrl);
 }
