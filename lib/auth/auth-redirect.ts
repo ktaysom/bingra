@@ -70,6 +70,13 @@ export function sanitizeNextPath(input: string | null | undefined, fallback = "/
 }
 
 function extractInternalPathFromMaybeAbsoluteUrl(input: string | null | undefined): string | null {
+  return extractInternalPathFromMaybeAbsoluteUrlWithOrigin(input);
+}
+
+function extractInternalPathFromMaybeAbsoluteUrlWithOrigin(
+  input: string | null | undefined,
+  allowedOrigin?: string,
+): string | null {
   if (!input) {
     return null;
   }
@@ -85,6 +92,13 @@ function extractInternalPathFromMaybeAbsoluteUrl(input: string | null | undefine
 
   try {
     const parsed = new URL(trimmed);
+
+    // Security: when an allowed origin is provided (e.g. active request origin),
+    // only treat absolute URLs from that same origin as valid redirect targets.
+    if (allowedOrigin && parsed.origin !== allowedOrigin) {
+      return null;
+    }
+
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return null;
@@ -116,16 +130,19 @@ function readParamWithNestedFallback(
   return searchParams.get(key) ?? nestedParams?.get(key) ?? null;
 }
 
-export function resolveNextPathFromSearchParams(searchParams: URLSearchParams): string | undefined {
+export function resolveNextPathFromSearchParams(
+  searchParams: URLSearchParams,
+  options?: { allowedOrigin?: string },
+): string | undefined {
   const rawNext = searchParams.get("next");
   const rawRedirectTo = searchParams.get("redirect_to");
 
   const candidate = rawNext ?? rawRedirectTo;
-  const extracted = extractInternalPathFromMaybeAbsoluteUrl(candidate);
+  const extracted = extractInternalPathFromMaybeAbsoluteUrlWithOrigin(candidate, options?.allowedOrigin);
 
   const nestedParams = parsePathToSearchParams(extracted);
   if (nestedParams) {
-    return resolveNextPathFromSearchParams(nestedParams);
+    return resolveNextPathFromSearchParams(nestedParams, options);
   }
 
   return extracted ?? undefined;
@@ -157,10 +174,16 @@ export function normalizePendingAuthContext(
   };
 }
 
-export function readPendingAuthContextFromSearchParams(searchParams: URLSearchParams): PendingAuthContext {
-  const resolvedNextPath = resolveNextPathFromSearchParams(searchParams);
+export function readPendingAuthContextFromSearchParams(
+  searchParams: URLSearchParams,
+  options?: { allowedOrigin?: string },
+): PendingAuthContext {
+  const resolvedNextPath = resolveNextPathFromSearchParams(searchParams, options);
   const nestedParams = parsePathToSearchParams(
-    extractInternalPathFromMaybeAbsoluteUrl(searchParams.get("next") ?? searchParams.get("redirect_to")),
+    extractInternalPathFromMaybeAbsoluteUrlWithOrigin(
+      searchParams.get("next") ?? searchParams.get("redirect_to"),
+      options?.allowedOrigin,
+    ),
   );
 
   const intentValue =

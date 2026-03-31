@@ -57,10 +57,19 @@ function clearPendingAuthContextCookieOnResponse(response: NextResponse) {
 
 export async function handleAuthRedirectRequest(request: NextRequest, options: HandleAuthRedirectOptions) {
   const requestUrl = new URL(request.url);
+  const requestOrigin = requestUrl.origin;
   const rawNext = requestUrl.searchParams.get("next");
   const rawRedirectTo = requestUrl.searchParams.get("redirect_to");
-  const resolvedNextPathFromQuery = resolveNextPathFromSearchParams(requestUrl.searchParams);
-  const queryContext = readPendingAuthContextFromSearchParams(requestUrl.searchParams);
+  // Normalize next/redirect_to against current request origin:
+  // - allow relative app paths
+  // - allow same-origin absolute URLs (converted to internal path)
+  // - reject cross-origin URLs
+  const resolvedNextPathFromQuery = resolveNextPathFromSearchParams(requestUrl.searchParams, {
+    allowedOrigin: requestOrigin,
+  });
+  const queryContext = readPendingAuthContextFromSearchParams(requestUrl.searchParams, {
+    allowedOrigin: requestOrigin,
+  });
   const cookieContext = readPendingAuthContextFromCookieValue(
     request.cookies.get(getPendingAuthContextCookieKey())?.value,
   );
@@ -120,6 +129,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
     rawNextPresent: Boolean(rawNext),
     rawRedirectToPresent: Boolean(rawRedirectTo),
     resolvedNextPathFromQuery,
+    requestOrigin,
   });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
