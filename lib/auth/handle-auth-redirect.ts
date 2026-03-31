@@ -25,6 +25,19 @@ type RedirectSource =
   | "cookie_context"
   | "default_me";
 
+function getRedirectStatusForRequestMethod(method: string): 303 | 307 {
+  // Critical: POST confirmation should always redirect as GET (303).
+  // Using 307 here causes browsers to replay POST to destination routes like /create,
+  // which can surface as generic "This page isn't working" failures.
+  return method.toUpperCase() === "POST" ? 303 : 307;
+}
+
+function redirectWithRequestMethod(request: NextRequest, target: URL): NextResponse {
+  return NextResponse.redirect(target, {
+    status: getRedirectStatusForRequestMethod(request.method),
+  });
+}
+
 function buildAuthErrorResponse(request: NextRequest, message: string, pendingContext: ReturnType<typeof readPendingAuthContextFromSearchParams>) {
   const fallbackRedirect = new URL("/me", request.url);
   fallbackRedirect.searchParams.set("auth_error", message);
@@ -44,7 +57,7 @@ function buildAuthErrorResponse(request: NextRequest, message: string, pendingCo
   if (pendingContext.email) {
     fallbackRedirect.searchParams.set("email", pendingContext.email);
   }
-  return NextResponse.redirect(fallbackRedirect);
+  return redirectWithRequestMethod(request, fallbackRedirect);
 }
 
 function clearPendingAuthContextCookieOnResponse(response: NextResponse) {
@@ -112,7 +125,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
       ? "token_hash"
       : "neither";
   const redirectUrl = new URL(resolvedRedirectPath, request.url);
-  const response = NextResponse.redirect(redirectUrl);
+  const response = redirectWithRequestMethod(request, redirectUrl);
   const linkIntent = readAccountLinkIntentFromRequest(request);
 
   console.info(`[${options.context}] callback reached`, {
@@ -130,6 +143,8 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
     rawRedirectToPresent: Boolean(rawRedirectTo),
     resolvedNextPathFromQuery,
     requestOrigin,
+    requestMethod: request.method,
+    redirectStatus: getRedirectStatusForRequestMethod(request.method),
   });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -232,7 +247,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
           "link_error",
           "Your verification completed, but linking expired. Please try adding the sign-in method again.",
         );
-        const errorResponse = NextResponse.redirect(fallbackRedirect);
+        const errorResponse = redirectWithRequestMethod(request, fallbackRedirect);
         clearAccountLinkIntentCookie(errorResponse);
         console.warn(`[${options.context}] expected account link intent but none was present`);
         return errorResponse;
@@ -259,7 +274,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
         "link_error",
         error instanceof Error ? error.message : "Unable to link sign-in method",
       );
-      const errorResponse = NextResponse.redirect(fallbackRedirect);
+      const errorResponse = redirectWithRequestMethod(request, fallbackRedirect);
       clearAccountLinkIntentCookie(errorResponse);
       return errorResponse;
     }
