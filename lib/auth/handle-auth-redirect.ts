@@ -60,6 +60,18 @@ function buildAuthErrorResponse(request: NextRequest, message: string, pendingCo
   return redirectWithRequestMethod(request, fallbackRedirect);
 }
 
+function formatSupabaseAuthError(error: unknown): { message: string; code: string | null; status: number | null } {
+  const asRecord = typeof error === "object" && error ? (error as Record<string, unknown>) : null;
+  const message =
+    (asRecord?.message && typeof asRecord.message === "string" ? asRecord.message : null) ||
+    (error instanceof Error ? error.message : null) ||
+    "Unknown auth error";
+  const code = asRecord?.code && typeof asRecord.code === "string" ? asRecord.code : null;
+  const status = asRecord?.status && typeof asRecord.status === "number" ? asRecord.status : null;
+
+  return { message, code, status };
+}
+
 function clearPendingAuthContextCookieOnResponse(response: NextResponse) {
   response.cookies.set(getPendingAuthContextCookieKey(), "", {
     maxAge: 0,
@@ -191,22 +203,61 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
     }
 
     if (!sessionEstablished && tokenHash) {
-      const { error: verifyTokenHashError } = await supabase.auth.verifyOtp({
-        token_hash: tokenHash,
-        type: otpType as "email" | "recovery" | "invite" | "email_change" | "magiclink" | "signup",
-      });
-
-      if (verifyTokenHashError) {
-        console.error(`[${options.context}] verifyOtp(token_hash) failed`, {
-          message: verifyTokenHashError.message,
-          otpType,
+      const runVerifyOtp = async (
+        type: "email" | "recovery" | "invite" | "email_change" | "magiclink" | "signup",
+      ) => {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type,
         });
-      } else {
+
+        return error;
+      };
+
+      const primaryVerifyError = await runVerifyOtp(
+        otpType as "email" | "recovery" | "invite" | "email_change" | "magiclink" | "signup",
+      );
+
+      if (!primaryVerifyError) {
         sessionEstablished = true;
         verifiedVia = "token_hash";
         console.info(`[${options.context}] verifyOtp(token_hash) succeeded`, {
           otpType,
+          tokenHashPrefix: tokenHash.slice(0, 8),
         });
+      } else {
+        const primaryDetails = formatSupabaseAuthError(primaryVerifyError);
+        console.error(`[${options.context}] verifyOtp(token_hash) failed`, {
+          otpType,
+          tokenHashPrefix: tokenHash.slice(0, 8),
+          message: primaryDetails.message,
+          code: primaryDetails.code,
+          status: primaryDetails.status,
+        });
+
+        // Narrow compatibility fallback:
+        // Some Supabase projects/templates emit PKCE token hashes (prefix "pkce_") where
+        // verifyOtp(type=email) can fail at runtime; retrying as magiclink may succeed.
+        const shouldRetryAsMagicLink = otpType === "email" && tokenHash.startsWith("pkce_");
+
+        if (shouldRetryAsMagicLink) {
+          const magicLinkVerifyError = await runVerifyOtp("magiclink");
+          if (!magicLinkVerifyError) {
+            sessionEstablished = true;
+            verifiedVia = "token_hash";
+            console.info(`[${options.context}] verifyOtp(token_hash) succeeded via magiclink fallback`, {
+              tokenHashPrefix: tokenHash.slice(0, 8),
+            });
+          } else {
+            const fallbackDetails = formatSupabaseAuthError(magicLinkVerifyError);
+            console.error(`[${options.context}] verifyOtp(token_hash) magiclink fallback failed`, {
+              tokenHashPrefix: tokenHash.slice(0, 8),
+              message: fallbackDetails.message,
+              code: fallbackDetails.code,
+              status: fallbackDetails.status,
+            });
+          }
+        }
       }
     }
 
@@ -214,9 +265,12 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
       console.warn(`[${options.context}] unable to establish session from callback`, {
         arrivalMethod,
       });
+      const reason = tokenHash
+        ? `token_hash verification failed for type=${otpType}`
+        : "missing code/token_hash";
       return buildAuthErrorResponse(
         request,
-        "We couldn't complete sign-in from that link. Please request a fresh sign-in email or use the email code.",
+        `We couldn't complete sign-in from that link (${reason}). Please request a fresh sign-in email or use the email code.`,
         pendingContext,
       );
     }
