@@ -25,9 +25,9 @@ export async function GET(request: NextRequest) {
       .card { width: 100%; max-width: 460px; background: white; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
       h1 { margin: 0; font-size: 1.25rem; line-height: 1.35; }
       p { margin: 10px 0 0; color: #475569; font-size: 0.92rem; line-height: 1.5; }
-      .actions { margin-top: 18px; display: grid; gap: 8px; }
+      .actions { margin-top: 18px; display: grid; gap: 10px; }
       button { height: 42px; border: 0; border-radius: 10px; background: #0f172a; color: white; font-weight: 600; cursor: pointer; }
-      a { display: inline-flex; height: 38px; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid #cbd5e1; color: #334155; text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+      .subtle-link { display: inline-flex; align-items: center; justify-content: center; color: #475569; text-decoration: underline; text-underline-offset: 2px; font-size: 0.85rem; }
       .note { margin-top: 14px; font-size: 0.78rem; color: #64748b; }
     </style>
   </head>
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
           <form method="post" action="${actionUrl}">
             <button type="submit">Continue to sign in</button>
           </form>
-          <a href="/me">Go to account page</a>
+          <a class="subtle-link" href="/">Cancel</a>
         </div>
         <p class="note">If this link was opened by a scanner or prefetcher, your sign-in code was not consumed.</p>
       </section>

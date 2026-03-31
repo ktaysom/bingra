@@ -1,8 +1,8 @@
 import { createSupabaseBrowserClient } from "../supabase/browser";
 import {
-  buildAuthConfirmPath,
   buildFinalizePath,
   normalizePendingAuthContext,
+  sanitizeNextPath,
   type PendingAuthContext,
   savePendingAuthContext,
 } from "./auth-redirect";
@@ -34,7 +34,11 @@ export async function sendEmailSignInLink(params: {
 
   savePendingAuthContext(contextWithEmail);
 
-  const emailRedirectTo = new URL(buildAuthConfirmPath(contextWithEmail), params.appBaseUrl).toString();
+  // IMPORTANT: Supabase email templates may already wrap RedirectTo inside /auth/confirm.
+  // Always emit the final in-app destination here (never an auth intermediary route),
+  // so templates cannot produce nested /auth/confirm?next=/auth/confirm?... URLs.
+  const safeNextPath = sanitizeNextPath(contextWithEmail.nextPath, "/me");
+  const emailRedirectTo = new URL(safeNextPath, params.appBaseUrl).toString();
 
   const supabase = createSupabaseBrowserClient();
   const { error } = await supabase.auth.signInWithOtp({

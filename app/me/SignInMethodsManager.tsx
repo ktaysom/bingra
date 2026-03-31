@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
-import { buildAuthConfirmPath, normalizePendingAuthContext, savePendingAuthContext } from "../../lib/auth/auth-redirect";
+import { normalizePendingAuthContext, sanitizeNextPath, savePendingAuthContext } from "../../lib/auth/auth-redirect";
 import {
   prepareAddEmailSignInMethodAction,
   prepareAddPhoneSignInMethodAction,
@@ -104,9 +104,12 @@ export function SignInMethodsManager({ methods }: Props) {
       });
       savePendingAuthContext(pendingContext);
 
-      const emailRedirectTo = new URL(buildAuthConfirmPath(pendingContext), getAppBaseUrl()).toString();
+      const safeNextPath = sanitizeNextPath(pendingContext.nextPath, "/me");
+      const emailRedirectTo = new URL(safeNextPath, getAppBaseUrl()).toString();
       console.info("[auth/init] starting account-link email sign-in", {
         nextPath: pendingContext.nextPath,
+        safeNextPath,
+        emailRedirectTo,
         expectedLink: pendingContext.expectedLink,
       });
 
