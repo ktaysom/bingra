@@ -167,11 +167,13 @@ export async function linkGuestPlayerToProfile(params: {
 export async function ensurePlayerLinkedToAuthenticatedUser(params: {
   playerId: string;
   authUserId: string;
+  accountId?: string;
   context: string;
 }): Promise<LinkGuestPlayerResult> {
   const { playerId, authUserId, context } = params;
   const supabase = createSupabaseAdminClient();
-  const accountId = await resolveCanonicalAccountIdForAuthUserId(authUserId);
+  const accountId =
+    params.accountId ?? (await resolveCanonicalAccountIdForAuthUserId(authUserId));
   const result = await linkGuestPlayerToProfile({
     playerId,
     profileId: accountId,

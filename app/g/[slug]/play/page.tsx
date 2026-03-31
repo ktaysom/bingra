@@ -7,10 +7,15 @@ import { ensurePlayerLinkedToAuthenticatedUser } from "../../../../lib/auth/link
 import { resolveCanonicalAccountIdForAuthUserId } from "../../../../lib/auth/profiles";
 import type { CompletionMode } from "../../../../lib/bingra/card-progress";
 import { PlayPageContent } from "./PlayPageContent";
+import { getPublicBaseUrl } from "../../../../lib/share/share";
 
 type PlayPageProps = {
   params: Promise<{
     slug: string;
+  }>;
+  searchParams?: Promise<{
+    joined?: string;
+    jt?: string;
   }>;
 };
 
@@ -37,19 +42,50 @@ export const metadata: Metadata = {
   title: "Play Game",
 };
 
+const JOIN_PROMPT_COOKIE_NAME = "bingra-join-prompt-token";
+
 export default async function PlayPage(props: PlayPageProps) {
+  const renderStartedAt = Date.now();
   const { slug } = await props.params;
+  const searchParams = (await props.searchParams) ?? {};
+  console.info("[play/page][perf] render start", {
+    slug,
+    startedAt: new Date(renderStartedAt).toISOString(),
+  });
+
   const supabase = createSupabaseAdminClient();
   const supabaseServer = await createSupabaseServerClient();
   const cookieStore = await cookies();
 
-  const { data: game, error: gameError } = await supabase
+  const gameFetchStartedAt = Date.now();
+  console.info("[play/page][perf] game fetch start", { slug });
+  const gamePromise = supabase
     .from("games")
     .select(
       "id, slug, title, status, completed_at, winner_player_id, mode, team_a_name, team_b_name, team_scope, events_per_card, completion_mode, end_condition, sport_profile, restricted_scoring, host_account_id",
     )
     .eq("slug", slug)
     .maybeSingle<GameRecord>();
+
+  const authFetchStartedAt = Date.now();
+  console.info("[play/page][perf] auth.getUser start", { slug });
+  const authPromise = supabaseServer.auth.getUser();
+
+  const [{ data: game, error: gameError }, authResponse] = await Promise.all([
+    gamePromise,
+    authPromise,
+  ]);
+
+  console.info("[play/page][perf] game fetch end", {
+    slug,
+    durationMs: Date.now() - gameFetchStartedAt,
+    found: Boolean(game),
+  });
+  console.info("[play/page][perf] auth.getUser end", {
+    slug,
+    durationMs: Date.now() - authFetchStartedAt,
+    hasUser: Boolean(authResponse.data.user?.id),
+  });
 
   if (gameError || !game) {
     return (
@@ -66,11 +102,18 @@ export default async function PlayPage(props: PlayPageProps) {
 
   const {
     data: { user },
-  } = await supabaseServer.auth.getUser();
+  } = authResponse;
 
   let actorAccountId: string | null = null;
   if (user?.id) {
+    const actorAccountStartedAt = Date.now();
+    console.info("[play/page][perf] resolve actor account start", { slug });
     actorAccountId = await resolveCanonicalAccountIdForAuthUserId(user.id);
+    console.info("[play/page][perf] resolve actor account end", {
+      slug,
+      durationMs: Date.now() - actorAccountStartedAt,
+      hasActorAccountId: Boolean(actorAccountId),
+    });
   }
 
   const isSignedInHostForRestrictedGame =
@@ -80,18 +123,52 @@ export default async function PlayPage(props: PlayPageProps) {
     actorAccountId === game.host_account_id;
 
   const cookiePlayerId = cookieStore.get("bingra-player-id")?.value ?? null;
+  const joinPromptCookie = cookieStore.get(JOIN_PROMPT_COOKIE_NAME)?.value ?? null;
+
+  const joinTokenFromQuery = typeof searchParams.jt === "string" ? searchParams.jt.trim() : "";
+
+  const shouldPromptInvite =
+    searchParams.joined === "1" &&
+    Boolean(joinTokenFromQuery) &&
+    Boolean(joinPromptCookie) &&
+    joinPromptCookie === joinTokenFromQuery;
+
+  if (joinPromptCookie) {
+    cookieStore.set({
+      name: JOIN_PROMPT_COOKIE_NAME,
+      value: "",
+      path: `/g/${slug}/play`,
+      maxAge: 0,
+      httpOnly: true,
+      sameSite: "lax",
+    });
+  }
 
   let resolvedSessionPlayerId: string | null = null;
+  let resolvedSessionPlayerProfileId: string | null = null;
 
   if (cookiePlayerId) {
+    const sessionPlayerLookupStartedAt = Date.now();
+    console.info("[play/page][perf] session player lookup start", {
+      slug,
+      hasCookiePlayerId: Boolean(cookiePlayerId),
+    });
     const { data: sessionPlayer, error: sessionPlayerError } = await supabase
       .from("players")
-      .select("id, game_id")
+      .select("id, game_id, profile_id")
       .eq("id", cookiePlayerId)
-      .maybeSingle<{ id: string; game_id: string }>();
+      .maybeSingle<{ id: string; game_id: string; profile_id: string | null }>();
+
+    console.info("[play/page][perf] session player lookup end", {
+      slug,
+      durationMs: Date.now() - sessionPlayerLookupStartedAt,
+      hasSessionPlayer: Boolean(sessionPlayer?.id),
+      hadError: Boolean(sessionPlayerError),
+    });
 
     if (!sessionPlayerError && sessionPlayer && sessionPlayer.game_id === game.id) {
       resolvedSessionPlayerId = sessionPlayer.id;
+      resolvedSessionPlayerProfileId = sessionPlayer.profile_id;
     }
   }
 
@@ -103,12 +180,31 @@ export default async function PlayPage(props: PlayPageProps) {
     redirect(`/g/${slug}`);
   }
 
-  if (user?.id) {
+  const consumeJoinQueryOnMount = searchParams.joined === "1" || Boolean(joinTokenFromQuery);
+
+  const shouldEnsureLink =
+    Boolean(user?.id) &&
+    Boolean(resolvedSessionPlayerId) &&
+    (!resolvedSessionPlayerProfileId ||
+      (Boolean(actorAccountId) && resolvedSessionPlayerProfileId !== actorAccountId));
+
+  if (shouldEnsureLink && user?.id) {
     try {
+      const ensureLinkStartedAt = Date.now();
+      console.info("[play/page][perf] ensure player link start", {
+        slug,
+        playerId: resolvedSessionPlayerId,
+        hadProfileLink: Boolean(resolvedSessionPlayerProfileId),
+      });
       await ensurePlayerLinkedToAuthenticatedUser({
         playerId: resolvedSessionPlayerId,
         authUserId: user.id,
+        accountId: actorAccountId ?? undefined,
         context: "play/page",
+      });
+      console.info("[play/page][perf] ensure player link end", {
+        slug,
+        durationMs: Date.now() - ensureLinkStartedAt,
       });
     } catch (error) {
       console.error("[play/page] failed to ensure authenticated player linkage", {
@@ -118,17 +214,34 @@ export default async function PlayPage(props: PlayPageProps) {
         error,
       });
     }
+  } else {
+    console.info("[play/page][perf] ensure player link skipped", {
+      slug,
+      hasUser: Boolean(user?.id),
+      hasCurrentPlayer: Boolean(resolvedSessionPlayerId),
+      hasExistingProfileLink: Boolean(resolvedSessionPlayerProfileId),
+      actorAccountId,
+    });
   }
 
   const canManageRestrictedScoring =
     !game.restricted_scoring ||
     (Boolean(actorAccountId) && Boolean(game.host_account_id) && actorAccountId === game.host_account_id);
 
+  console.info("[play/page][perf] render end", {
+    slug,
+    durationMs: Date.now() - renderStartedAt,
+    currentPlayerId: resolvedSessionPlayerId,
+    canManageRestrictedScoring,
+  });
+
   return (
     <PlayPageContent
       game={game}
       currentPlayerId={resolvedSessionPlayerId}
       slug={slug}
+      joinedFromQuery={shouldPromptInvite}
+      consumeJoinQueryOnMount={consumeJoinQueryOnMount}
       canManageRestrictedScoring={canManageRestrictedScoring}
     />
   );

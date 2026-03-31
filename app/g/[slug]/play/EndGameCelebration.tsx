@@ -1,6 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  buildPreferredShareUrl,
+  buildGameUrl,
+  buildResultsCardUrl,
+  buildResultsShareText,
+  getPublicBaseUrl,
+} from "../../../../lib/share/share";
+import { ShareSheet } from "../../../../components/share/ShareSheet";
 
 type LeaderboardPreviewEntry = {
   id: string;
@@ -19,6 +27,7 @@ type WinnerSummary = {
 
 type EndGameCelebrationProps = {
   gameId: string;
+  slug: string;
   isFinished: boolean;
   winner: WinnerSummary | null;
   topEntries: LeaderboardPreviewEntry[];
@@ -42,6 +51,7 @@ type EndGameCelebrationProps = {
     }>;
   }>;
   teamNames: { A: string; B: string };
+  matchup: { teamA: string; teamB: string };
   mode: "streak" | "blackout";
   scoreboardTargetId?: string;
 };
@@ -56,17 +66,21 @@ function formatProgressCount(currentCount: number, requiredCount: number): strin
 
 export function EndGameCelebration({
   gameId,
+  slug,
   isFinished,
   winner,
   topEntries,
   topPlayerCards,
   teamNames,
+  matchup,
   mode,
   scoreboardTargetId,
 }: EndGameCelebrationProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [animateIn, setAnimateIn] = useState(false);
   const [selectedTopPlayerId, setSelectedTopPlayerId] = useState<string | null>(null);
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
 
   const storageKey = `bingra-finished-${gameId}`;
 
@@ -110,6 +124,42 @@ export function EndGameCelebration({
   const selectedTopPlayerCard =
     topPlayerCards.find((card) => card.player_id === selectedTopPlayerId) ?? null;
 
+  const { baseUrl, gameUrl, isLocalOnlyShare } = useMemo(() => {
+    const origin = typeof window !== "undefined" ? window.location.origin : getPublicBaseUrl();
+    const preferredShareUrl = buildPreferredShareUrl(slug, origin);
+
+    return {
+      baseUrl: origin,
+      gameUrl: preferredShareUrl ?? buildGameUrl(slug, origin),
+      isLocalOnlyShare: !preferredShareUrl,
+    };
+  }, [slug]);
+
+  const resultsShareText = useMemo(
+    () =>
+      buildResultsShareText({
+        teamA: matchup.teamA,
+        teamB: matchup.teamB,
+        winnerName: winner?.name ?? null,
+        winnerFinalScore: winner?.finalScore ?? null,
+        gameUrl,
+      }),
+    [gameUrl, matchup.teamA, matchup.teamB, winner?.finalScore, winner?.name],
+  );
+
+  const resultsCardUrl = useMemo(
+    () =>
+      buildResultsCardUrl({
+        slug,
+        baseUrl,
+        teamA: matchup.teamA,
+        teamB: matchup.teamB,
+        winnerName: winner?.name ?? null,
+        winnerFinalScore: winner?.finalScore ?? null,
+      }),
+    [baseUrl, matchup.teamA, matchup.teamB, slug, winner?.finalScore, winner?.name],
+  );
+
   if (!isFinished || !isOpen) {
     return null;
   }
@@ -136,6 +186,24 @@ export function EndGameCelebration({
       target.scrollIntoView({ behavior: "smooth", block: "start" });
       target.focus({ preventScroll: true });
     }, 160);
+  };
+
+  const copyResultsText = async () => {
+    try {
+      await navigator.clipboard.writeText(resultsShareText);
+      setShareFeedback("Results text copied");
+    } catch {
+      setShareFeedback("Could not copy results text");
+    }
+  };
+
+  const copyResultsCardLink = async () => {
+    try {
+      await navigator.clipboard.writeText(resultsCardUrl);
+      setShareFeedback("Results card link copied");
+    } catch {
+      setShareFeedback("Could not copy results card link");
+    }
   };
 
   return (
@@ -290,6 +358,13 @@ export function EndGameCelebration({
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
+              onClick={() => setShareSheetOpen(true)}
+              className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-blue-400/40 transition hover:bg-blue-500"
+            >
+              Share results
+            </button>
+            <button
+              type="button"
               onClick={handleViewScores}
               className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-violet-400/40 transition hover:bg-violet-500"
             >
@@ -303,8 +378,49 @@ export function EndGameCelebration({
               Close
             </button>
           </div>
+
+          <section className="mt-4 rounded-2xl border border-slate-200 bg-white/85 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Share results</p>
+            <p className="mt-1 text-xs text-slate-600">
+              Share your public-safe game result text or card image.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={copyResultsText}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                Copy result text
+              </button>
+              <button
+                type="button"
+                onClick={copyResultsCardLink}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                Copy result card link
+              </button>
+            </div>
+            <a
+              href={resultsCardUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Open result card image
+            </a>
+            {shareFeedback ? <p className="mt-2 text-xs text-slate-500">{shareFeedback}</p> : null}
+          </section>
         </div>
       </div>
+
+      <ShareSheet
+        isOpen={shareSheetOpen}
+        onClose={() => setShareSheetOpen(false)}
+        title="Share results"
+        shareText={resultsShareText}
+        shareUrl={gameUrl}
+        isLocalOnly={isLocalOnlyShare}
+      />
 
       <style jsx>{`
         @keyframes confetti-fall {

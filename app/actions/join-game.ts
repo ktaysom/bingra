@@ -22,6 +22,24 @@ const formSchema = z.object({
   displayName: z.string().optional(),
 });
 
+const JOIN_PROMPT_COOKIE_NAME = "bingra-join-prompt-token";
+
+async function redirectWithJoinPrompt(slug: string) {
+  const token = randomUUID();
+  const cookieStore = await cookies();
+
+  cookieStore.set({
+    name: JOIN_PROMPT_COOKIE_NAME,
+    value: token,
+    path: `/g/${slug}/play`,
+    maxAge: 60 * 10,
+    httpOnly: true,
+    sameSite: "lax",
+  });
+
+  redirect(`/g/${slug}/play?joined=1&jt=${encodeURIComponent(token)}`);
+}
+
 function formatError(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -110,7 +128,7 @@ export async function joinGameAction(
           context: "join-game/cookie-player",
         });
 
-        redirect(`/g/${parsed.data.slug}/play`);
+        await redirectWithJoinPrompt(parsed.data.slug);
       }
     }
 
@@ -139,7 +157,7 @@ export async function joinGameAction(
           sameSite: "lax",
         });
 
-        redirect(`/g/${parsed.data.slug}/play`);
+        await redirectWithJoinPrompt(parsed.data.slug);
       }
     }
 
@@ -183,7 +201,7 @@ export async function joinGameAction(
             sameSite: "lax",
           });
 
-          redirect(`/g/${parsed.data.slug}/play`);
+          await redirectWithJoinPrompt(parsed.data.slug);
         }
       }
 
@@ -206,7 +224,7 @@ export async function joinGameAction(
     const cookieStore = await cookies();
     cookieStore.set(cookieOptions);
 
-    redirect(`/g/${parsed.data.slug}/play`);
+    await redirectWithJoinPrompt(parsed.data.slug);
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;

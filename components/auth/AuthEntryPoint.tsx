@@ -41,6 +41,11 @@ export function AuthEntryPoint({ nextPath, linkPlayerId, subtle = true }: AuthEn
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     let mounted = true;
+    const shouldPerfLog = nextPath === "/create";
+
+    if (shouldPerfLog) {
+      console.info("[create/page][perf] AuthEntryPoint hydrate start");
+    }
 
     const resolveAccountLabel = async (user: User | null): Promise<string | null> => {
       if (!user?.id) {
@@ -72,6 +77,7 @@ export function AuthEntryPoint({ nextPath, linkPlayerId, subtle = true }: AuthEn
     };
 
     const hydrateAccountState = async (user: User | null) => {
+      const hydrateStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
       setIsAuthenticated(Boolean(user?.id));
 
       const label = await resolveAccountLabel(user);
@@ -82,6 +88,14 @@ export function AuthEntryPoint({ nextPath, linkPlayerId, subtle = true }: AuthEn
 
       setAccountLabel(label ?? (user?.id ? "Account" : null));
       setIsLoading(false);
+
+      if (shouldPerfLog) {
+        const end = typeof performance !== "undefined" ? performance.now() : Date.now();
+        console.info("[create/page][perf] AuthEntryPoint hydrate end", {
+          hasUser: Boolean(user?.id),
+          durationMs: Math.round(end - hydrateStartedAt),
+        });
+      }
     };
 
     supabase.auth.getUser().then(({ data }) => hydrateAccountState(data.user ?? null));

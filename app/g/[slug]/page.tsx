@@ -8,6 +8,8 @@ import {
   getSportProfileLabel,
   resolveSportProfileKey,
 } from "../../../lib/bingra/sport-profiles";
+import { getPublicGameShareDataBySlug } from "../../../lib/share/game-public";
+import { buildGameUrl, getPublicBaseUrl } from "../../../lib/share/share";
 
 type JoinPageProps = {
   params: {
@@ -15,39 +17,76 @@ type JoinPageProps = {
   };
 };
 
-type GameRecord = {
-  id: string;
-  slug: string;
-  title: string | null;
-  team_a_name: string;
-  team_b_name: string;
-  sport_profile: string | null;
-};
-
 type HostRecord = {
   display_name: string;
 };
 
-export const metadata: Metadata = {
-  title: "Join game",
-};
+export async function generateMetadata(props: JoinPageProps): Promise<Metadata> {
+  const { slug } = await props.params;
+
+  const baseUrl = getPublicBaseUrl();
+  const metadataBase = new URL(baseUrl);
+  const game = await getPublicGameShareDataBySlug(slug);
+
+  if (!game) {
+    return {
+      title: "Join game | Bingra",
+      description: "Predict game events and race to Bingra.",
+    };
+  }
+
+  const title = `${game.teamAName} vs ${game.teamBName} | Bingra`;
+  const description = "Predict game events and race to Bingra.";
+  const gameUrl = buildGameUrl(slug, baseUrl);
+  const ogImageUrl = `${gameUrl}/opengraph-image`;
+
+  const metadata: Metadata = {
+    metadataBase,
+    title,
+    description,
+    alternates: {
+      canonical: gameUrl,
+    },
+    openGraph: {
+      type: "website",
+      title,
+      description,
+      url: gameUrl,
+      siteName: "Bingra",
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: `Bingra: ${game.teamAName} vs ${game.teamBName}`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImageUrl],
+    },
+  };
+
+  return metadata;
+}
 
 export default async function JoinGamePage(props: JoinPageProps) {
   const { slug } = await props.params;
+
   const supabase = createSupabaseAdminClient();
   const supabaseServer = await createSupabaseServerClient();
 
-  const {
-    data: { user },
-  } = await supabaseServer.auth.getUser();
+  const [{ data: authUserData }, game] = await Promise.all([
+    supabaseServer.auth.getUser(),
+    getPublicGameShareDataBySlug(slug),
+  ]);
 
-  const { data: game, error } = await supabase
-    .from("games")
-    .select("id, slug, title, team_a_name, team_b_name, sport_profile")
-    .eq("slug", slug)
-    .maybeSingle<GameRecord>();
+  const user = authUserData.user;
 
-  const showError = error || !game;
+  const showError = !game;
 
   if (showError) {
     return (
@@ -70,10 +109,10 @@ export default async function JoinGamePage(props: JoinPageProps) {
     .limit(1)
     .maybeSingle<HostRecord>();
 
-  const teamAName = game.team_a_name?.trim() || "Team A";
-  const teamBName = game.team_b_name?.trim() || "Team B";
+  const teamAName = game.teamAName;
+  const teamBName = game.teamBName;
   const hostName = host?.display_name?.trim() || "Host";
-  const sportProfileLabel = getSportProfileLabel(resolveSportProfileKey(game.sport_profile));
+  const sportProfileLabel = getSportProfileLabel(resolveSportProfileKey(game.sportProfile));
 
   let initialDisplayName = "";
 

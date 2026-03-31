@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { createGameAction, CreateGameFormState } from "../actions/create-game";
 import { generateGameName } from "../../lib/bingra/game-name-generator";
 import { AuthEntryPoint } from "../../components/auth/AuthEntryPoint";
+import { AuthDialog } from "../../components/auth/AuthDialog";
 import { BingraLogo } from "../../components/BingraLogo";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import {
@@ -222,11 +223,13 @@ function getDeterministicPreviewItems(input: {
 }
 
 export default function CreatePage() {
+  const renderStartedAt = performance.now();
   const [state, formAction] = useActionState(createGameAction, initialState);
   const createFormRef = useRef<HTMLFormElement | null>(null);
   const submitAttemptedRef = useRef(false);
   const autoRetryTriggeredRef = useRef(false);
   const autoRetryInProgressRef = useRef(false);
+  const [autoRetrySignal, setAutoRetrySignal] = useState(0);
 
   const [title, setTitle] = useState(DEFAULT_TITLE);
   const [hostDisplayName, setHostDisplayName] = useState("Host");
@@ -247,10 +250,25 @@ export default function CreatePage() {
   const [eventsPerCard, setEventsPerCard] = useState(5);
   const [sportProfile, setSportProfile] = useState<SportProfileKey>(DEFAULT_SPORT_PROFILE);
 
+  console.info("[create/page][perf] render start", {
+    ts: new Date().toISOString(),
+    hasError: Boolean(state.error),
+  });
+
+  useEffect(() => {
+    console.info("[create/page][perf] render committed", {
+      commitMs: Math.round(performance.now() - renderStartedAt),
+      hasError: Boolean(state.error),
+    });
+  });
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
+
+    const lookupStartedAt = performance.now();
+    console.info("[create/page][perf] draft load start");
 
     try {
       const raw = window.localStorage.getItem(CREATE_DRAFT_STORAGE_KEY);
@@ -278,6 +296,10 @@ export default function CreatePage() {
       if (draft.sportProfile) setSportProfile(draft.sportProfile);
     } catch {
       // Ignore malformed drafts.
+    } finally {
+      console.info("[create/page][perf] draft load end", {
+        durationMs: Math.round(performance.now() - lookupStartedAt),
+      });
     }
   }, []);
 
@@ -320,23 +342,33 @@ export default function CreatePage() {
       return;
     }
 
+    const authRequiredStartedAt = performance.now();
+    console.info("[create/page][perf] auth-required branch start");
+
     if (!submitAttemptedRef.current || autoRetryInProgressRef.current) {
-      console.info("[create/auto-retry] auth-required encountered but skipping retry flag write", {
+      console.info("[create/page][perf] auth-required branch skip retry flag", {
         submitAttempted: submitAttemptedRef.current,
         autoRetryInProgress: autoRetryInProgressRef.current,
+        durationMs: Math.round(performance.now() - authRequiredStartedAt),
       });
       return;
     }
 
     if (window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY) === "1") {
-      console.info("[create/auto-retry] retry already consumed; not writing retry flag");
+      console.info("[create/page][perf] auth-required retry already consumed", {
+        durationMs: Math.round(performance.now() - authRequiredStartedAt),
+      });
       return;
     }
 
     window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_KEY, "1");
-    console.info("[create/auto-retry] wrote retry flag", {
-      retryKey: CREATE_AFTER_LOGIN_RETRY_KEY,
-      consumedKey: CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY,
+    console.info("[create/page][perf] retry flag set", {
+      retryFlag: window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY),
+      consumedFlag: window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY),
+    });
+    setAutoRetrySignal((current) => current + 1);
+    console.info("[create/page][perf] auth-required branch end", {
+      durationMs: Math.round(performance.now() - authRequiredStartedAt),
     });
   }, [state.error]);
 
@@ -345,29 +377,50 @@ export default function CreatePage() {
       return;
     }
 
+    const autoRetryStartedAt = performance.now();
+
+    const retryFlag = window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY);
+    const consumedFlag = window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY);
+    console.info("[create/page][perf] auto-retry flags read", {
+      retryFlag,
+      consumedFlag,
+      signal: autoRetrySignal,
+    });
+
     if (autoRetryTriggeredRef.current) {
-      console.info("[create/auto-retry] auto-retry already triggered in this render lifecycle");
+      console.info("[create/page][perf] auto-retry already triggered", {
+        durationMs: Math.round(performance.now() - autoRetryStartedAt),
+      });
       return;
     }
 
-    if (window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY) !== "1") {
-      console.info("[create/auto-retry] retry flag missing; no auto-submit");
+    if (retryFlag !== "1") {
+      console.info("[create/page][perf] auto-retry skipped (retry flag missing)", {
+        durationMs: Math.round(performance.now() - autoRetryStartedAt),
+      });
       return;
     }
 
-    if (window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY) === "1") {
-      console.info("[create/auto-retry] retry already consumed; no auto-submit");
+    if (consumedFlag === "1") {
+      console.info("[create/page][perf] auto-retry skipped (already consumed)", {
+        durationMs: Math.round(performance.now() - autoRetryStartedAt),
+      });
       return;
     }
 
     const form = createFormRef.current;
     if (!form) {
-      console.info("[create/auto-retry] form ref missing; no auto-submit");
+      console.info("[create/page][perf] auto-retry skipped (form missing)", {
+        durationMs: Math.round(performance.now() - autoRetryStartedAt),
+      });
       return;
     }
 
     let cancelled = false;
     let submitted = false;
+    let pollTimer: number | null = null;
+    let pollAttempt = 0;
+    const maxPollAttempts = 20;
 
     const consumeAndSubmit = () => {
       if (submitted || cancelled) {
@@ -379,37 +432,58 @@ export default function CreatePage() {
       autoRetryInProgressRef.current = true;
       window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY, "1");
       window.sessionStorage.removeItem(CREATE_AFTER_LOGIN_RETRY_KEY);
-      console.info("[create/auto-retry] conditions met; auto-submitting create form");
+      console.info("[create/page][perf] auto-retry submit", {
+        totalMs: Math.round(performance.now() - autoRetryStartedAt),
+        consumedFlag: window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY),
+        retryFlag: window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY),
+      });
       form.requestSubmit();
     };
 
-    const maybeAutoRetryAfterAuth = async (source: "initial" | "auth_change" | "retry") => {
-      const supabase = createSupabaseBrowserClient();
+    const supabase = createSupabaseBrowserClient();
+
+    const maybeAutoRetryAfterAuth = async (source: "initial" | "auth_change" | "poll") => {
+      const authLookupStartedAt = performance.now();
+      console.info("[create/page][perf] auto-retry auth lookup start", { source });
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
+      console.info("[create/page][perf] auto-retry auth lookup end", {
+        source,
+        durationMs: Math.round(performance.now() - authLookupStartedAt),
+        hasUser: Boolean(user?.id),
+      });
 
       if (cancelled) {
         return;
       }
 
       if (!user?.id) {
-        console.info("[create/auto-retry] auth user not yet available", {
-          source,
-        });
+        if (pollAttempt < maxPollAttempts) {
+          const nextAttempt = pollAttempt + 1;
+          pollAttempt = nextAttempt;
+          pollTimer = window.setTimeout(() => {
+            void maybeAutoRetryAfterAuth("poll");
+          }, 300);
+          console.info("[create/page][perf] auto-retry auth pending; scheduling poll", {
+            source,
+            attempt: nextAttempt,
+            maxPollAttempts,
+          });
+        } else {
+          console.info("[create/page][perf] auto-retry auth polling exhausted", {
+            source,
+            attempts: pollAttempt,
+          });
+        }
         return;
       }
 
       consumeAndSubmit();
     };
 
-    const supabase = createSupabaseBrowserClient();
-
     void maybeAutoRetryAfterAuth("initial");
-
-    const retryTimeout = window.setTimeout(() => {
-      void maybeAutoRetryAfterAuth("retry");
-    }, 250);
 
     const {
       data: { subscription },
@@ -423,10 +497,12 @@ export default function CreatePage() {
 
     return () => {
       cancelled = true;
-      window.clearTimeout(retryTimeout);
+      if (pollTimer) {
+        window.clearTimeout(pollTimer);
+      }
       subscription.unsubscribe();
     };
-  }, []);
+  }, [autoRetrySignal]);
 
   useEffect(() => {
     if (autoRetryInProgressRef.current && state.error) {
@@ -871,8 +947,17 @@ export default function CreatePage() {
                 >
                   {state.error}
                   {state.error === AUTH_REQUIRED_CREATE_ERROR ? (
-                    <div className="mt-3">
-                      <AuthEntryPoint nextPath="/create" subtle={false} />
+                    <div className="mt-3 flex flex-col gap-2">
+                      <div>
+                        <AuthDialog
+                          label="Sign in to continue"
+                          nextPath="/create"
+                          emphasis="prominent"
+                        />
+                      </div>
+                      <p className="text-xs text-[#8b3c2d]">
+                        After sign-in, we&apos;ll auto-retry creating this game.
+                      </p>
                     </div>
                   ) : null}
                 </div>

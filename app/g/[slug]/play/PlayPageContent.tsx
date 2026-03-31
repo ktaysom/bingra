@@ -107,6 +107,8 @@ type PlayPageContentProps = {
   game: GameRecord;
   currentPlayerId: string;
   slug: string;
+  joinedFromQuery?: boolean;
+  consumeJoinQueryOnMount?: boolean;
   canManageRestrictedScoring: boolean;
 };
 
@@ -114,16 +116,24 @@ export async function PlayPageContent({
   game,
   currentPlayerId,
   slug,
+  joinedFromQuery = false,
+  consumeJoinQueryOnMount = false,
   canManageRestrictedScoring,
 }: PlayPageContentProps) {
+  const contentStartedAt = Date.now();
+  console.info("[play/content][perf] render start", {
+    slug,
+    gameId: game.id,
+    startedAt: new Date(contentStartedAt).toISOString(),
+  });
+
   const supabase = createSupabaseAdminClient();
   const sportProfile = resolveSportProfileKey(game.sport_profile);
   const sportProfileLabel = getSportProfileLabel(sportProfile);
 
-  let players: PlayerRecord[] | null = null;
-  let playersError: string | null = null;
-
-  {
+  const playersFetchPromise = (async () => {
+    const startedAt = Date.now();
+    console.info("[play/content][perf] players fetch start", { slug, gameId: game.id });
     const { data, error } = await supabase
       .from("players")
       .select("id, display_name, role, created_at")
@@ -132,30 +142,45 @@ export async function PlayPageContent({
       .order("id", { ascending: true })
       .returns<PlayerRecord[]>();
 
-    players = data;
-    playersError = error?.message ?? null;
-  }
+    console.info("[play/content][perf] players fetch end", {
+      slug,
+      gameId: game.id,
+      durationMs: Date.now() - startedAt,
+      rowCount: data?.length ?? 0,
+      hadError: Boolean(error),
+    });
 
-  let cardsForGame: CardRow[] = [];
+    return {
+      players: data,
+      playersError: error?.message ?? null,
+    };
+  })();
 
-  {
+  const cardsFetchPromise = (async () => {
+    const startedAt = Date.now();
+    console.info("[play/content][perf] cards fetch start", { slug, gameId: game.id });
     const { data, error } = await supabase
       .from("cards")
       .select("id, player_id, accepted_at, card_cells(order_index, event_key, event_label, team_key, point_value, threshold)")
       .eq("game_id", game.id)
       .returns<CardRow[]>();
 
-    if (!error && data) {
-      cardsForGame = data;
-    }
-  }
+    console.info("[play/content][perf] cards fetch end", {
+      slug,
+      gameId: game.id,
+      durationMs: Date.now() - startedAt,
+      rowCount: data?.length ?? 0,
+      hadError: Boolean(error),
+    });
 
-  const playerCount = players?.length ?? 0;
+    return {
+      cardsForGame: !error && data ? data : [],
+    };
+  })();
+
   const playMode = game.completion_mode === "STREAK" ? "streak" : "quick_play";
   const initialRiskLevel: RiskLevel = 3;
   const teamNames: Record<TeamKey, string> = { A: game.team_a_name, B: game.team_b_name };
-  const hostName = players?.find((player) => player.role === "host")?.display_name?.trim() || null;
-  const displayHostName = hostName || "Host";
   const resolvedTeamA = game.team_a_name?.trim() || null;
   const resolvedTeamB = game.team_b_name?.trim() || null;
   const parsedTeamsFromTitle = (() => {
@@ -214,37 +239,99 @@ export async function PlayPageContent({
   const isLobby = game.status === "lobby";
   const isLive = game.status === "live";
   const isGameFinished = game.status === "finished";
-  let allScoredEvents: RecentScoredEvent[] = [];
+  const scoredEventsFetchPromise = (async () => {
+    const startedAt = Date.now();
+    console.info("[play/content][perf] scored_events fetch start", { slug, gameId: game.id });
+    try {
+      const { data, error } = await supabase
+        .from("scored_events")
+        .select("id, event_key, event_label, team_key, created_at")
+        .eq("game_id", game.id)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
 
-  try {
-    const { data, error } = await supabase
-      .from("scored_events")
-      .select("id, event_key, event_label, team_key, created_at")
-      .eq("game_id", game.id)
-      .order("created_at", { ascending: true })
-      .order("id", { ascending: true });
+      const rows = (data as RecentScoredEvent[] | null) ?? [];
+      console.info("[play/content][perf] scored_events fetch end", {
+        slug,
+        gameId: game.id,
+        durationMs: Date.now() - startedAt,
+        rowCount: rows.length,
+        hadError: Boolean(error),
+      });
 
-    allScoredEvents = (data as RecentScoredEvent[] | null) ?? [];
-  } catch (error) {
-    console.error("Unable to load scored events", error);
-  }
+      return {
+        allScoredEvents: rows,
+      };
+    } catch (error) {
+      console.error("Unable to load scored events", error);
+      console.info("[play/content][perf] scored_events fetch end", {
+        slug,
+        gameId: game.id,
+        durationMs: Date.now() - startedAt,
+        rowCount: 0,
+        hadError: true,
+      });
+      return {
+        allScoredEvents: [] as RecentScoredEvent[],
+      };
+    }
+  })();
 
-  let liveCompletions: LiveCompletionRow[] = [];
-  let liveCompletionsError: string | null = null;
+  const completionsFetchPromise = (async () => {
+    const startedAt = Date.now();
+    console.info("[play/content][perf] game_completions fetch start", { slug, gameId: game.id });
+    try {
+      const { data, error } = await supabase
+        .from("game_completions")
+        .select("id, player_id, completed_at_event_id, created_at")
+        .eq("game_id", game.id)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
 
-  try {
-    const { data, error } = await supabase
-      .from("game_completions")
-      .select("id, player_id, completed_at_event_id, created_at")
-      .eq("game_id", game.id)
-      .order("created_at", { ascending: true })
-      .order("id", { ascending: true });
+      const rows = (data as LiveCompletionRow[] | null) ?? [];
+      console.info("[play/content][perf] game_completions fetch end", {
+        slug,
+        gameId: game.id,
+        durationMs: Date.now() - startedAt,
+        rowCount: rows.length,
+        hadError: Boolean(error),
+      });
 
-    liveCompletions = (data as LiveCompletionRow[] | null) ?? [];
-    liveCompletionsError = error?.message ?? null;
-  } catch (error) {
-    liveCompletionsError = String(error);
-  }
+      return {
+        liveCompletions: rows,
+        liveCompletionsError: error?.message ?? null,
+      };
+    } catch (error) {
+      console.info("[play/content][perf] game_completions fetch end", {
+        slug,
+        gameId: game.id,
+        durationMs: Date.now() - startedAt,
+        rowCount: 0,
+        hadError: true,
+      });
+      return {
+        liveCompletions: [] as LiveCompletionRow[],
+        liveCompletionsError: String(error),
+      };
+    }
+  })();
+
+  const [playersResult, cardsResult, scoredEventsResult, completionsResult] = await Promise.all([
+    playersFetchPromise,
+    cardsFetchPromise,
+    scoredEventsFetchPromise,
+    completionsFetchPromise,
+  ]);
+
+  const players = playersResult.players;
+  const playersError = playersResult.playersError;
+  const cardsForGame = cardsResult.cardsForGame;
+  const allScoredEvents = scoredEventsResult.allScoredEvents;
+  const liveCompletions = completionsResult.liveCompletions;
+  const liveCompletionsError = completionsResult.liveCompletionsError;
+  const playerCount = players?.length ?? 0;
+  const hostName = players?.find((player) => player.role === "host")?.display_name?.trim() || null;
+  const displayHostName = hostName || "Host";
 
   const completionMode = game.completion_mode;
   const recordedEvents: RecordedEvent[] = allScoredEvents.map((event) => ({
@@ -263,6 +350,7 @@ export async function PlayPageContent({
   const cardsByPlayerId = new Map(cardsForGame.map((card) => [card.player_id, card]));
   const playersById = new Map((players ?? []).map((player) => [player.id, player]));
 
+  const scoringStartedAt = Date.now();
   const scoringLeaderboardEntries: LeaderboardEntry[] = buildGameScores({
     players: (players ?? []).map((player) => ({
       id: player.id,
@@ -298,6 +386,12 @@ export async function PlayPageContent({
     join_order: entry.join_order,
     is_active: true,
   }));
+  console.info("[play/content][perf] leaderboard compute end", {
+    slug,
+    gameId: game.id,
+    durationMs: Date.now() - scoringStartedAt,
+    entryCount: scoringLeaderboardEntries.length,
+  });
 
   const scoringEntriesByPlayerId = new Map(scoringLeaderboardEntries.map((entry) => [entry.id, entry]));
 
@@ -436,6 +530,7 @@ export async function PlayPageContent({
 
   const leaderboardEntryByPlayerId = new Map(leaderboardEntries.map((entry) => [entry.id, entry]));
 
+  const playerPreviewStartedAt = Date.now();
   const playerCardPreviews = (players ?? []).map((player) => {
     const playerCard = cardsByPlayerId.get(player.id) ?? null;
     const sortedCells = [...(playerCard?.card_cells ?? [])].sort(
@@ -506,6 +601,12 @@ export async function PlayPageContent({
       }),
     };
   });
+  console.info("[play/content][perf] player card preview compute end", {
+    slug,
+    gameId: game.id,
+    durationMs: Date.now() - playerPreviewStartedAt,
+    previewCount: playerCardPreviews.length,
+  });
 
   const playerCardsForScoring = new Map(
     cardsForGame.map((card) => [
@@ -542,6 +643,7 @@ export async function PlayPageContent({
     currentPlayerId != null &&
     unacceptedPlayerIds.has(currentPlayerId);
 
+  const activityFeedStartedAt = Date.now();
   const activityFeedItems: ActivityFeedItem[] = buildActivityFeedItems({
     players: (players ?? []).map((player) => ({
       id: player.id,
@@ -564,6 +666,12 @@ export async function PlayPageContent({
       has_bingra: entry.has_bingra,
     })),
     sportProfile,
+  });
+  console.info("[play/content][perf] activity feed compute end", {
+    slug,
+    gameId: game.id,
+    durationMs: Date.now() - activityFeedStartedAt,
+    itemCount: activityFeedItems.length,
   });
 
   const formatActivityTimestamp = (iso: string) =>
@@ -636,6 +744,16 @@ export async function PlayPageContent({
 
   const activityFeedIsScrollable = activityFeedItems.length > 7;
 
+  console.info("[play/content][perf] render end", {
+    slug,
+    gameId: game.id,
+    durationMs: Date.now() - contentStartedAt,
+    playerCount,
+    cardCount: cardsForGame.length,
+    scoredEventsCount: allScoredEvents.length,
+    completionsCount: liveCompletions.length,
+  });
+
   return (
     <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6">
       <PlayRealtimeBridgeMount gameId={game.id} slug={slug} />
@@ -647,6 +765,7 @@ export async function PlayPageContent({
       />
       <EndGameCelebration
         gameId={game.id}
+        slug={slug}
         isFinished={isGameFinished}
         winner={
           winnerEntry
@@ -666,6 +785,10 @@ export async function PlayPageContent({
           hasBingra: entry.has_bingra,
         }))}
         topPlayerCards={playerCardPreviews}
+        matchup={{
+          teamA: shareTeamA || "Team A",
+          teamB: shareTeamB || "Team B",
+        }}
         teamNames={teamNames}
         mode={playMode === "streak" ? "streak" : "blackout"}
         scoreboardTargetId={scoreboardTargetId}
@@ -691,6 +814,8 @@ export async function PlayPageContent({
               teamA={shareTeamA}
               teamB={shareTeamB}
               hostName={hostName}
+              promptInviteOnMount={joinedFromQuery}
+              consumeJoinQueryOnMount={consumeJoinQueryOnMount}
             />
           </div>
         </div>

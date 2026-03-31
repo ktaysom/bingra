@@ -107,11 +107,20 @@ export async function createGameAction(
     const supabase = createSupabaseAdminClient();
     const supabaseServer = await createSupabaseServerClient();
 
+    const authLookupStartedAt = Date.now();
+    console.info("[createGameAction][perf] auth.getUser start");
     const {
       data: { user },
     } = await supabaseServer.auth.getUser();
+    console.info("[createGameAction][perf] auth.getUser end", {
+      durationMs: Date.now() - authLookupStartedAt,
+      hasUser: Boolean(user?.id),
+    });
 
     if (!user?.id) {
+      console.info("[createGameAction][perf] auth-required return", {
+        totalMs: Date.now() - actionStartedAt,
+      });
       return { error: AUTH_REQUIRED_CREATE_ERROR };
     }
 
@@ -122,8 +131,6 @@ export async function createGameAction(
     if (!resolvedHostDisplayName.trim() || resolvedHostDisplayName.trim().toLowerCase() === "host") {
       resolvedHostDisplayName = await resolveProfileDefaultDisplayName(user.id);
     }
-
-    console.log("[createGameAction] SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
     const selectedSport = resolveCreateGameSport(parsed.data.sport_profile);
 
@@ -140,8 +147,6 @@ export async function createGameAction(
       p_auth_user_id: user.id,
     };
 
-    console.log("[createGameAction] rpc_create_game payload", rpcPayload);
-
     let hostSlug: string | null = null;
     let hostPlayerId: string | null = null;
 
@@ -152,8 +157,6 @@ export async function createGameAction(
       console.info("[createGameAction][perf] rpc_create_game end", {
         durationMs: Date.now() - rpcStartedAt,
       });
-
-      console.log("[createGameAction] rpc_create_game response", { data, error });
 
       if (error) {
         console.error("[createGameAction] insert error", error);
@@ -170,7 +173,6 @@ export async function createGameAction(
       };
 
       hostSlug = resultRow.game_slug;
-      console.log("[createGameAction] resolved hostSlug", hostSlug);
 
       const verifyGameStartedAt = Date.now();
       console.info("[createGameAction][perf] games verify query start", { hostSlug });
@@ -182,8 +184,6 @@ export async function createGameAction(
       console.info("[createGameAction][perf] games verify query end", {
         durationMs: Date.now() - verifyGameStartedAt,
       });
-
-      console.log("[createGameAction] immediate verify query", { verifyRow, verifyError });
 
       if (verifyError) {
         throw verifyError;
@@ -315,8 +315,6 @@ export async function createGameAction(
       httpOnly: true,
       sameSite: "lax",
     });
-
-    console.log("[createGameAction] redirecting to", `/g/${hostSlug}/play`);
     redirect(`/g/${hostSlug}/play`);
   } finally {
     console.info("[createGameAction][perf] total action duration", {
