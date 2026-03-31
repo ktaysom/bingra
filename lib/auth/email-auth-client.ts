@@ -7,14 +7,10 @@ import {
   savePendingAuthContext,
 } from "./auth-redirect";
 
-export const DEFAULT_EMAIL_OTP_LENGTH = 8;
+export const DEFAULT_EMAIL_OTP_LENGTH = 6;
 
 export function getExpectedEmailOtpLength(): number {
-  const configured = Number(process.env.NEXT_PUBLIC_EMAIL_OTP_LENGTH);
-  if (Number.isInteger(configured) && configured >= 4 && configured <= 12) {
-    return configured;
-  }
-
+  // Bingra email OTP is fixed to 6 digits to match Supabase configuration.
   return DEFAULT_EMAIL_OTP_LENGTH;
 }
 

@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createGameAction, CreateGameFormState } from "../actions/create-game";
 import { generateGameName } from "../../lib/bingra/game-name-generator";
 import { AuthEntryPoint } from "../../components/auth/AuthEntryPoint";
 import { BingraLogo } from "../../components/BingraLogo";
+import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import {
   getEventMaxThreshold,
   getEventsForMode,
@@ -26,6 +27,8 @@ import { mapPlayModeToGameMode } from "../../lib/bingra/types";
 
 const initialState: CreateGameFormState = {};
 const CREATE_DRAFT_STORAGE_KEY = "bingra.create-draft.v1";
+const CREATE_AFTER_LOGIN_RETRY_KEY = "bingra.create-after-login.retry.v1";
+const CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY = "bingra.create-after-login.retry-consumed.v1";
 const AUTH_REQUIRED_CREATE_ERROR = "Please sign in to create a game.";
 
 const DEFAULT_TITLE = "Game On";
@@ -220,6 +223,10 @@ function getDeterministicPreviewItems(input: {
 
 export default function CreatePage() {
   const [state, formAction] = useActionState(createGameAction, initialState);
+  const createFormRef = useRef<HTMLFormElement | null>(null);
+  const submitAttemptedRef = useRef(false);
+  const autoRetryTriggeredRef = useRef(false);
+  const autoRetryInProgressRef = useRef(false);
 
   const [title, setTitle] = useState(DEFAULT_TITLE);
   const [hostDisplayName, setHostDisplayName] = useState("Host");
@@ -304,6 +311,80 @@ export default function CreatePage() {
     sportProfile,
   ]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (state.error !== AUTH_REQUIRED_CREATE_ERROR) {
+      return;
+    }
+
+    if (!submitAttemptedRef.current || autoRetryInProgressRef.current) {
+      return;
+    }
+
+    if (window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY) === "1") {
+      return;
+    }
+
+    window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_KEY, "1");
+  }, [state.error]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (autoRetryTriggeredRef.current) {
+      return;
+    }
+
+    if (window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY) !== "1") {
+      return;
+    }
+
+    if (window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY) === "1") {
+      return;
+    }
+
+    const form = createFormRef.current;
+    if (!form) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const maybeAutoRetryAfterAuth = async () => {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (cancelled || !user?.id) {
+        return;
+      }
+
+      autoRetryTriggeredRef.current = true;
+      autoRetryInProgressRef.current = true;
+      window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY, "1");
+      window.sessionStorage.removeItem(CREATE_AFTER_LOGIN_RETRY_KEY);
+      form.requestSubmit();
+    };
+
+    void maybeAutoRetryAfterAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.error]);
+
+  useEffect(() => {
+    if (autoRetryInProgressRef.current && state.error) {
+      autoRetryInProgressRef.current = false;
+    }
+  }, [state.error]);
+
   const { sport: selectedSportForPicker, level: selectedLevelForPicker } =
     resolveSportLevelSelection(sportProfile);
   const selectedLevelOptions = SPORT_LEVEL_PROFILE_MAP[selectedSportForPicker];
@@ -374,7 +455,18 @@ export default function CreatePage() {
           </section>
 
           <section>
-            <form action={formAction} className="space-y-6">
+            <form
+              ref={createFormRef}
+              action={formAction}
+              onSubmit={() => {
+                submitAttemptedRef.current = true;
+
+                if (typeof window !== "undefined" && !autoRetryInProgressRef.current) {
+                  window.sessionStorage.removeItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY);
+                }
+              }}
+              className="space-y-6"
+            >
               <input type="hidden" name="mode" value={legacyMode} />
               <input type="hidden" name="completion_mode" value={completionModeDb} />
               <input type="hidden" name="end_condition" value={endConditionDb} />
