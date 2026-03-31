@@ -1,14 +1,10 @@
 import type { Metadata } from "next";
-import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server";
 import { ensurePlayerLinkedToAuthenticatedUser } from "../../../../lib/auth/link-player";
-import {
-  resolveCanonicalAccountIdForAuthUserId,
-  resolveProfileDefaultDisplayName,
-} from "../../../../lib/auth/profiles";
+import { resolveCanonicalAccountIdForAuthUserId } from "../../../../lib/auth/profiles";
 import type { CompletionMode } from "../../../../lib/bingra/card-progress";
 import { PlayPageContent } from "./PlayPageContent";
 
@@ -100,74 +96,12 @@ export default async function PlayPage(props: PlayPageProps) {
   }
 
   if (!resolvedSessionPlayerId && isSignedInHostForRestrictedGame && user?.id && actorAccountId) {
-    const { data: existingHostPlayer, error: existingHostPlayerError } = await supabase
-      .from("players")
-      .select("id, profile_id")
-      .eq("game_id", game.id)
-      .eq("role", "host")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle<{ id: string; profile_id: string | null }>();
-
-    if (existingHostPlayerError) {
-      console.error("[play/page] host player recovery lookup failed", {
-        slug,
-        userId: user.id,
-        error: existingHostPlayerError,
-      });
-      redirect(`/g/${slug}`);
-    }
-
-    if (existingHostPlayer?.id) {
-      if (!existingHostPlayer.profile_id) {
-        await supabase
-          .from("players")
-          .update({ profile_id: actorAccountId })
-          .eq("id", existingHostPlayer.id)
-          .is("profile_id", null)
-          .limit(1);
-      }
-
-      resolvedSessionPlayerId = existingHostPlayer.id;
-    } else {
-      const hostDisplayName = await resolveProfileDefaultDisplayName(user.id);
-      const { data: insertedHostPlayer, error: insertedHostPlayerError } = await supabase
-        .from("players")
-        .insert({
-          game_id: game.id,
-          display_name: hostDisplayName,
-          role: "host",
-          join_token: randomUUID(),
-          profile_id: actorAccountId,
-        })
-        .select("id")
-        .maybeSingle<{ id: string }>();
-
-      if (insertedHostPlayerError || !insertedHostPlayer?.id) {
-        console.error("[play/page] host player recovery create failed", {
-          slug,
-          userId: user.id,
-          error: insertedHostPlayerError,
-        });
-        redirect(`/g/${slug}`);
-      }
-
-      resolvedSessionPlayerId = insertedHostPlayer.id;
-    }
+    redirect(`/g/${slug}/play/recover-host`);
   }
 
   if (!resolvedSessionPlayerId) {
     redirect(`/g/${slug}`);
   }
-
-  cookieStore.set({
-    name: "bingra-player-id",
-    value: resolvedSessionPlayerId,
-    path: `/g/${slug}`,
-    maxAge: 60 * 60 * 24 * 30,
-    httpOnly: true,
-    sameSite: "lax",
-  });
 
   if (user?.id) {
     try {
