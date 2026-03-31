@@ -99,6 +99,7 @@ type CardRow = {
     team_key: string | null;
     point_value: number | null;
     threshold?: number | null;
+    required_count?: number | null;
   }[];
 };
 
@@ -277,6 +278,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     })),
     recordedEvents,
     completionMode,
+    sportProfile,
     bingraPlayerIds,
     bingraCompletedAtByPlayerId,
   }).map((entry) => ({
@@ -337,6 +339,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
     currentPlayerEligibleRecordedEvents,
     currentPlayerProgressCells,
     completionMode,
+    sportProfile,
   );
   const currentPlayerCellProgress = currentPlayerProgress.cell_progress;
 
@@ -401,6 +404,10 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
           : typeof cell.threshold === "number"
             ? cell.threshold
             : 1,
+      required_count:
+        typeof cellProgress?.required_count === "number"
+          ? cellProgress.required_count
+          : 1,
       current_count: typeof cellProgress?.current_count === "number" ? cellProgress.current_count : 0,
       remaining_count:
         typeof cellProgress?.remaining_count === "number" ? cellProgress.remaining_count : null,
@@ -448,6 +455,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
       eligibleRecordedEvents,
       progressCells,
       completionMode,
+      sportProfile,
     );
     const cellProgress = cardProgress.cell_progress;
 
@@ -479,6 +487,10 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
               : typeof cell.threshold === "number"
                 ? cell.threshold
                 : 1,
+          required_count:
+            typeof cellProgress[index]?.required_count === "number"
+              ? cellProgress[index].required_count
+              : 1,
           current_count:
             typeof cellProgress[index]?.current_count === "number"
               ? cellProgress[index].current_count
@@ -620,7 +632,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
 
   return (
     <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6">
-      <PlayRealtimeBridgeMount gameId={game.id} />
+      <PlayRealtimeBridgeMount gameId={game.id} slug={slug} />
       <EndGameSaveStatsPrompt
         gameId={game.id}
         slug={slug}

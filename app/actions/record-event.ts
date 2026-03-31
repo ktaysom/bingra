@@ -343,11 +343,13 @@ export async function recordEventAction(
       filterRecordedEventsByAcceptedAt(recordedEventsBefore, acceptedAt),
       progressCells,
       game.completion_mode,
+      resolvedProfile,
     );
     const afterProgress = calculateCardProgress(
       filterRecordedEventsByAcceptedAt(recordedEventsAfter, acceptedAt),
       progressCells,
       game.completion_mode,
+      resolvedProfile,
     );
 
     if (!beforeProgress.is_complete && afterProgress.is_complete) {

@@ -52,9 +52,14 @@ export async function deleteScoredEventAction(
 
   const { data: game, error: gameError } = await supabase
     .from("games")
-    .select("id, status, completion_mode")
+    .select("id, status, completion_mode, sport_profile")
     .eq("slug", parsed.data.slug)
-    .maybeSingle<{ id: string; status: "lobby" | "live" | "finished"; completion_mode: "BLACKOUT" | "STREAK" }>();
+    .maybeSingle<{
+      id: string;
+      status: "lobby" | "live" | "finished";
+      completion_mode: "BLACKOUT" | "STREAK";
+      sport_profile: string | null;
+    }>();
 
   if (gameError) {
     return { error: formatError(gameError), completedAt: new Date().toISOString() };
@@ -112,6 +117,7 @@ export async function deleteScoredEventAction(
       supabase,
       gameId: game.id,
       completionMode: game.completion_mode,
+      sportProfile: game.sport_profile,
     });
   } catch (error) {
     return {

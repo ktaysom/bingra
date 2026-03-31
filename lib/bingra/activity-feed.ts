@@ -636,8 +636,18 @@ export function buildEventRecordedItems(input: {
       const cardCells = card?.card_cells ?? [];
       const eligibleBefore = filterRecordedEventsByAcceptedAt(recordedEventsProgress, acceptedAt);
       const eligibleAfter = filterRecordedEventsByAcceptedAt(nextRecordedEvents, acceptedAt);
-      const before = calculateCardProgress(eligibleBefore, cardCells, completionMode);
-      const after = calculateCardProgress(eligibleAfter, cardCells, completionMode);
+      const before = calculateCardProgress(
+        eligibleBefore,
+        cardCells,
+        completionMode,
+        sportProfile ?? DEFAULT_SPORT_PROFILE,
+      );
+      const after = calculateCardProgress(
+        eligibleAfter,
+        cardCells,
+        completionMode,
+        sportProfile ?? DEFAULT_SPORT_PROFILE,
+      );
       const delta = after.score - before.score;
       const beforeRemainingTotalCount = getRemainingTotalCount(before.cell_progress);
       const afterRemainingTotalCount = getRemainingTotalCount(after.cell_progress);
@@ -675,8 +685,12 @@ export function buildEventRecordedItems(input: {
             teamLabel && eventMeta?.teamScope === "team"
               ? `${teamLabel}: ${baseEventLabel}`
               : baseEventLabel;
-          const threshold = remainingCellProgress?.threshold ?? remainingCell?.threshold ?? 1;
-          const predictionLabel = formatThresholdPredictionLabel(threshold, detailedEventLabel);
+          const requiredCount =
+            remainingCellProgress?.required_count ??
+            remainingCellProgress?.threshold ??
+            remainingCell?.threshold ??
+            1;
+          const predictionLabel = formatThresholdPredictionLabel(requiredCount, detailedEventLabel);
           const rarity = eventMeta
             ? getEventRarityForProfile(
                 eventMeta,

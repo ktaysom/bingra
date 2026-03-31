@@ -9,6 +9,7 @@ import { SignInMethodsManager } from "./SignInMethodsManager";
 import { AuthErrorRecoveryPanel } from "../../components/auth/AuthErrorRecoveryPanel";
 import type { PostAuthIntent } from "../../lib/auth/auth-redirect";
 import { readPendingAuthContextFromCookieValue, getPendingAuthContextCookieKey } from "../../lib/auth/auth-redirect";
+import { LastGameFallback } from "./LastGameFallback";
 
 type AccountPageProps = {
   searchParams?: Promise<{
@@ -215,22 +216,13 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     return accumulator;
   }, []);
 
-  const contextGameSlug = pendingContextFromCookie?.gameSlug?.trim() || authRecoveryContext.gameSlug?.trim() || null;
-  if (contextGameSlug) {
-    const alreadyPresent = mergedRecentOrActiveGames.some((game) => game.slug?.trim() === contextGameSlug);
-
-    if (!alreadyPresent) {
-      const { data: contextGameRow } = await supabase
-        .from("games")
-        .select("id, title, slug, status")
-        .eq("slug", contextGameSlug)
-        .maybeSingle<{ id: string; title?: string | null; slug?: string | null; status?: string | null }>();
-
-      if (contextGameRow?.id) {
-        mergedRecentOrActiveGames.unshift(contextGameRow);
-      }
-    }
-  }
+  const contextGameSlug = authRecoveryContext.gameSlug?.trim() || pendingContextFromCookie?.gameSlug?.trim() || null;
+  const hasPendingAuthContext = Boolean(pendingContextFromCookie || authRecoveryContext.gameSlug);
+  const contextGameAlreadyInRecentActive =
+    Boolean(contextGameSlug) &&
+    mergedRecentOrActiveGames.some((game) => game.slug?.trim() === contextGameSlug);
+  const showContinueToGameBanner =
+    hasPendingAuthContext && Boolean(contextGameSlug) && !contextGameAlreadyInRecentActive;
 
   const recentOrActiveGamesTop = mergedRecentOrActiveGames.slice(0, 6);
 
@@ -302,6 +294,14 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
         <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
           <h2 className="text-sm font-semibold text-slate-900">Recent / Active games</h2>
+          {showContinueToGameBanner && contextGameSlug ? (
+            <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900">
+              <p className="text-xs font-semibold uppercase tracking-wide">Continue to your game</p>
+              <Link href={`/g/${contextGameSlug}/play`} className="mt-1 inline-flex font-semibold underline">
+                Open /g/{contextGameSlug}/play
+              </Link>
+            </div>
+          ) : null}
           {(hostedGamesErrorMessage || joinedGamesErrorMessage) && (
             <p className="mt-2 text-sm text-slate-600">
               We couldn&apos;t load all game shortcuts right now. You can still use your recent results below.
@@ -334,6 +334,10 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               })}
             </ul>
           )}
+          <LastGameFallback
+            showWhenListEmpty={recentOrActiveGamesTop.length === 0}
+            excludedSlug={contextGameSlug}
+          />
         </section>
 
         <dl className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm sm:grid-cols-3">

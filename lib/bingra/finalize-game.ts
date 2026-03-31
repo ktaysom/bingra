@@ -5,6 +5,7 @@ import {
   type CardCell,
 } from "./card-progress";
 import { buildGameScores, resolveWinnerPlayerId } from "./game-results";
+import { resolveSportProfileKey } from "./sport-profiles";
 
 type FinalizeInput = {
   supabase: {
@@ -47,6 +48,7 @@ type ScoredEventRow = {
 type GameRow = {
   id: string;
   created_at: string | null;
+  sport_profile: string | null;
 };
 
 type ProfileStatsRow = {
@@ -207,7 +209,7 @@ export async function finalizeGameAndSetWinner(input: FinalizeInput): Promise<Fi
 
   const { data: gameData, error: gameError } = await input.supabase
     .from("games")
-    .select("id, created_at")
+    .select("id, created_at, sport_profile")
     .eq("id", input.gameId)
     .maybeSingle();
 
@@ -275,6 +277,7 @@ export async function finalizeGameAndSetWinner(input: FinalizeInput): Promise<Fi
     })),
     recordedEvents,
     completionMode: input.completionMode,
+    sportProfile: resolveSportProfileKey((gameData as GameRow | null)?.sport_profile ?? null),
     bingraPlayerIds,
     bingraCompletedAtByPlayerId,
   });

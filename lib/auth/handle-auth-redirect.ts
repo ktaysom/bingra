@@ -47,6 +47,14 @@ function buildAuthErrorResponse(request: NextRequest, message: string, pendingCo
   return NextResponse.redirect(fallbackRedirect);
 }
 
+function clearPendingAuthContextCookieOnResponse(response: NextResponse) {
+  response.cookies.set(getPendingAuthContextCookieKey(), "", {
+    maxAge: 0,
+    path: "/",
+    sameSite: "lax",
+  });
+}
+
 export async function handleAuthRedirectRequest(request: NextRequest, options: HandleAuthRedirectOptions) {
   const requestUrl = new URL(request.url);
   const rawNext = requestUrl.searchParams.get("next");
@@ -80,6 +88,11 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
       : cookieContext
         ? "cookie_context"
         : "default_me";
+  const resolvedRedirectPath =
+    (!pendingContext.nextPath || pendingContext.nextPath === "/" || pendingContext.nextPath === "/me") &&
+    pendingContext.gameSlug
+      ? `/g/${pendingContext.gameSlug}/play`
+      : pendingContext.nextPath;
   const hasPendingContext = hasPendingAuthContextInSearchParams(requestUrl.searchParams);
   const code = requestUrl.searchParams.get("code");
   const tokenHash = requestUrl.searchParams.get("token_hash");
@@ -89,7 +102,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
     : tokenHash
       ? "token_hash"
       : "neither";
-  const redirectUrl = new URL(pendingContext.nextPath, request.url);
+  const redirectUrl = new URL(resolvedRedirectPath, request.url);
   const response = NextResponse.redirect(redirectUrl);
   const linkIntent = readAccountLinkIntentFromRequest(request);
 
@@ -98,6 +111,7 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
     redirectSource,
     hasPendingContext,
     nextPath: pendingContext.nextPath,
+    resolvedRedirectPath,
     hasLinkPlayerId: Boolean(pendingContext.linkPlayerId),
     expectedLink: Boolean(pendingContext.expectedLink),
     intent: pendingContext.intent ?? null,
@@ -222,10 +236,10 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
           authUserId: user.id,
           context: options.context,
         });
-      } else if (pendingContext.nextPath.includes("/play")) {
+      } else if (resolvedRedirectPath.includes("/play")) {
         console.warn(`[${options.context}] expected link_player_id for play redirect but none was provided`, {
           userId: user.id,
-          nextPath: pendingContext.nextPath,
+          nextPath: resolvedRedirectPath,
         });
       }
     } catch (error) {
@@ -242,11 +256,12 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
   }
 
   clearAccountLinkIntentCookie(response);
+  clearPendingAuthContextCookieOnResponse(response);
   console.info(`[${options.context}] redirecting to final destination`, {
     arrivalMethod,
     redirectSource,
     hasPendingContext,
-    finalPath: pendingContext.nextPath,
+    finalPath: resolvedRedirectPath,
   });
 
   return response;

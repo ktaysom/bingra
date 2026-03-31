@@ -1,5 +1,6 @@
 import { buildGameScores } from "./game-results";
 import { normalizeCardCells, type CardCell, type CompletionMode, type RecordedEvent } from "./card-progress";
+import { resolveSportProfileKey } from "./sport-profiles";
 
 type SupabaseLike = {
   from: (table: string) => any;
@@ -10,6 +11,7 @@ type FinishedGameRow = {
   created_at: string | null;
   completed_at: string | null;
   completion_mode: CompletionMode;
+  sport_profile: string | null;
 };
 
 type PlayerRow = {
@@ -213,6 +215,7 @@ async function buildProfileResultRowsForGame(params: {
     })),
     recordedEvents,
     completionMode: game.completion_mode,
+    sportProfile: resolveSportProfileKey(game.sport_profile),
     bingraPlayerIds,
     bingraCompletedAtByPlayerId,
   });
@@ -294,7 +297,7 @@ export async function rebuildCareerStatsFromCanonicalHistory(params: {
 
   const { data: finishedGamesData, error: finishedGamesError } = await params.supabase
     .from("games")
-    .select("id, created_at, completed_at, completion_mode")
+    .select("id, created_at, completed_at, completion_mode, sport_profile")
     .eq("status", "finished")
     .order("completed_at", { ascending: true })
     .order("id", { ascending: true });

@@ -7,6 +7,7 @@ import {
   type RecordedEvent,
 } from "./card-progress";
 import { buildScoreBreakdown, rankScoreEntries } from "./game-scoring";
+import { DEFAULT_SPORT_PROFILE, type SportProfileKey } from "./sport-profiles";
 
 export type ScorePlayer = {
   id: string;
@@ -37,6 +38,7 @@ type BuildGameScoresInput = {
   cards: ScoreCard[];
   recordedEvents: RecordedEvent[];
   completionMode: CompletionMode;
+  sportProfile?: SportProfileKey;
   bingraPlayerIds: Set<string>;
   bingraCompletedAtByPlayerId?: Map<string, string>;
 };
@@ -57,7 +59,12 @@ export function buildGameScores(input: BuildGameScoresInput): GameScoreEntry[] {
       input.recordedEvents,
       acceptedAt,
     );
-    const progress = calculateCardProgress(eligibleRecordedEvents, cardCells, input.completionMode);
+    const progress = calculateCardProgress(
+      eligibleRecordedEvents,
+      cardCells,
+      input.completionMode,
+      input.sportProfile ?? DEFAULT_SPORT_PROFILE,
+    );
     const hasBingra = input.bingraPlayerIds.has(player.id);
     const scoreBreakdown = buildScoreBreakdown(progress.score, hasBingra);
 

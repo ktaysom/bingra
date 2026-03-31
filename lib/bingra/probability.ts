@@ -4,6 +4,11 @@ import {
   getSportProfileDefinition,
   type SportProfileKey,
 } from "./sport-profiles";
+import {
+  getAllowedThresholdLevelsForEvent,
+  getRequiredCountForThresholdLevel,
+  normalizeThresholdLevelForEvent,
+} from "./threshold-levels";
 
 export type RiskLevel = 1 | 2 | 3 | 4 | 5;
 
@@ -46,8 +51,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function normalizeThreshold(event: GameEventType, threshold: number): number {
-  const maxThreshold = typeof event.maxThreshold === "number" ? event.maxThreshold : 5;
-  return Math.min(Math.max(1, Math.ceil(Number.isFinite(threshold) ? threshold : 1)), maxThreshold);
+  return normalizeThresholdLevelForEvent(event, threshold);
 }
 
 function eventTextBlob(event: GameEventType): string {
@@ -120,8 +124,9 @@ export function getThresholdProbability(
       ? 1 - Math.pow(1 - base, 2)
       : base;
   const normalizedThreshold = normalizeThreshold(event, threshold);
+  const requiredCount = getRequiredCountForThresholdLevel(event, profile, normalizedThreshold);
   const decayFactor = getThresholdDecayFactor(event);
-  const exponent = 1 + (normalizedThreshold - 1) * decayFactor;
+  const exponent = 1 + (requiredCount - 1) * decayFactor;
   const probability = Math.pow(teamAdjustedBase, exponent);
 
   return clamp(probability, 0.01, 0.98);
@@ -213,10 +218,9 @@ export function generateCardForRisk(
   }
 
   const candidateCombos = eventPool.flatMap((event) => {
-    const maxThreshold = typeof event.maxThreshold === "number" ? event.maxThreshold : 5;
+    const levels = getAllowedThresholdLevelsForEvent(event, profile);
 
-    return Array.from({ length: Math.max(1, maxThreshold) }, (_, index) => {
-      const threshold = index + 1;
+    return levels.map((threshold) => {
       return {
         event,
         threshold,

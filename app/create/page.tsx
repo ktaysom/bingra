@@ -11,6 +11,7 @@ import {
   getEventsForMode,
   type TeamKey,
 } from "../../lib/bingra/event-logic";
+import { getRequiredCountForThresholdLevel } from "../../lib/bingra/threshold-levels";
 import type { GameEventType } from "../../lib/bingra/event-catalog";
 import {
   DEFAULT_SPORT_PROFILE,
@@ -164,10 +165,12 @@ function formatPreviewItem(input: {
   teamScope: "both_teams" | "team_a_only" | "team_b_only";
   safeTeamAName: string;
   safeTeamBName: string;
+  sportProfile: SportProfileKey;
 }): string {
-  const { event, index, teamScope, safeTeamAName, safeTeamBName } = input;
+  const { event, index, teamScope, safeTeamAName, safeTeamBName, sportProfile } = input;
 
   const threshold = (index % Math.max(1, getEventMaxThreshold(event))) + 1;
+  const requiredCount = getRequiredCountForThresholdLevel(event, sportProfile, threshold);
 
   let teamKey: TeamKey | null = null;
   if (event.teamScope === "team") {
@@ -182,7 +185,7 @@ function formatPreviewItem(input: {
 
   const teamPrefix = teamKey ? `${teamKey === "A" ? safeTeamAName : safeTeamBName}: ` : "";
 
-  return `${threshold}+ ${teamPrefix}${event.label}`;
+  return `${requiredCount}+ ${teamPrefix}${event.label}`;
 }
 
 function getDeterministicPreviewItems(input: {
@@ -191,8 +194,9 @@ function getDeterministicPreviewItems(input: {
   teamScope: "both_teams" | "team_a_only" | "team_b_only";
   safeTeamAName: string;
   safeTeamBName: string;
+  sportProfile: SportProfileKey;
 }): string[] {
-  const { events, count, teamScope, safeTeamAName, safeTeamBName } = input;
+  const { events, count, teamScope, safeTeamAName, safeTeamBName, sportProfile } = input;
 
   if (events.length === 0 || count <= 0) {
     return [];
@@ -207,6 +211,7 @@ function getDeterministicPreviewItems(input: {
       teamScope,
       safeTeamAName,
       safeTeamBName,
+      sportProfile,
     });
   });
 }
@@ -267,6 +272,7 @@ export default function CreatePage() {
       teamScope,
       safeTeamAName,
       safeTeamBName,
+      sportProfile,
     });
   }, [eventsPerCard, legacyMode, safeTeamAName, safeTeamBName, sportProfile, teamScope]);
 

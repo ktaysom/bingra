@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 
 type PlayRealtimeBridgeMountProps = {
   gameId: string;
+  slug: string;
 };
 
 const DISABLE_PLAY_REALTIME_BRIDGE =
@@ -17,7 +18,7 @@ const PlayRealtimeBridge = dynamic(
   },
 );
 
-export function PlayRealtimeBridgeMount({ gameId }: PlayRealtimeBridgeMountProps) {
+export function PlayRealtimeBridgeMount({ gameId, slug }: PlayRealtimeBridgeMountProps) {
   if (DISABLE_PLAY_REALTIME_BRIDGE) {
     console.info("[PlayRealtimeBridge] disabled via env", {
       gameId,
@@ -26,5 +27,5 @@ export function PlayRealtimeBridgeMount({ gameId }: PlayRealtimeBridgeMountProps
     return null;
   }
 
-  return <PlayRealtimeBridge gameId={gameId} />;
+  return <PlayRealtimeBridge gameId={gameId} slug={slug} />;
 }

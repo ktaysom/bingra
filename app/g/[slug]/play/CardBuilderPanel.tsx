@@ -14,6 +14,7 @@ import { buildCardCellEventKey } from "../../../../lib/bingra/card-event-key";
 import type { EventCategory, GameEventType } from "../../../../lib/bingra/event-catalog";
 import { mapPlayModeToGameMode, type PlayMode } from "../../../../lib/bingra/types";
 import { getThresholdScoreMultiplier } from "../../../../lib/bingra/game-scoring";
+import { getRequiredCountForThresholdLevel } from "../../../../lib/bingra/threshold-levels";
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { generateCardAction } from "../../../actions/generate-card";
@@ -28,6 +29,7 @@ type CardBuilderEvent = GameEventType & {
   marked?: boolean;
   cardTeamKey?: TeamKey | null;
   threshold: number;
+  required_count?: number;
   current_count?: number;
   remaining_count?: number;
   is_completed?: boolean;
@@ -97,12 +99,12 @@ function getAddableEventIdentityKey(candidate: AddableEvent): string {
   return `${candidate.event.id}:${candidate.cardTeamKey ?? "NONE"}`;
 }
 
-function formatThresholdEventLabel(threshold: number, eventLabel: string): string {
-  return `${threshold}+ ${eventLabel}`;
+function formatThresholdEventLabel(requiredCount: number, eventLabel: string): string {
+  return `${requiredCount}+ ${eventLabel}`;
 }
 
-function formatProgressCount(currentCount: number, threshold: number): string {
-  return `${Math.min(currentCount, threshold)} / ${threshold}`;
+function formatProgressCount(currentCount: number, requiredCount: number): string {
+  return `${Math.min(currentCount, requiredCount)} / ${requiredCount}`;
 }
 
 function toSafePoints(value: number | null | undefined): number {
@@ -211,6 +213,7 @@ function generateCardEvents(
       shortLabel: getDisplayLabel(event),
       cardTeamKey,
       threshold: cell.threshold,
+      required_count: getRequiredCountForThresholdLevel(event, sportProfile, cell.threshold),
     };
   });
 }
@@ -455,6 +458,7 @@ export function CardBuilderPanel({
         shortLabel: candidate.eventName,
         cardTeamKey: candidate.cardTeamKey,
         threshold,
+        required_count: getRequiredCountForThresholdLevel(candidate.event, sportProfile, threshold),
       },
     ]);
 
@@ -728,12 +732,16 @@ export function CardBuilderPanel({
                     const tone = getIdentityTone(event.cardTeamKey ?? null);
                     const teamName = event.cardTeamKey ? teamNames[event.cardTeamKey] : null;
                     const threshold = typeof event.threshold === "number" ? event.threshold : 1;
+                    const requiredCount =
+                      typeof event.required_count === "number"
+                        ? event.required_count
+                        : getRequiredCountForThresholdLevel(event, sportProfile, threshold);
                     const isCompleted = Boolean(event.is_completed ?? event.marked);
                     const currentCount =
                       typeof event.current_count === "number"
                         ? event.current_count
                         : isCompleted
-                          ? threshold
+                          ? requiredCount
                           : 0;
 
                     return (
@@ -745,13 +753,13 @@ export function CardBuilderPanel({
                       >
                         <div>
                           <p className="font-medium text-slate-900">
-                            {index + 1}. {formatThresholdEventLabel(threshold, stripTeamPrefix(event.label, teamName))}
+                            {index + 1}. {formatThresholdEventLabel(requiredCount, stripTeamPrefix(event.label, teamName))}
                           </p>
                           {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                           <p className="text-xs text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</p>
                         </div>
                         <p className={isCompleted ? "text-xs font-semibold text-blue-600" : "text-xs text-slate-500"}>
-                          {isCompleted ? "Complete" : formatProgressCount(currentCount, threshold)}
+                          {isCompleted ? "Complete" : formatProgressCount(currentCount, requiredCount)}
                         </p>
                       </li>
                     );
@@ -768,12 +776,16 @@ export function CardBuilderPanel({
                     const tone = getIdentityTone(event.cardTeamKey ?? null);
                     const teamName = event.cardTeamKey ? teamNames[event.cardTeamKey] : null;
                     const threshold = typeof event.threshold === "number" ? event.threshold : 1;
+                    const requiredCount =
+                      typeof event.required_count === "number"
+                        ? event.required_count
+                        : getRequiredCountForThresholdLevel(event, sportProfile, threshold);
                     const isCompleted = Boolean(event.is_completed ?? event.marked);
                     const currentCount =
                       typeof event.current_count === "number"
                         ? event.current_count
                         : isCompleted
-                          ? threshold
+                          ? requiredCount
                           : 0;
 
                     return (
@@ -784,13 +796,13 @@ export function CardBuilderPanel({
                     }`}
                   >
                     <p className="font-medium text-slate-900">
-                      {formatThresholdEventLabel(threshold, stripTeamPrefix(event.label, teamName))}
+                      {formatThresholdEventLabel(requiredCount, stripTeamPrefix(event.label, teamName))}
                     </p>
                     {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                     <div className="mt-1 flex items-center justify-between text-xs">
                       <span className="text-slate-500">{getEventPointsForProfile(event, sportProfile)} pts</span>
                       <span className={isCompleted ? "font-semibold text-blue-600" : "text-slate-500"}>
-                        {isCompleted ? "Complete" : formatProgressCount(currentCount, threshold)}
+                        {isCompleted ? "Complete" : formatProgressCount(currentCount, requiredCount)}
                       </span>
                     </div>
                   </div>
@@ -899,6 +911,10 @@ export function CardBuilderPanel({
                 const itemId = getCardEventIdentityKey(event);
                 const tone = getIdentityTone(event.cardTeamKey ?? null);
                 const isTouchDragging = touchDragItemId === itemId;
+                const requiredCount =
+                  typeof event.required_count === "number"
+                    ? event.required_count
+                    : getRequiredCountForThresholdLevel(event, sportProfile, event.threshold);
 
                 return (
                   <li
@@ -916,7 +932,7 @@ export function CardBuilderPanel({
                     <div className="min-w-0">
                       <p className="font-medium text-slate-900">
                         {index + 1}. {formatThresholdEventLabel(
-                          event.threshold,
+                          requiredCount,
                           stripTeamPrefix(event.label, event.cardTeamKey ? teamNames[event.cardTeamKey] : null),
                         )}
                       </p>
@@ -962,6 +978,10 @@ export function CardBuilderPanel({
                 {cardEvents.map((event, index) => {
                   const tone = getIdentityTone(event.cardTeamKey ?? null);
                   const teamName = event.cardTeamKey ? teamNames[event.cardTeamKey] : null;
+                const requiredCount =
+                  typeof event.required_count === "number"
+                    ? event.required_count
+                    : getRequiredCountForThresholdLevel(event, sportProfile, event.threshold);
 
                   return (
                     <li
@@ -970,7 +990,7 @@ export function CardBuilderPanel({
                     >
                       <div className="min-w-0">
                         <p className="font-medium text-slate-900">
-                          {formatThresholdEventLabel(event.threshold, stripTeamPrefix(event.label, teamName))}
+                          {formatThresholdEventLabel(requiredCount, stripTeamPrefix(event.label, teamName))}
                         </p>
                         {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                         <p className="text-xs text-slate-500">{getThresholdPreviewPoints(event, sportProfile)} pts</p>
@@ -1102,6 +1122,11 @@ export function CardBuilderPanel({
                                   Choose threshold
                                 </p>
                                 {thresholdOptions.map((threshold) => {
+                                  const requiredCount = getRequiredCountForThresholdLevel(
+                                    candidate.event,
+                                    sportProfile,
+                                    threshold,
+                                  );
                                   const thresholdPoints = Math.round(
                                     candidate.basePoints * getThresholdScoreMultiplier(threshold),
                                   );
@@ -1114,7 +1139,7 @@ export function CardBuilderPanel({
                                       disabled={!canAddMoreEvents}
                                       className="rounded-2xl bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm disabled:opacity-50"
                                     >
-                                      {threshold}+ · {thresholdPoints} pts
+                                      {requiredCount}+ · {thresholdPoints} pts
                                     </button>
                                   );
                                 })}

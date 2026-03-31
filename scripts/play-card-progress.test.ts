@@ -14,6 +14,7 @@ import {
   buildCardCellEventKey,
   parseCardCellEventKey,
 } from "../lib/bingra/card-event-key.ts";
+import { getEventById } from "../lib/bingra/event-logic.ts";
 
 test("team-key matching: match, mismatch, and neutral wildcard", () => {
   const cells: CardCell[] = [
@@ -301,7 +302,7 @@ test("threshold=2 increases points using escalation multiplier", () => {
   assert.equal(progress.score, 22);
 });
 
-test("threshold 3/4/5 use expected escalation multipliers", () => {
+test("threshold scoring applies event max-threshold normalization before multipliers", () => {
   const cells: CardCell[] = [
     { event_key: "STEAL", team_key: "A", point_value: 10, threshold: 3 },
     { event_key: "BLOCK", team_key: "A", point_value: 10, threshold: 4 },
@@ -323,7 +324,9 @@ test("threshold 3/4/5 use expected escalation multipliers", () => {
   ];
 
   const progress = calculateCardProgress(events, cells, "BLACKOUT");
-  assert.equal(progress.score, 38 + 58 + 80);
+  // BLOCK and TIMEOUT_TAKEN are capped below 5 for the default basketball profile,
+  // so their persisted threshold levels normalize before multiplier scoring.
+  assert.equal(progress.score, 38 + 38 + 58);
 });
 
 test("thresholds above 5 are deterministic (clamped to 5)", () => {
@@ -343,4 +346,68 @@ test("thresholds above 5 are deterministic (clamped to 5)", () => {
 
   const progress = calculateCardProgress(events, cells, "BLACKOUT");
   assert.equal(progress.score, 80);
+});
+
+test("college/pro basketball base points are rebalanced for threshold-required-count model", () => {
+  const expectedCollege: Record<string, number> = {
+    MADE_FREE_THROW: 6,
+    THREE_POINTER_MADE: 7,
+    AND_ONE_CONVERTED: 15,
+    DUNK: 14,
+    TECHNICAL_FREE_THROW_MADE: 18,
+    BONUS_FREE_THROW_MADE: 8,
+    STEAL: 8,
+    BLOCK: 10,
+    CHARGE_TAKEN: 14,
+    CARRY: 16,
+    TRAVEL: 8,
+    DOUBLE_DRIBBLE: 18,
+    ILLEGAL_SCREEN: 12,
+    OUT_OF_BOUNDS: 7,
+    JUMP_BALL_CALL: 7,
+    GOALTENDING: 18,
+    THREE_SECOND_CALL: 18,
+    FIVE_SECOND_CALL: 20,
+    OVER_AND_BACK: 16,
+    TIMEOUT_TAKEN: 5,
+    EIGHT_SECOND_VIOLATION: 18,
+    SHOT_CLOCK_VIOLATION: 14,
+  };
+
+  const expectedPro: Record<string, number> = {
+    MADE_FREE_THROW: 6,
+    THREE_POINTER_MADE: 7,
+    AND_ONE_CONVERTED: 14,
+    DUNK: 8,
+    TECHNICAL_FREE_THROW_MADE: 16,
+    BONUS_FREE_THROW_MADE: 7,
+    STEAL: 7,
+    BLOCK: 9,
+    CHARGE_TAKEN: 16,
+    CARRY: 14,
+    TRAVEL: 10,
+    DOUBLE_DRIBBLE: 18,
+    ILLEGAL_SCREEN: 12,
+    OUT_OF_BOUNDS: 7,
+    JUMP_BALL_CALL: 7,
+    GOALTENDING: 18,
+    THREE_SECOND_CALL: 16,
+    FIVE_SECOND_CALL: 22,
+    OVER_AND_BACK: 16,
+    TIMEOUT_TAKEN: 4,
+    EIGHT_SECOND_VIOLATION: 14,
+    SHOT_CLOCK_VIOLATION: 12,
+  };
+
+  for (const [eventId, points] of Object.entries(expectedCollege)) {
+    const event = getEventById(eventId);
+    assert.ok(event, `${eventId} should exist`);
+    assert.equal(event?.scoringByProfile.basketball_college, points, `${eventId} college points`);
+  }
+
+  for (const [eventId, points] of Object.entries(expectedPro)) {
+    const event = getEventById(eventId);
+    assert.ok(event, `${eventId} should exist`);
+    assert.equal(event?.scoringByProfile.basketball_pro, points, `${eventId} pro points`);
+  }
 });

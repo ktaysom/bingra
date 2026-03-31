@@ -36,6 +36,7 @@ type EndGameCelebrationProps = {
       team_key: "A" | "B" | null;
       point_value: number;
       threshold: number;
+      required_count?: number;
       current_count: number;
       is_completed: boolean;
     }>;
@@ -45,12 +46,12 @@ type EndGameCelebrationProps = {
   scoreboardTargetId?: string;
 };
 
-function formatThresholdEventLabel(threshold: number, eventLabel: string): string {
-  return `${threshold}+ ${eventLabel}`;
+function formatThresholdEventLabel(requiredCount: number, eventLabel: string): string {
+  return `${requiredCount}+ ${eventLabel}`;
 }
 
-function formatProgressCount(currentCount: number, threshold: number): string {
-  return `${Math.min(currentCount, threshold)} / ${threshold}`;
+function formatProgressCount(currentCount: number, requiredCount: number): string {
+  return `${Math.min(currentCount, requiredCount)} / ${requiredCount}`;
 }
 
 export function EndGameCelebration({
@@ -248,6 +249,8 @@ export function EndGameCelebration({
                   <ul className="mt-3 space-y-2">
                     {selectedTopPlayerCard.card_cells.map((cell, index) => {
                       const teamName = cell.team_key ? teamNames[cell.team_key] : null;
+                      const requiredCount =
+                        typeof cell.required_count === "number" ? cell.required_count : cell.threshold;
 
                       return (
                         <li
@@ -262,13 +265,13 @@ export function EndGameCelebration({
                         >
                           <p className="break-words text-sm font-medium text-slate-900">
                             {mode === "streak" ? `${index + 1}. ` : ""}
-                            {formatThresholdEventLabel(cell.threshold, cell.event_label)}
+                            {formatThresholdEventLabel(requiredCount, cell.event_label)}
                           </p>
                           {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                           <div className="mt-1 flex items-center justify-between text-xs">
                             <span className="text-slate-500">{cell.point_value} pts</span>
                             <span className={cell.is_completed ? "font-semibold text-blue-600" : "text-slate-500"}>
-                              {cell.is_completed ? "Complete" : formatProgressCount(cell.current_count, cell.threshold)}
+                              {cell.is_completed ? "Complete" : formatProgressCount(cell.current_count, requiredCount)}
                             </span>
                           </div>
                         </li>

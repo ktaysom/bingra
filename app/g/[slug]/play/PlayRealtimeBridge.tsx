@@ -6,12 +6,15 @@ import { createSupabaseBrowserClient } from "../../../../lib/supabase/browser";
 
 type PlayRealtimeBridgeProps = {
   gameId: string;
+  slug: string;
 };
 
-export function PlayRealtimeBridge({ gameId }: PlayRealtimeBridgeProps) {
+export function PlayRealtimeBridge({ gameId, slug }: PlayRealtimeBridgeProps) {
   const router = useRouter();
 
   useEffect(() => {
+    window.localStorage.setItem("bingra-last-game", slug);
+
     const supabase = createSupabaseBrowserClient();
     const channelName = `play-live-${gameId}`;
 
@@ -144,7 +147,7 @@ export function PlayRealtimeBridge({ gameId }: PlayRealtimeBridgeProps) {
       });
       supabase.removeChannel(channel);
     };
-  }, [gameId, router]);
+  }, [gameId, router, slug]);
 
   return null;
 }

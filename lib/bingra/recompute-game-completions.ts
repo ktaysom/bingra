@@ -6,6 +6,7 @@ import {
   type CompletionMode,
   type RecordedEvent,
 } from "./card-progress";
+import { resolveSportProfileKey } from "./sport-profiles";
 
 type RecomputeInput = {
   supabase: {
@@ -13,6 +14,7 @@ type RecomputeInput = {
   };
   gameId: string;
   completionMode: CompletionMode;
+  sportProfile?: string | null;
 };
 
 type CardRow = {
@@ -29,6 +31,8 @@ type ScoredEventRow = {
 };
 
 export async function recomputeGameCompletions(input: RecomputeInput): Promise<void> {
+  const resolvedProfile = resolveSportProfileKey(input.sportProfile);
+
   const { data: cardsData, error: cardsError } = await input.supabase
     .from("cards")
     .select("player_id, accepted_at, card_cells(order_index, event_key, team_key, point_value, threshold)")
@@ -76,11 +80,13 @@ export async function recomputeGameCompletions(input: RecomputeInput): Promise<v
         filterRecordedEventsByAcceptedAt(beforeEvents, card.accepted_at),
         normalizeCardCells((card.card_cells ?? []) as Array<Partial<CardCell>>),
         input.completionMode,
+        resolvedProfile,
       );
       const afterProgress = calculateCardProgress(
         filterRecordedEventsByAcceptedAt(afterEvents, card.accepted_at),
         normalizeCardCells((card.card_cells ?? []) as Array<Partial<CardCell>>),
         input.completionMode,
+        resolvedProfile,
       );
 
       if (!beforeProgress.is_complete && afterProgress.is_complete) {

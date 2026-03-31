@@ -1,7 +1,14 @@
 export type CompletionMode = "BLACKOUT" | "STREAK";
 
 import { cardCellEventMatchesRecordedEvent } from "./card-event-key";
+import { resolveBaseEventKey } from "./card-event-key";
+import { getEventById } from "./event-logic";
 import { getThresholdScoreMultiplier } from "./game-scoring";
+import { DEFAULT_SPORT_PROFILE, type SportProfileKey } from "./sport-profiles";
+import {
+  getRequiredCountForThresholdLevel,
+  normalizeThresholdLevelForEvent,
+} from "./threshold-levels";
 
 export type RecordedEvent = {
   event_key: string | null;
@@ -30,6 +37,7 @@ export type CardCellProgress = {
   team_key: string | null;
   current_count: number;
   threshold: number;
+  required_count: number;
   remaining_count: number;
   is_completed: boolean;
 };
@@ -58,7 +66,31 @@ function calculateThresholdAdjustedPoints(basePoints: number, threshold: number)
 }
 
 function toThreshold(value: number | null | undefined): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 1;
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(1, Math.ceil(value)) : 1;
+}
+
+function resolveThresholdRule(
+  cell: CardCell,
+  profile: SportProfileKey,
+): { thresholdLevel: number; requiredCount: number } {
+  const fallbackLevel = toThreshold(cell.threshold);
+  const baseEventKey = resolveBaseEventKey(cell.event_key);
+  const event = baseEventKey ? getEventById(baseEventKey) : undefined;
+
+  if (!event) {
+    return {
+      thresholdLevel: fallbackLevel,
+      requiredCount: fallbackLevel,
+    };
+  }
+
+  const thresholdLevel = normalizeThresholdLevelForEvent(event, fallbackLevel);
+  const requiredCount = getRequiredCountForThresholdLevel(event, profile, thresholdLevel);
+
+  return {
+    thresholdLevel,
+    requiredCount,
+  };
 }
 
 export function normalizeCardCell(cell: Partial<CardCell>): CardCell {
@@ -121,8 +153,9 @@ export function calculateCompletedCellFlags(
   recorded_events: RecordedEvent[],
   card_cells: CardCell[],
   completion_mode: CompletionMode,
+  sportProfile: SportProfileKey = DEFAULT_SPORT_PROFILE,
 ): boolean[] {
-  return calculateCardCellProgress(recorded_events, card_cells, completion_mode).map(
+  return calculateCardCellProgress(recorded_events, card_cells, completion_mode, sportProfile).map(
     (cellProgress) => cellProgress.is_completed,
   );
 }
@@ -131,16 +164,18 @@ export function calculateCardCellProgress(
   recorded_events: RecordedEvent[],
   card_cells: CardCell[],
   completion_mode: CompletionMode,
+  sportProfile: SportProfileKey = DEFAULT_SPORT_PROFILE,
 ): CardCellProgress[] {
   const progress: CardCellProgress[] = card_cells.map((cell) => {
-    const threshold = toThreshold(cell.threshold);
+    const thresholdRule = resolveThresholdRule(cell, sportProfile);
 
     return {
       event_key: cell.event_key,
       team_key: typeof cell.team_key === "string" ? cell.team_key : null,
       current_count: 0,
-      threshold,
-      remaining_count: threshold,
+      threshold: thresholdRule.thresholdLevel,
+      required_count: thresholdRule.requiredCount,
+      remaining_count: thresholdRule.requiredCount,
       is_completed: false,
     };
   });
@@ -156,14 +191,14 @@ export function calculateCardCellProgress(
         }
       }
 
-      const threshold = progress[cellIndex]?.threshold ?? 1;
-      const remainingCount = Math.max(threshold - currentCount, 0);
+      const requiredCount = progress[cellIndex]?.required_count ?? 1;
+      const remainingCount = Math.max(requiredCount - currentCount, 0);
 
       progress[cellIndex] = {
         ...(progress[cellIndex] as CardCellProgress),
         current_count: currentCount,
         remaining_count: remainingCount,
-        is_completed: currentCount >= threshold,
+        is_completed: currentCount >= requiredCount,
       };
     }
 
@@ -174,7 +209,8 @@ export function calculateCardCellProgress(
   let lastMatchedEventIndex = -1;
 
   for (const cell of orderedCells) {
-    const threshold = toThreshold(cell.threshold);
+    const thresholdRule = resolveThresholdRule(cell, sportProfile);
+    const requiredCount = thresholdRule.requiredCount;
     let currentCount = 0;
 
     for (
@@ -186,22 +222,22 @@ export function calculateCardCellProgress(
         currentCount += 1;
         lastMatchedEventIndex = eventIndex;
 
-        if (currentCount >= threshold) {
+        if (currentCount >= requiredCount) {
           break;
         }
       }
     }
 
-    const remainingCount = Math.max(threshold - currentCount, 0);
+    const remainingCount = Math.max(requiredCount - currentCount, 0);
 
     progress[cell.originalIndex] = {
       ...(progress[cell.originalIndex] as CardCellProgress),
       current_count: currentCount,
       remaining_count: remainingCount,
-      is_completed: currentCount >= threshold,
+      is_completed: currentCount >= requiredCount,
     };
 
-    if (currentCount < threshold) {
+    if (currentCount < requiredCount) {
       break;
     }
   }
@@ -218,6 +254,7 @@ export function calculateCardProgress(
   recorded_events: RecordedEvent[],
   card_cells: CardCell[],
   completion_mode: CompletionMode,
+  sportProfile: SportProfileKey = DEFAULT_SPORT_PROFILE,
 ): CardProgress {
   const totalCells = card_cells.length;
 
@@ -231,7 +268,12 @@ export function calculateCardProgress(
     };
   }
 
-  const cellProgress = calculateCardCellProgress(recorded_events, card_cells, completion_mode);
+  const cellProgress = calculateCardCellProgress(
+    recorded_events,
+    card_cells,
+    completion_mode,
+    sportProfile,
+  );
 
   let completedCount = 0;
   let score = 0;

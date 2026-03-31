@@ -21,6 +21,7 @@ type PreviewCardCell = {
   team_key: "A" | "B" | null;
   point_value: number;
   threshold: number;
+  required_count?: number;
   current_count: number;
   is_completed: boolean;
 };
@@ -47,12 +48,12 @@ type LeaderboardCardPreviewProps = {
   playersError: string | null;
 };
 
-function formatThresholdEventLabel(threshold: number, eventLabel: string): string {
-  return `${threshold}+ ${eventLabel}`;
+function formatThresholdEventLabel(requiredCount: number, eventLabel: string): string {
+  return `${requiredCount}+ ${eventLabel}`;
 }
 
-function formatProgressCount(currentCount: number, threshold: number): string {
-  return `${Math.min(currentCount, threshold)} / ${threshold}`;
+function formatProgressCount(currentCount: number, requiredCount: number): string {
+  return `${Math.min(currentCount, requiredCount)} / ${requiredCount}`;
 }
 
 export function LeaderboardCardPreview({
@@ -227,6 +228,8 @@ export function LeaderboardCardPreview({
                     <ul className="mt-2 space-y-2">
                       {selectedCard.card_cells.map((cell, index) => {
                         const teamName = cell.team_key ? teamNames[cell.team_key] : null;
+                        const requiredCount =
+                          typeof cell.required_count === "number" ? cell.required_count : cell.threshold;
 
                         return (
                           <li
@@ -240,7 +243,7 @@ export function LeaderboardCardPreview({
                             } ${cell.is_completed ? "ring-1 ring-blue-300" : ""}`}
                           >
                             <p className="break-words text-sm font-medium text-slate-900">
-                              {index + 1}. {formatThresholdEventLabel(cell.threshold, cell.event_label)}
+                              {index + 1}. {formatThresholdEventLabel(requiredCount, cell.event_label)}
                             </p>
                             {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                             <div className="mt-1 flex items-center justify-between text-xs">
@@ -250,7 +253,7 @@ export function LeaderboardCardPreview({
                               >
                                 {cell.is_completed
                                   ? "Complete"
-                                  : formatProgressCount(cell.current_count, cell.threshold)}
+                                  : formatProgressCount(cell.current_count, requiredCount)}
                               </span>
                             </div>
                           </li>
@@ -264,6 +267,8 @@ export function LeaderboardCardPreview({
                     <ul className="mt-2 space-y-2">
                       {selectedCard.card_cells.map((cell, index) => {
                         const teamName = cell.team_key ? teamNames[cell.team_key] : null;
+                        const requiredCount =
+                          typeof cell.required_count === "number" ? cell.required_count : cell.threshold;
 
                         return (
                           <li
@@ -277,7 +282,7 @@ export function LeaderboardCardPreview({
                             } ${cell.is_completed ? "ring-1 ring-blue-300" : ""}`}
                           >
                             <p className="break-words text-sm font-medium text-slate-900">
-                              {formatThresholdEventLabel(cell.threshold, cell.event_label)}
+                              {formatThresholdEventLabel(requiredCount, cell.event_label)}
                             </p>
                             {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                             <div className="mt-1 flex items-center justify-between text-xs">
@@ -287,7 +292,7 @@ export function LeaderboardCardPreview({
                               >
                                 {cell.is_completed
                                   ? "Complete"
-                                  : formatProgressCount(cell.current_count, cell.threshold)}
+                                  : formatProgressCount(cell.current_count, requiredCount)}
                               </span>
                             </div>
                           </li>

@@ -12,7 +12,7 @@ export type PendingAuthContext = {
 
 const PENDING_AUTH_STORAGE_KEY = "bingra.pending-auth-context.v1";
 const PENDING_AUTH_COOKIE_KEY = "bingra-pending-auth-context";
-const PENDING_AUTH_MAX_AGE_SECONDS = 6 * 60 * 60;
+const PENDING_AUTH_MAX_AGE_SECONDS = 5 * 60;
 
 export function sanitizeNextPath(input: string | null | undefined, fallback = "/"): string {
   if (!input || !input.startsWith("/")) {

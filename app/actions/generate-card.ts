@@ -14,6 +14,7 @@ import {
 } from "../../lib/bingra/event-logic";
 import { resolveSportProfileKey } from "../../lib/bingra/sport-profiles";
 import { buildCardCellsPayload } from "../../lib/bingra/card-cells-payload";
+import { isThresholdLevelAllowedForEvent } from "../../lib/bingra/threshold-levels";
 
 export type GenerateCardFormState = {
   success?: boolean;
@@ -110,6 +111,17 @@ export async function generateCardAction(
       const catalogEvent = getEventById(baseEventKey);
       if (!catalogEvent || !isEventEnabledForProfile(catalogEvent, sportProfile)) {
         throw new Error(`Event ${baseEventKey} is not enabled for this game profile.`);
+      }
+
+      const submittedLevel =
+        typeof acceptedEvent.threshold === "number" && Number.isFinite(acceptedEvent.threshold)
+          ? acceptedEvent.threshold
+          : 1;
+
+      if (!isThresholdLevelAllowedForEvent(catalogEvent, sportProfile, submittedLevel)) {
+        throw new Error(
+          `Threshold level ${Math.ceil(submittedLevel)} is not allowed for ${baseEventKey} in this game profile.`,
+        );
       }
     }
 
