@@ -147,11 +147,20 @@ type GameStatusActionButtonProps = {
   intent: "start" | "end";
   children: ReactNode;
   className?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 const initialState: SetGameStatusFormState = {};
 
-export function GameStatusActionButton({ slug, intent, children, className }: GameStatusActionButtonProps) {
+export function GameStatusActionButton({
+  slug,
+  intent,
+  children,
+  className,
+  disabled = false,
+  disabledReason,
+}: GameStatusActionButtonProps) {
   const [state, action] = useActionState(setGameStatusAction, initialState);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -177,22 +186,34 @@ export function GameStatusActionButton({ slug, intent, children, className }: Ga
       <button
         type="button"
         onClick={handleClick}
-        disabled={isPending}
+        disabled={isPending || disabled}
         className={`btn-primary rounded-2xl ${className ?? ""}`}
       >
         {isPending ? "Saving..." : children}
       </button>
       {state.error && <p className="mt-2 text-xs text-red-600">{state.error}</p>}
+      {!state.error && disabled && disabledReason && (
+        <p className="mt-2 text-xs text-amber-700">{disabledReason}</p>
+      )}
     </div>
   );
 }
 
 type EndGameControlProps = {
   slug: string;
+  canManageRestrictedScoring?: boolean;
 };
 
-export function EndGameControl({ slug }: EndGameControlProps) {
+export function EndGameControl({ slug, canManageRestrictedScoring = true }: EndGameControlProps) {
   const [isConfirming, setIsConfirming] = useState(false);
+
+  if (!canManageRestrictedScoring) {
+    return (
+      <section className="surface-card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:p-6">
+        <p className="font-semibold">Only the host can end this game.</p>
+      </section>
+    );
+  }
 
   if (!isConfirming) {
     return (

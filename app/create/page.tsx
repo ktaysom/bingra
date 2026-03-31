@@ -25,6 +25,8 @@ import {
 import { mapPlayModeToGameMode } from "../../lib/bingra/types";
 
 const initialState: CreateGameFormState = {};
+const CREATE_DRAFT_STORAGE_KEY = "bingra.create-draft.v1";
+const AUTH_REQUIRED_CREATE_ERROR = "Please sign in to create a game.";
 
 const DEFAULT_TITLE = "Game On";
 
@@ -220,6 +222,7 @@ export default function CreatePage() {
   const [state, formAction] = useActionState(createGameAction, initialState);
 
   const [title, setTitle] = useState(DEFAULT_TITLE);
+  const [hostDisplayName, setHostDisplayName] = useState("Host");
 
   useEffect(() => {
     setTitle((current) => (current === DEFAULT_TITLE ? generateGameName() : current));
@@ -236,6 +239,79 @@ export default function CreatePage() {
   );
   const [eventsPerCard, setEventsPerCard] = useState(5);
   const [sportProfile, setSportProfile] = useState<SportProfileKey>(DEFAULT_SPORT_PROFILE);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(CREATE_DRAFT_STORAGE_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as {
+        title?: string;
+        hostDisplayName?: string;
+        teamScope?: "both_teams" | "team_a_only" | "team_b_only";
+        teamAName?: string;
+        teamBName?: string;
+        completionMode?: "blackout" | "streak";
+        endCondition?: "first_to_complete" | "host_ends";
+        eventsPerCard?: number;
+        sportProfile?: SportProfileKey;
+      };
+
+      if (draft.title) setTitle(draft.title);
+      if (draft.hostDisplayName) setHostDisplayName(draft.hostDisplayName);
+      if (draft.teamScope) setTeamScope(draft.teamScope);
+      if (draft.teamAName) setTeamAName(draft.teamAName);
+      if (draft.teamBName) setTeamBName(draft.teamBName);
+      if (draft.completionMode) setCompletionMode(draft.completionMode);
+      if (draft.endCondition) setEndCondition(draft.endCondition);
+      if (typeof draft.eventsPerCard === "number") setEventsPerCard(draft.eventsPerCard);
+      if (draft.sportProfile) setSportProfile(draft.sportProfile);
+    } catch {
+      // Ignore malformed drafts.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const payload = {
+      title,
+      hostDisplayName,
+      teamScope,
+      teamAName,
+      teamBName,
+      completionMode,
+      endCondition,
+      eventsPerCard,
+      sportProfile,
+    };
+
+    window.localStorage.setItem(CREATE_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+  }, [
+    title,
+    hostDisplayName,
+    teamScope,
+    teamAName,
+    teamBName,
+    completionMode,
+    endCondition,
+    eventsPerCard,
+    sportProfile,
+  ]);
+
+  useEffect(() => {
+    if (state.error !== AUTH_REQUIRED_CREATE_ERROR) {
+      return;
+    }
+
+    const next = encodeURIComponent("/create");
+    window.location.assign(`/auth/phone?next=${next}`);
+  }, [state.error]);
 
   const { sport: selectedSportForPicker, level: selectedLevelForPicker } =
     resolveSportLevelSelection(sportProfile);
@@ -336,7 +412,8 @@ export default function CreatePage() {
                   <input
                     name="hostDisplayName"
                     required
-                    defaultValue="Host"
+                    value={hostDisplayName}
+                    onChange={(event) => setHostDisplayName(event.target.value)}
                     placeholder="Host"
                     className="h-14 w-full rounded-[1.25rem] border border-[#ddd2c7] bg-white px-5 text-base font-medium text-[#2f2925] placeholder:text-[#a09488] outline-none transition focus:border-[#9b8c7f] focus:ring-4 focus:ring-[#d8ccc0]/50"
                   />
@@ -661,6 +738,11 @@ export default function CreatePage() {
                   role="alert"
                 >
                   {state.error}
+                  {state.error === AUTH_REQUIRED_CREATE_ERROR ? (
+                    <div className="mt-3">
+                      <AuthEntryPoint nextPath="/create" subtle={false} />
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 

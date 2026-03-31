@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import { recomputeGameCompletions } from "../../lib/bingra/recompute-game-completions";
+import { assertHostAuthorized } from "../../lib/auth/host-authorization";
 
 export type DeleteScoredEventFormState = {
   success?: boolean;
@@ -44,6 +45,15 @@ export async function deleteScoredEventAction(
   if (!parsed.success) {
     return {
       error: parsed.error.issues[0]?.message ?? "Invalid request",
+      completedAt: new Date().toISOString(),
+    };
+  }
+
+  try {
+    await assertHostAuthorized(parsed.data.slug);
+  } catch (error) {
+    return {
+      error: formatError(error),
       completedAt: new Date().toISOString(),
     };
   }

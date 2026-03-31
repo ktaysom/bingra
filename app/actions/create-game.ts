@@ -22,6 +22,8 @@ export type CreateGameFormState = {
   error?: string;
 };
 
+const AUTH_REQUIRED_CREATE_ERROR = "Please sign in to create a game.";
+
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
   hostDisplayName: z.string().min(1, "Host display name is required"),
@@ -109,16 +111,16 @@ export async function createGameAction(
       data: { user },
     } = await supabaseServer.auth.getUser();
 
-    let profileId: string | null = null;
-    let resolvedHostDisplayName = parsed.data.hostDisplayName;
-    if (user?.id) {
-      // Compatibility-phase canonical write identity:
-      // players.profile_id uses canonical accounts.id for new authenticated writes.
-      profileId = await resolveCanonicalAccountIdForAuthUserId(user.id);
+    if (!user?.id) {
+      return { error: AUTH_REQUIRED_CREATE_ERROR };
+    }
 
-      if (!resolvedHostDisplayName.trim() || resolvedHostDisplayName.trim().toLowerCase() === "host") {
-        resolvedHostDisplayName = await resolveProfileDefaultDisplayName(user.id);
-      }
+    // Canonical write identity for host ownership.
+    const profileId = await resolveCanonicalAccountIdForAuthUserId(user.id);
+    let resolvedHostDisplayName = parsed.data.hostDisplayName;
+
+    if (!resolvedHostDisplayName.trim() || resolvedHostDisplayName.trim().toLowerCase() === "host") {
+      resolvedHostDisplayName = await resolveProfileDefaultDisplayName(user.id);
     }
 
     console.log("[createGameAction] SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
@@ -135,7 +137,7 @@ export async function createGameAction(
       p_event_keys: null,
       p_event_labels: null,
       p_event_points: null,
-      p_auth_user_id: user?.id ?? null,
+      p_auth_user_id: user.id,
     };
 
     console.log("[createGameAction] rpc_create_game payload", rpcPayload);
@@ -206,8 +208,10 @@ export async function createGameAction(
           events_per_card: parsed.data.eventsPerCard,
           sport_profile: parsed.data.sport_profile,
           catalog_version: "v1",
-          ...(user?.id ? { auth_user_id: user.id } : {}),
-          ...(profileId ? { account_id: profileId } : {}),
+          auth_user_id: user.id,
+          account_id: profileId,
+          host_account_id: profileId,
+          restricted_scoring: true,
         })
         .eq("id", verifyRow.id)
         .limit(1);

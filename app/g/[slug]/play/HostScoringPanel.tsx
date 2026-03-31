@@ -31,6 +31,7 @@ import {
 type HostScoringPanelProps = {
   slug: string;
   isFinished?: boolean;
+  canManageRestrictedScoring?: boolean;
   teamScope?: "both_teams" | "team_a_only" | "team_b_only";
   teamNames?: {
     A: string;
@@ -134,6 +135,7 @@ const initialDeleteState: DeleteScoredEventFormState = {};
 export function HostScoringPanel({
   slug,
   isFinished = false,
+  canManageRestrictedScoring = true,
   teamScope = "both_teams",
   teamNames = { A: "Team A", B: "Team B" },
   sportProfile = DEFAULT_SPORT_PROFILE,
@@ -242,8 +244,11 @@ export function HostScoringPanel({
     }
   }, [deleteState.success, deleteState.completedAt, deleteState.removedEventId, router]);
 
-  const isScoringLocked = isFinished || Boolean(recordState.blocked);
+  const isScoringLocked = !canManageRestrictedScoring || isFinished || Boolean(recordState.blocked);
   const lockReason =
+    (!canManageRestrictedScoring
+      ? "Only the host can record scoring events in this game."
+      : undefined) ??
     recordState.blockedReason ??
     (isFinished ? "Scoring is locked because this game has ended." : undefined);
 

@@ -107,9 +107,15 @@ type PlayPageContentProps = {
   game: GameRecord;
   currentPlayerId: string;
   slug: string;
+  canManageRestrictedScoring: boolean;
 };
 
-export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageContentProps) {
+export async function PlayPageContent({
+  game,
+  currentPlayerId,
+  slug,
+  canManageRestrictedScoring,
+}: PlayPageContentProps) {
   const supabase = createSupabaseAdminClient();
   const sportProfile = resolveSportProfileKey(game.sport_profile);
   const sportProfileLabel = getSportProfileLabel(sportProfile);
@@ -881,6 +887,7 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
           teamScope={game.team_scope}
           teamNames={teamNames}
           sportProfile={sportProfile}
+          canManageRestrictedScoring={canManageRestrictedScoring}
         />
       ) : isLobby ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm sm:p-6">
@@ -920,8 +927,22 @@ export async function PlayPageContent({ game, currentPlayerId, slug }: PlayPageC
             </p>
           </div>
 
-          {isLobby && <GameStatusActionButton slug={slug} intent="start">Start game</GameStatusActionButton>}
-          {isLive && <EndGameControl slug={slug} />}
+          {isLobby && (
+            <GameStatusActionButton
+              slug={slug}
+              intent="start"
+              disabled={!canManageRestrictedScoring}
+              disabledReason={!canManageRestrictedScoring ? "Only the host can start this game." : undefined}
+            >
+              Start game
+            </GameStatusActionButton>
+          )}
+          {isLive && (
+            <EndGameControl
+              slug={slug}
+              canManageRestrictedScoring={canManageRestrictedScoring}
+            />
+          )}
         </div>
       </section>
     </main>

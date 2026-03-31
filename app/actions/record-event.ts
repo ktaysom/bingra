@@ -24,6 +24,7 @@ import {
   type RecordedEvent,
 } from "../../lib/bingra/card-progress";
 import { finalizeGameAndSetWinner } from "../../lib/bingra/finalize-game";
+import { assertHostAuthorized } from "../../lib/auth/host-authorization";
 
 export type RecordEventFormState = {
   error?: string;
@@ -111,6 +112,16 @@ export async function recordEventAction(
     logTotalDuration();
     return {
       error: parsed.error.issues[0]?.message ?? "Invalid submission",
+      completedAt: new Date().toISOString(),
+    };
+  }
+
+  try {
+    await assertHostAuthorized(parsed.data.slug);
+  } catch (error) {
+    logTotalDuration();
+    return {
+      error: formatError(error),
       completedAt: new Date().toISOString(),
     };
   }
