@@ -133,17 +133,6 @@ export default async function PlayPage(props: PlayPageProps) {
     Boolean(joinPromptCookie) &&
     joinPromptCookie === joinTokenFromQuery;
 
-  if (joinPromptCookie) {
-    cookieStore.set({
-      name: JOIN_PROMPT_COOKIE_NAME,
-      value: "",
-      path: `/g/${slug}/play`,
-      maxAge: 0,
-      httpOnly: true,
-      sameSite: "lax",
-    });
-  }
-
   let resolvedSessionPlayerId: string | null = null;
   let resolvedSessionPlayerProfileId: string | null = null;
 
