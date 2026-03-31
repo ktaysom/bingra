@@ -321,14 +321,23 @@ export default function CreatePage() {
     }
 
     if (!submitAttemptedRef.current || autoRetryInProgressRef.current) {
+      console.info("[create/auto-retry] auth-required encountered but skipping retry flag write", {
+        submitAttempted: submitAttemptedRef.current,
+        autoRetryInProgress: autoRetryInProgressRef.current,
+      });
       return;
     }
 
     if (window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY) === "1") {
+      console.info("[create/auto-retry] retry already consumed; not writing retry flag");
       return;
     }
 
     window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_KEY, "1");
+    console.info("[create/auto-retry] wrote retry flag", {
+      retryKey: CREATE_AFTER_LOGIN_RETRY_KEY,
+      consumedKey: CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY,
+    });
   }, [state.error]);
 
   useEffect(() => {
@@ -337,47 +346,87 @@ export default function CreatePage() {
     }
 
     if (autoRetryTriggeredRef.current) {
+      console.info("[create/auto-retry] auto-retry already triggered in this render lifecycle");
       return;
     }
 
     if (window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY) !== "1") {
+      console.info("[create/auto-retry] retry flag missing; no auto-submit");
       return;
     }
 
     if (window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY) === "1") {
+      console.info("[create/auto-retry] retry already consumed; no auto-submit");
       return;
     }
 
     const form = createFormRef.current;
     if (!form) {
+      console.info("[create/auto-retry] form ref missing; no auto-submit");
       return;
     }
 
     let cancelled = false;
+    let submitted = false;
 
-    const maybeAutoRetryAfterAuth = async () => {
+    const consumeAndSubmit = () => {
+      if (submitted || cancelled) {
+        return;
+      }
+
+      submitted = true;
+      autoRetryTriggeredRef.current = true;
+      autoRetryInProgressRef.current = true;
+      window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY, "1");
+      window.sessionStorage.removeItem(CREATE_AFTER_LOGIN_RETRY_KEY);
+      console.info("[create/auto-retry] conditions met; auto-submitting create form");
+      form.requestSubmit();
+    };
+
+    const maybeAutoRetryAfterAuth = async (source: "initial" | "auth_change" | "retry") => {
       const supabase = createSupabaseBrowserClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (cancelled || !user?.id) {
+      if (cancelled) {
         return;
       }
 
-      autoRetryTriggeredRef.current = true;
-      autoRetryInProgressRef.current = true;
-      window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY, "1");
-      window.sessionStorage.removeItem(CREATE_AFTER_LOGIN_RETRY_KEY);
-      form.requestSubmit();
+      if (!user?.id) {
+        console.info("[create/auto-retry] auth user not yet available", {
+          source,
+        });
+        return;
+      }
+
+      consumeAndSubmit();
     };
 
-    void maybeAutoRetryAfterAuth();
+    const supabase = createSupabaseBrowserClient();
+
+    void maybeAutoRetryAfterAuth("initial");
+
+    const retryTimeout = window.setTimeout(() => {
+      void maybeAutoRetryAfterAuth("retry");
+    }, 250);
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user?.id) {
+        return;
+      }
+
+      void maybeAutoRetryAfterAuth("auth_change");
+    });
 
     return () => {
       cancelled = true;
+      window.clearTimeout(retryTimeout);
+      subscription.unsubscribe();
     };
-  }, [state.error]);
+  }, []);
 
   useEffect(() => {
     if (autoRetryInProgressRef.current && state.error) {
