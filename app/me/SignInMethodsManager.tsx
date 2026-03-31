@@ -125,7 +125,7 @@ export function SignInMethodsManager({ methods }: Props) {
         throw authError;
       }
 
-      setStatus("Magic link sent. Open your email to finish linking this sign-in method.");
+      setStatus("Sign-in code email sent. Enter the code from your email to finish linking this sign-in method.");
       console.info("[auth/init] account-link email sign-in sent");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unable to add email sign-in.";
@@ -294,7 +294,7 @@ export function SignInMethodsManager({ methods }: Props) {
             onClick={handleAddEmail}
             className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
           >
-            Send magic link
+            Send code email
           </button>
         </div>
 

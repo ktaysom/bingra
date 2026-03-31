@@ -97,9 +97,7 @@ export function AuthErrorRecoveryPanel({ authError, initialContext }: AuthErrorR
         pendingContext,
       });
 
-      setStatus(
-        `New sign-in email sent. You can open the new link or enter the ${expectedEmailOtpLength}-digit code.`,
-      );
+      setStatus(`New sign-in code sent. Enter the ${expectedEmailOtpLength}-digit code from your email.`);
     } catch (sendError) {
       const message = sendError instanceof Error ? sendError.message : "Unable to send sign-in email";
       setError(message);
@@ -111,7 +109,7 @@ export function AuthErrorRecoveryPanel({ authError, initialContext }: AuthErrorR
   return (
     <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Sign-in recovery</p>
-      <h2 className="mt-1 text-base font-semibold text-slate-900">That sign-in link didn&apos;t work in this browser.</h2>
+      <h2 className="mt-1 text-base font-semibold text-slate-900">Email sign-in needs code verification.</h2>
       <p className="mt-1 text-sm text-slate-700">You can still finish signing in with the code from your email.</p>
 
       <p className="mt-2 text-xs text-slate-600">{authError}</p>
@@ -169,7 +167,7 @@ export function AuthErrorRecoveryPanel({ authError, initialContext }: AuthErrorR
             disabled={isResending}
             className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
           >
-            {isResending ? "Sending..." : "Send a new sign-in email"}
+            {isResending ? "Sending..." : "Send a new code"}
           </button>
         </div>
       </div>

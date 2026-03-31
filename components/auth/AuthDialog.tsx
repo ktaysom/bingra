@@ -36,7 +36,7 @@ export function AuthDialog({
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [pendingMagicLink, setPendingMagicLink] = useState(false);
+  const [pendingEmailCodeSend, setPendingEmailCodeSend] = useState(false);
   const [emailOtpCode, setEmailOtpCode] = useState("");
   const [pendingEmailOtpVerify, setPendingEmailOtpVerify] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -66,22 +66,22 @@ export function AuthDialog({
 
   const close = () => {
     setIsOpen(false);
-    setPendingMagicLink(false);
+    setPendingEmailCodeSend(false);
     setPendingEmailOtpVerify(false);
   };
 
-  const handleMagicLink = async () => {
+  const handleSendEmailCode = async () => {
     if (!email.trim()) {
       setError("Please enter an email address");
       return;
     }
 
-    setPendingMagicLink(true);
+    setPendingEmailCodeSend(true);
     setError(null);
     setMessage(null);
 
     try {
-      console.info("[auth/init] starting email link sign-in", {
+      console.info("[auth/init] starting email code sign-in", {
         nextPath: pendingContext.nextPath,
         hasLinkPlayerId: Boolean(pendingContext.linkPlayerId),
         intent: pendingContext.intent ?? null,
@@ -93,18 +93,16 @@ export function AuthDialog({
         pendingContext,
       });
 
-      setMessage(
-        `Email sent. Check your inbox for your secure login link or enter the ${expectedEmailOtpLength}-digit code.`,
-      );
-      console.info("[auth/init] email link/otp sent");
+      setMessage(`Code sent. Check your inbox, then enter the ${expectedEmailOtpLength}-digit code below.`);
+      console.info("[auth/init] email code sent");
     } catch (authError) {
       const nextError = authError instanceof Error ? authError.message : "Unable to send sign-in email";
       setError(nextError);
-      console.error("[auth/init] email sign-in initiation failed", {
+      console.error("[auth/init] email code sign-in initiation failed", {
         message: nextError,
       });
     } finally {
-      setPendingMagicLink(false);
+      setPendingEmailCodeSend(false);
     }
   };
 
@@ -176,7 +174,7 @@ export function AuthDialog({
               Guest play stays available. Sign in to save stats and unlock history.
             </p>
 
-            <p className="mt-4 text-sm text-slate-600">Email me a sign-in link</p>
+            <p className="mt-4 text-sm text-slate-600">Step 1: Enter your email to get a sign-in code</p>
             <input
               id="magic-link-email"
               type="email"
@@ -187,16 +185,16 @@ export function AuthDialog({
             />
             <button
               type="button"
-              onClick={handleMagicLink}
-              disabled={pendingMagicLink}
+              onClick={handleSendEmailCode}
+              disabled={pendingEmailCodeSend}
               className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
-              {pendingMagicLink ? "Sending..." : "Email me a sign-in link"}
+              {pendingEmailCodeSend ? "Sending..." : "Send sign-in code"}
             </button>
 
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Or enter a {expectedEmailOtpLength}-digit code
+                Step 2: Enter your {expectedEmailOtpLength}-digit code
               </p>
               <input
                 id="email-otp-code"

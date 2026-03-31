@@ -34,15 +34,15 @@ export async function GET(request: NextRequest) {
   <body>
     <main>
       <section class="card">
-        <h1>Continue sign-in</h1>
-        <p>For security, Bingra waits for your confirmation before finishing email sign-in.</p>
+        <h1>Legacy sign-in link confirmation</h1>
+        <p>This page supports older sign-in links. Bingra now uses email code entry in-app as the primary sign-in method.</p>
         <div class="actions">
           <form method="post" action="${actionUrl}">
-            <button type="submit">Continue to sign in</button>
+            <button type="submit">Continue with this legacy link</button>
           </form>
           <a class="subtle-link" href="/">Cancel</a>
         </div>
-        <p class="note">If this link was opened by a scanner or prefetcher, your sign-in code was not consumed.</p>
+        <p class="note">If this link was opened by a scanner or prefetcher, your sign-in code was not consumed. If you have trouble, return to Bingra and use the email code flow.</p>
       </section>
     </main>
   </body>
