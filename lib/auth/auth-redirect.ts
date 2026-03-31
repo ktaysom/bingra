@@ -14,12 +14,59 @@ const PENDING_AUTH_STORAGE_KEY = "bingra.pending-auth-context.v1";
 const PENDING_AUTH_COOKIE_KEY = "bingra-pending-auth-context";
 const PENDING_AUTH_MAX_AGE_SECONDS = 5 * 60;
 
+function isAuthIntermediaryPath(pathname: string): boolean {
+  return pathname === "/auth/confirm" || pathname === "/auth/callback" || pathname === "/auth/finalize";
+}
+
+function unwrapAuthIntermediaryPath(input: string, maxDepth = 5): string {
+  let current = input;
+
+  for (let depth = 0; depth < maxDepth; depth += 1) {
+    let parsed: URL;
+    try {
+      parsed = new URL(current, "http://localhost");
+    } catch {
+      return current;
+    }
+
+    if (!isAuthIntermediaryPath(parsed.pathname)) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+
+    const nested = parsed.searchParams.get("next") ?? parsed.searchParams.get("redirect_to");
+    const extractedNested = extractInternalPathFromMaybeAbsoluteUrl(nested);
+    if (!extractedNested) {
+      return "/";
+    }
+
+    current = extractedNested;
+  }
+
+  return "/";
+}
+
 export function sanitizeNextPath(input: string | null | undefined, fallback = "/"): string {
   if (!input || !input.startsWith("/")) {
     return fallback;
   }
 
-  return input;
+  const unwrapped = unwrapAuthIntermediaryPath(input);
+  if (!unwrapped || !unwrapped.startsWith("/")) {
+    return fallback;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(unwrapped, "http://localhost");
+  } catch {
+    return fallback;
+  }
+
+  if (isAuthIntermediaryPath(parsed.pathname)) {
+    return fallback;
+  }
+
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
 function extractInternalPathFromMaybeAbsoluteUrl(input: string | null | undefined): string | null {
@@ -51,11 +98,7 @@ function parsePathToSearchParams(path: string | null | undefined): URLSearchPara
 
   try {
     const parsed = new URL(path, "http://localhost");
-    if (
-      parsed.pathname === "/auth/confirm" ||
-      parsed.pathname === "/auth/callback" ||
-      parsed.pathname === "/auth/finalize"
-    ) {
+    if (isAuthIntermediaryPath(parsed.pathname)) {
       return parsed.searchParams;
     }
 
