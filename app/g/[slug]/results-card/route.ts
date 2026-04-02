@@ -18,6 +18,8 @@ export async function GET(request: Request) {
   const teamB = sanitizeLabel(url.searchParams.get("teamB"), "Team B");
   const winner = sanitizeLabel(url.searchParams.get("winner"), "Winner");
   const score = sanitizeLabel(url.searchParams.get("score"), "—");
+  const raw = sanitizeLabel(url.searchParams.get("raw"), "—");
+  const hasBingra = url.searchParams.get("bingra") === "1";
 
   return new ImageResponse(
     createElement(
@@ -80,6 +82,11 @@ export async function GET(request: Request) {
           "div",
           { style: { fontSize: 30, opacity: 0.96, fontWeight: 600 } },
           `Final score: ${score}`,
+        ),
+        createElement(
+          "div",
+          { style: { fontSize: 24, opacity: 0.95, fontWeight: 600 } },
+          `Raw score: ${raw}${hasBingra ? " · Bingra x2" : ""}`,
         ),
         createElement(
           "div",
