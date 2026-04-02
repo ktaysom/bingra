@@ -121,19 +121,12 @@ export async function PlayPageContent({
   canManageRestrictedScoring,
 }: PlayPageContentProps) {
   const contentStartedAt = Date.now();
-  console.info("[play/content][perf] render start", {
-    slug,
-    gameId: game.id,
-    startedAt: new Date(contentStartedAt).toISOString(),
-  });
 
   const supabase = createSupabaseAdminClient();
   const sportProfile = resolveSportProfileKey(game.sport_profile);
   const sportProfileLabel = getSportProfileLabel(sportProfile);
 
   const playersFetchPromise = (async () => {
-    const startedAt = Date.now();
-    console.info("[play/content][perf] players fetch start", { slug, gameId: game.id });
     const { data, error } = await supabase
       .from("players")
       .select("id, display_name, role, created_at")
@@ -142,14 +135,6 @@ export async function PlayPageContent({
       .order("id", { ascending: true })
       .returns<PlayerRecord[]>();
 
-    console.info("[play/content][perf] players fetch end", {
-      slug,
-      gameId: game.id,
-      durationMs: Date.now() - startedAt,
-      rowCount: data?.length ?? 0,
-      hadError: Boolean(error),
-    });
-
     return {
       players: data,
       playersError: error?.message ?? null,
@@ -157,21 +142,11 @@ export async function PlayPageContent({
   })();
 
   const cardsFetchPromise = (async () => {
-    const startedAt = Date.now();
-    console.info("[play/content][perf] cards fetch start", { slug, gameId: game.id });
     const { data, error } = await supabase
       .from("cards")
       .select("id, player_id, accepted_at, card_cells(order_index, event_key, event_label, team_key, point_value, threshold)")
       .eq("game_id", game.id)
       .returns<CardRow[]>();
-
-    console.info("[play/content][perf] cards fetch end", {
-      slug,
-      gameId: game.id,
-      durationMs: Date.now() - startedAt,
-      rowCount: data?.length ?? 0,
-      hadError: Boolean(error),
-    });
 
     return {
       cardsForGame: !error && data ? data : [],
@@ -240,8 +215,6 @@ export async function PlayPageContent({
   const isLive = game.status === "live";
   const isGameFinished = game.status === "finished";
   const scoredEventsFetchPromise = (async () => {
-    const startedAt = Date.now();
-    console.info("[play/content][perf] scored_events fetch start", { slug, gameId: game.id });
     try {
       const { data, error } = await supabase
         .from("scored_events")
@@ -251,26 +224,11 @@ export async function PlayPageContent({
         .order("id", { ascending: true });
 
       const rows = (data as RecentScoredEvent[] | null) ?? [];
-      console.info("[play/content][perf] scored_events fetch end", {
-        slug,
-        gameId: game.id,
-        durationMs: Date.now() - startedAt,
-        rowCount: rows.length,
-        hadError: Boolean(error),
-      });
-
       return {
         allScoredEvents: rows,
       };
     } catch (error) {
       console.error("Unable to load scored events", error);
-      console.info("[play/content][perf] scored_events fetch end", {
-        slug,
-        gameId: game.id,
-        durationMs: Date.now() - startedAt,
-        rowCount: 0,
-        hadError: true,
-      });
       return {
         allScoredEvents: [] as RecentScoredEvent[],
       };
@@ -278,8 +236,6 @@ export async function PlayPageContent({
   })();
 
   const completionsFetchPromise = (async () => {
-    const startedAt = Date.now();
-    console.info("[play/content][perf] game_completions fetch start", { slug, gameId: game.id });
     try {
       const { data, error } = await supabase
         .from("game_completions")
@@ -289,26 +245,11 @@ export async function PlayPageContent({
         .order("id", { ascending: true });
 
       const rows = (data as LiveCompletionRow[] | null) ?? [];
-      console.info("[play/content][perf] game_completions fetch end", {
-        slug,
-        gameId: game.id,
-        durationMs: Date.now() - startedAt,
-        rowCount: rows.length,
-        hadError: Boolean(error),
-      });
-
       return {
         liveCompletions: rows,
         liveCompletionsError: error?.message ?? null,
       };
     } catch (error) {
-      console.info("[play/content][perf] game_completions fetch end", {
-        slug,
-        gameId: game.id,
-        durationMs: Date.now() - startedAt,
-        rowCount: 0,
-        hadError: true,
-      });
       return {
         liveCompletions: [] as LiveCompletionRow[],
         liveCompletionsError: String(error),
@@ -350,7 +291,6 @@ export async function PlayPageContent({
   const cardsByPlayerId = new Map(cardsForGame.map((card) => [card.player_id, card]));
   const playersById = new Map((players ?? []).map((player) => [player.id, player]));
 
-  const scoringStartedAt = Date.now();
   const scoringLeaderboardEntries: LeaderboardEntry[] = buildGameScores({
     players: (players ?? []).map((player) => ({
       id: player.id,
@@ -386,12 +326,6 @@ export async function PlayPageContent({
     join_order: entry.join_order,
     is_active: true,
   }));
-  console.info("[play/content][perf] leaderboard compute end", {
-    slug,
-    gameId: game.id,
-    durationMs: Date.now() - scoringStartedAt,
-    entryCount: scoringLeaderboardEntries.length,
-  });
 
   const scoringEntriesByPlayerId = new Map(scoringLeaderboardEntries.map((entry) => [entry.id, entry]));
 
@@ -530,7 +464,6 @@ export async function PlayPageContent({
 
   const leaderboardEntryByPlayerId = new Map(leaderboardEntries.map((entry) => [entry.id, entry]));
 
-  const playerPreviewStartedAt = Date.now();
   const playerCardPreviews = (players ?? []).map((player) => {
     const playerCard = cardsByPlayerId.get(player.id) ?? null;
     const sortedCells = [...(playerCard?.card_cells ?? [])].sort(
@@ -601,12 +534,6 @@ export async function PlayPageContent({
       }),
     };
   });
-  console.info("[play/content][perf] player card preview compute end", {
-    slug,
-    gameId: game.id,
-    durationMs: Date.now() - playerPreviewStartedAt,
-    previewCount: playerCardPreviews.length,
-  });
 
   const playerCardsForScoring = new Map(
     cardsForGame.map((card) => [
@@ -643,7 +570,6 @@ export async function PlayPageContent({
     currentPlayerId != null &&
     unacceptedPlayerIds.has(currentPlayerId);
 
-  const activityFeedStartedAt = Date.now();
   const activityFeedItems: ActivityFeedItem[] = buildActivityFeedItems({
     players: (players ?? []).map((player) => ({
       id: player.id,
@@ -666,12 +592,6 @@ export async function PlayPageContent({
       has_bingra: entry.has_bingra,
     })),
     sportProfile,
-  });
-  console.info("[play/content][perf] activity feed compute end", {
-    slug,
-    gameId: game.id,
-    durationMs: Date.now() - activityFeedStartedAt,
-    itemCount: activityFeedItems.length,
   });
 
   const formatActivityTimestamp = (iso: string) =>
@@ -906,19 +826,7 @@ export async function PlayPageContent({
                                 if (typeof awardedPlayerNames.join !== "function") {
                                   return "No points awarded";
                                 }
-                                const joinFn = awardedPlayerNames.join;
-                                console.info("[play/content][join-check] awardedPlayerNames", {
-                                  context: "PlayPageContent:event_recorded_scoreText",
-                                  variable: "awardedPlayerNames",
-                                  isArray: Array.isArray(awardedPlayerNames),
-                                  type: typeof awardedPlayerNames,
-                                  hasCallableJoin: typeof joinFn === "function",
-                                });
-
-                                const joinedNames =
-                                  typeof joinFn === "function"
-                                    ? joinFn.call(awardedPlayerNames, ", ")
-                                    : "";
+                                const joinedNames = awardedPlayerNames.join(", ");
 
                                 return joinedNames
                                   ? `Points awarded to ${joinedNames}`

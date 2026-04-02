@@ -48,17 +48,11 @@ export default async function PlayPage(props: PlayPageProps) {
   const renderStartedAt = Date.now();
   const { slug } = await props.params;
   const searchParams = (await props.searchParams) ?? {};
-  console.info("[play/page][perf] render start", {
-    slug,
-    startedAt: new Date(renderStartedAt).toISOString(),
-  });
 
   const supabase = createSupabaseAdminClient();
   const supabaseServer = await createSupabaseServerClient();
   const cookieStore = await cookies();
 
-  const gameFetchStartedAt = Date.now();
-  console.info("[play/page][perf] game fetch start", { slug });
   const gamePromise = supabase
     .from("games")
     .select(
@@ -67,25 +61,12 @@ export default async function PlayPage(props: PlayPageProps) {
     .eq("slug", slug)
     .maybeSingle<GameRecord>();
 
-  const authFetchStartedAt = Date.now();
-  console.info("[play/page][perf] auth.getUser start", { slug });
   const authPromise = supabaseServer.auth.getUser();
 
   const [{ data: game, error: gameError }, authResponse] = await Promise.all([
     gamePromise,
     authPromise,
   ]);
-
-  console.info("[play/page][perf] game fetch end", {
-    slug,
-    durationMs: Date.now() - gameFetchStartedAt,
-    found: Boolean(game),
-  });
-  console.info("[play/page][perf] auth.getUser end", {
-    slug,
-    durationMs: Date.now() - authFetchStartedAt,
-    hasUser: Boolean(authResponse.data.user?.id),
-  });
 
   if (gameError || !game) {
     return (
@@ -106,14 +87,7 @@ export default async function PlayPage(props: PlayPageProps) {
 
   let actorAccountId: string | null = null;
   if (user?.id) {
-    const actorAccountStartedAt = Date.now();
-    console.info("[play/page][perf] resolve actor account start", { slug });
     actorAccountId = await resolveCanonicalAccountIdForAuthUserId(user.id);
-    console.info("[play/page][perf] resolve actor account end", {
-      slug,
-      durationMs: Date.now() - actorAccountStartedAt,
-      hasActorAccountId: Boolean(actorAccountId),
-    });
   }
 
   const isSignedInHostForRestrictedGame =
@@ -137,23 +111,11 @@ export default async function PlayPage(props: PlayPageProps) {
   let resolvedSessionPlayerProfileId: string | null = null;
 
   if (cookiePlayerId) {
-    const sessionPlayerLookupStartedAt = Date.now();
-    console.info("[play/page][perf] session player lookup start", {
-      slug,
-      hasCookiePlayerId: Boolean(cookiePlayerId),
-    });
     const { data: sessionPlayer, error: sessionPlayerError } = await supabase
       .from("players")
       .select("id, game_id, profile_id")
       .eq("id", cookiePlayerId)
       .maybeSingle<{ id: string; game_id: string; profile_id: string | null }>();
-
-    console.info("[play/page][perf] session player lookup end", {
-      slug,
-      durationMs: Date.now() - sessionPlayerLookupStartedAt,
-      hasSessionPlayer: Boolean(sessionPlayer?.id),
-      hadError: Boolean(sessionPlayerError),
-    });
 
     if (!sessionPlayerError && sessionPlayer && sessionPlayer.game_id === game.id) {
       resolvedSessionPlayerId = sessionPlayer.id;
@@ -179,21 +141,11 @@ export default async function PlayPage(props: PlayPageProps) {
 
   if (shouldEnsureLink && user?.id) {
     try {
-      const ensureLinkStartedAt = Date.now();
-      console.info("[play/page][perf] ensure player link start", {
-        slug,
-        playerId: resolvedSessionPlayerId,
-        hadProfileLink: Boolean(resolvedSessionPlayerProfileId),
-      });
       await ensurePlayerLinkedToAuthenticatedUser({
         playerId: resolvedSessionPlayerId,
         authUserId: user.id,
         accountId: actorAccountId ?? undefined,
         context: "play/page",
-      });
-      console.info("[play/page][perf] ensure player link end", {
-        slug,
-        durationMs: Date.now() - ensureLinkStartedAt,
       });
     } catch (error) {
       console.error("[play/page] failed to ensure authenticated player linkage", {
@@ -203,14 +155,6 @@ export default async function PlayPage(props: PlayPageProps) {
         error,
       });
     }
-  } else {
-    console.info("[play/page][perf] ensure player link skipped", {
-      slug,
-      hasUser: Boolean(user?.id),
-      hasCurrentPlayer: Boolean(resolvedSessionPlayerId),
-      hasExistingProfileLink: Boolean(resolvedSessionPlayerProfileId),
-      actorAccountId,
-    });
   }
 
   const canManageRestrictedScoring =

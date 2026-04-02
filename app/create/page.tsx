@@ -224,7 +224,6 @@ function getDeterministicPreviewItems(input: {
 }
 
 export default function CreatePage() {
-  const renderStartedAt = performance.now();
   const [state, formAction] = useActionState(createGameAction, initialState);
   const createFormRef = useRef<HTMLFormElement | null>(null);
   const submitAttemptedRef = useRef(false);
@@ -252,24 +251,11 @@ export default function CreatePage() {
   const [eventsPerCard, setEventsPerCard] = useState(5);
   const [sportProfile, setSportProfile] = useState<SportProfileKey>(DEFAULT_SPORT_PROFILE);
 
-  console.info("[create/page][perf] render start", {
-    ts: new Date().toISOString(),
-    hasError: Boolean(state.error),
-  });
-
-  useEffect(() => {
-    console.info("[create/page][perf] render committed", {
-      commitMs: Math.round(performance.now() - renderStartedAt),
-      hasError: Boolean(state.error),
-    });
-  });
-
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    const remountAt = Date.now();
     const traceRaw = window.sessionStorage.getItem(CREATE_AUTH_CREATE_TRACE_KEY);
     if (!traceRaw) {
       return;
@@ -287,16 +273,6 @@ export default function CreatePage() {
         setAuthCreateTraceId(trace.traceId);
       }
 
-      console.info("[create/page][perf] remount after verify", {
-        traceId: trace.traceId ?? null,
-        remountAt,
-        verifyClickToRemountMs:
-          typeof trace.verifyClickAt === "number" ? remountAt - trace.verifyClickAt : null,
-        verifySuccessToRemountMs:
-          typeof trace.verifySuccessAt === "number" ? remountAt - trace.verifySuccessAt : null,
-        redirectToRemountMs:
-          typeof trace.redirectStartAt === "number" ? remountAt - trace.redirectStartAt : null,
-      });
     } catch {
       // Ignore malformed trace payloads.
     }
@@ -306,9 +282,6 @@ export default function CreatePage() {
     if (typeof window === "undefined") {
       return;
     }
-
-    const lookupStartedAt = performance.now();
-    console.info("[create/page][perf] draft load start");
 
     try {
       const raw = window.localStorage.getItem(CREATE_DRAFT_STORAGE_KEY);
@@ -337,9 +310,6 @@ export default function CreatePage() {
     } catch {
       // Ignore malformed drafts.
     } finally {
-      console.info("[create/page][perf] draft load end", {
-        durationMs: Math.round(performance.now() - lookupStartedAt),
-      });
     }
   }, []);
 
@@ -382,34 +352,16 @@ export default function CreatePage() {
       return;
     }
 
-    const authRequiredStartedAt = performance.now();
-    console.info("[create/page][perf] auth-required branch start");
-
     if (!submitAttemptedRef.current || autoRetryInProgressRef.current) {
-      console.info("[create/page][perf] auth-required branch skip retry flag", {
-        submitAttempted: submitAttemptedRef.current,
-        autoRetryInProgress: autoRetryInProgressRef.current,
-        durationMs: Math.round(performance.now() - authRequiredStartedAt),
-      });
       return;
     }
 
     if (window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY) === "1") {
-      console.info("[create/page][perf] auth-required retry already consumed", {
-        durationMs: Math.round(performance.now() - authRequiredStartedAt),
-      });
       return;
     }
 
     window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_KEY, "1");
-    console.info("[create/page][perf] retry flag set", {
-      retryFlag: window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY),
-      consumedFlag: window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY),
-    });
     setAutoRetrySignal((current) => current + 1);
-    console.info("[create/page][perf] auth-required branch end", {
-      durationMs: Math.round(performance.now() - authRequiredStartedAt),
-    });
   }, [state.error]);
 
   useEffect(() => {
@@ -417,52 +369,28 @@ export default function CreatePage() {
       return;
     }
 
-    const autoRetryStartedAt = performance.now();
-
     const retryFlag = window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY);
     const consumedFlag = window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY);
     const traceRaw = window.sessionStorage.getItem(CREATE_AUTH_CREATE_TRACE_KEY);
     const trace = traceRaw
       ? (JSON.parse(traceRaw) as {
           traceId?: string;
-          verifyClickAt?: number;
-          verifySuccessAt?: number;
-          redirectStartAt?: number;
         })
       : null;
-    console.info("[create/page][perf] auto-retry flags read", {
-      retryFlag,
-      consumedFlag,
-      signal: autoRetrySignal,
-      traceId: trace?.traceId ?? null,
-    });
-
     if (autoRetryTriggeredRef.current) {
-      console.info("[create/page][perf] auto-retry already triggered", {
-        durationMs: Math.round(performance.now() - autoRetryStartedAt),
-      });
       return;
     }
 
     if (retryFlag !== "1") {
-      console.info("[create/page][perf] auto-retry skipped (retry flag missing)", {
-        durationMs: Math.round(performance.now() - autoRetryStartedAt),
-      });
       return;
     }
 
     if (consumedFlag === "1") {
-      console.info("[create/page][perf] auto-retry skipped (already consumed)", {
-        durationMs: Math.round(performance.now() - autoRetryStartedAt),
-      });
       return;
     }
 
     const form = createFormRef.current;
     if (!form) {
-      console.info("[create/page][perf] auto-retry skipped (form missing)", {
-        durationMs: Math.round(performance.now() - autoRetryStartedAt),
-      });
       return;
     }
 
@@ -482,37 +410,15 @@ export default function CreatePage() {
       autoRetryInProgressRef.current = true;
       window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY, "1");
       window.sessionStorage.removeItem(CREATE_AFTER_LOGIN_RETRY_KEY);
-      const submitAt = Date.now();
-      console.info("[create/page][perf] auto-retry submit", {
-        traceId: trace?.traceId ?? null,
-        autoRetrySubmitAt: submitAt,
-        verifyClickToSubmitMs:
-          trace && typeof trace.verifyClickAt === "number" ? submitAt - trace.verifyClickAt : null,
-        verifySuccessToSubmitMs:
-          trace && typeof trace.verifySuccessAt === "number" ? submitAt - trace.verifySuccessAt : null,
-        redirectToSubmitMs:
-          trace && typeof trace.redirectStartAt === "number" ? submitAt - trace.redirectStartAt : null,
-        totalMs: Math.round(performance.now() - autoRetryStartedAt),
-        consumedFlag: window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY),
-        retryFlag: window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY),
-      });
       form.requestSubmit();
     };
 
     const supabase = createSupabaseBrowserClient();
 
     const maybeAutoRetryAfterAuth = async (source: "initial" | "auth_change" | "poll") => {
-      const authLookupStartedAt = performance.now();
-      console.info("[create/page][perf] auto-retry auth lookup start", { source });
       const {
         data: { user },
       } = await supabase.auth.getUser();
-
-      console.info("[create/page][perf] auto-retry auth lookup end", {
-        source,
-        durationMs: Math.round(performance.now() - authLookupStartedAt),
-        hasUser: Boolean(user?.id),
-      });
 
       if (cancelled) {
         return;
@@ -525,16 +431,6 @@ export default function CreatePage() {
           pollTimer = window.setTimeout(() => {
             void maybeAutoRetryAfterAuth("poll");
           }, 300);
-          console.info("[create/page][perf] auto-retry auth pending; scheduling poll", {
-            source,
-            attempt: nextAttempt,
-            maxPollAttempts,
-          });
-        } else {
-          console.info("[create/page][perf] auto-retry auth polling exhausted", {
-            source,
-            attempts: pollAttempt,
-          });
         }
         return;
       }

@@ -59,21 +59,7 @@ function eventTextBlob(event: GameEventType): string {
     (part): part is string => typeof part === "string" && part.length > 0,
   );
 
-  const text =
-    (() => {
-      const joinFn = textParts.join;
-      console.info("[probability][join-check] textParts", {
-        context: "eventTextBlob",
-        variable: "textParts",
-        isArray: Array.isArray(textParts),
-        type: typeof textParts,
-        hasCallableJoin: typeof joinFn === "function",
-      });
-
-      return typeof joinFn === "function"
-        ? joinFn.call(textParts, " ")
-        : textParts[0] ?? "";
-    })();
+  const text = textParts.join(" ");
 
   return text.toLowerCase();
 }

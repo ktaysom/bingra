@@ -104,12 +104,6 @@ export function AuthDialog({
     setMessage(null);
 
     try {
-      console.info("[auth/init] starting email code sign-in", {
-        nextPath: pendingContext.nextPath,
-        hasLinkPlayerId: Boolean(pendingContext.linkPlayerId),
-        intent: pendingContext.intent ?? null,
-      });
-
       await sendEmailSignInLink({
         email: email.trim(),
         appBaseUrl: getAppBaseUrl(),
@@ -117,7 +111,6 @@ export function AuthDialog({
       });
 
       setMessage(`Code sent. Check your inbox, then enter the ${expectedEmailOtpLength}-digit code below.`);
-      console.info("[auth/init] email code sent");
     } catch (authError) {
       const details = formatClientAuthError(authError);
       const nextError = details.message || "Unable to send sign-in email";
@@ -156,12 +149,6 @@ export function AuthDialog({
         ? window.crypto.randomUUID()
         : `${verifyClickAt}-${Math.random().toString(16).slice(2)}`;
 
-    console.info("[auth/otp][perf] verify click", {
-      traceId,
-      verifyClickAt,
-      nextPath: pendingContext.nextPath,
-    });
-
     try {
       const { finalizePath } = await verifyEmailOtpAndGetFinalizePath({
         email: email.trim(),
@@ -171,26 +158,10 @@ export function AuthDialog({
 
       const verifySuccessAt = Date.now();
 
-      console.info("[auth/otp][perf] verify success", {
-        traceId,
-        verifySuccessAt,
-        verifyDurationMs: verifySuccessAt - verifyClickAt,
-      });
-
       setPostVerifyProgress(true);
       setMessage("Code accepted. Signing you in and creating your Bingra game...");
 
       const redirectStartAt = Date.now();
-      console.info("[auth/otp] verifyOtp(email) succeeded", {
-        nextPath: pendingContext.nextPath,
-        hasLinkPlayerId: Boolean(pendingContext.linkPlayerId),
-      });
-      console.info("[auth/redirect][perf] redirect start", {
-        traceId,
-        redirectStartAt,
-        successToRedirectMs: redirectStartAt - verifySuccessAt,
-        target: finalizePath,
-      });
 
       if (typeof window !== "undefined") {
         window.sessionStorage.setItem(CREATE_VERIFY_AT_STORAGE_KEY, String(verifySuccessAt));

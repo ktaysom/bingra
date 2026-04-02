@@ -76,13 +76,6 @@ export async function createGameAction(
   const allowCustomCardsInput = formData.get("allowCustomCards");
   const rawSportProfile = formData.get("sport_profile") ?? DEFAULT_SPORT_PROFILE;
 
-  console.info("[createGameAction][perf] action start", {
-    traceId: authCreateTraceId,
-    actionStartAt: actionStartedAt,
-    startedAt: new Date(actionStartedAt).toISOString(),
-    hasTitle: typeof rawTitle === "string" ? rawTitle.trim().length > 0 : false,
-  });
-
   try {
 
   const parsed = formSchema.safeParse({
@@ -113,20 +106,11 @@ export async function createGameAction(
     const supabase = createSupabaseAdminClient();
     const supabaseServer = await createSupabaseServerClient();
 
-    const authLookupStartedAt = Date.now();
-    console.info("[createGameAction][perf] auth.getUser start");
     const {
       data: { user },
     } = await supabaseServer.auth.getUser();
-    console.info("[createGameAction][perf] auth.getUser end", {
-      durationMs: Date.now() - authLookupStartedAt,
-      hasUser: Boolean(user?.id),
-    });
 
     if (!user?.id) {
-      console.info("[createGameAction][perf] auth-required return", {
-        totalMs: Date.now() - actionStartedAt,
-      });
       return { error: AUTH_REQUIRED_CREATE_ERROR };
     }
 
@@ -163,15 +147,7 @@ export async function createGameAction(
     let hostPlayerId: string | null = null;
 
     try {
-      const rpcStartedAt = Date.now();
-      console.info("[createGameAction][perf] rpc_create_game_full start", {
-        traceId: authCreateTraceId,
-      });
       const { data, error } = await supabase.rpc("rpc_create_game_full", rpcPayload);
-      console.info("[createGameAction][perf] rpc_create_game_full end", {
-        traceId: authCreateTraceId,
-        durationMs: Date.now() - rpcStartedAt,
-      });
 
       if (error) {
         console.error("[createGameAction] insert error", error);
@@ -206,13 +182,6 @@ export async function createGameAction(
       return { error: "Failed to initialize host player session" };
     }
 
-    console.info("[createGameAction][perf] cookie set + redirect", {
-      traceId: authCreateTraceId,
-      redirectStartAt: Date.now(),
-      hostSlug,
-      hasHostPlayerId: Boolean(hostPlayerId),
-      redirectTarget: `/g/${hostSlug}/play`,
-    });
     const cookieStore = await cookies();
     cookieStore.set({
       name: "bingra-player-id",

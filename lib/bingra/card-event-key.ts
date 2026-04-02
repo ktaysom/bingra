@@ -126,18 +126,7 @@ export function assertUniqueCardCellEventKeys(eventKeys: string[]): void {
 
   if (duplicates.size > 0) {
     const duplicateArray = Array.from(duplicates);
-    const joinFn = duplicateArray.join;
-    console.info("[card-event-key][join-check] duplicateArray", {
-      context: "assertUniqueCardCellEventKeys",
-      variable: "duplicateArray",
-      isArray: Array.isArray(duplicateArray),
-      type: typeof duplicateArray,
-      hasCallableJoin: typeof joinFn === "function",
-    });
-    const duplicateList =
-      typeof joinFn === "function"
-        ? joinFn.call(duplicateArray, ", ")
-        : duplicateArray[0] ?? "unknown";
+    const duplicateList = duplicateArray.join(", ");
 
     throw new Error(
       `Duplicate card cell event keys are not allowed: ${duplicateList}`,

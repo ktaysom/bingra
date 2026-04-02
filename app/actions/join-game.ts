@@ -36,33 +36,12 @@ function isTransientNetworkError(error: unknown): boolean {
 }
 
 async function runJoinStep<T>(context: JoinStepContext, action: () => Promise<T>): Promise<T> {
-  const startedAt = Date.now();
-  console.info("[joinGameAction][step:start]", context);
-
   try {
-    const result = await action();
-    console.info("[joinGameAction][step:end]", {
-      ...context,
-      durationMs: Date.now() - startedAt,
-      success: true,
-    });
-    return result;
+    return await action();
   } catch (error) {
     if (isRedirectError(error)) {
-      console.info("[joinGameAction][step:redirect]", {
-        ...context,
-        durationMs: Date.now() - startedAt,
-      });
       throw error;
     }
-
-    console.error("[joinGameAction][step:error]", {
-      ...context,
-      durationMs: Date.now() - startedAt,
-      success: false,
-      message: error instanceof Error ? error.message : String(error),
-      error: formatErrorForLog(error),
-    });
     throw error;
   }
 }
@@ -74,12 +53,6 @@ async function runJoinStepWithSingleRetry<T>(context: JoinStepContext, action: (
     if (!isTransientNetworkError(error)) {
       throw error;
     }
-
-    console.warn("[joinGameAction][step:retry] transient network failure, retrying once", {
-      ...context,
-      message: error instanceof Error ? error.message : String(error),
-      error: formatErrorForLog(error),
-    });
 
     return runJoinStep(
       {
@@ -164,9 +137,6 @@ export async function joinGameAction(
   formData: FormData
 ): Promise<JoinGameFormState> {
   const actionStartedAt = Date.now();
-  console.info("[joinGameAction] start", {
-    startedAt: new Date(actionStartedAt).toISOString(),
-  });
 
   const rawSlug = formData.get("slug");
   const rawDisplayName = formData.get("displayName");
@@ -253,23 +223,6 @@ export async function joinGameAction(
           .select("id")
           .eq("slug", parsed.data.slug)
           .maybeSingle<{ id: string }>(),
-    );
-
-    await runJoinStep(
-      {
-        step: "post-lookup-inspect-result",
-        client: "internal",
-        operation: "inspect lookup result flags",
-      },
-      async () => {
-        console.info("[joinGameAction][post-lookup] result snapshot", {
-          slug: parsed.data.slug,
-          hasGame: Boolean(game),
-          gameId: game?.id ?? null,
-          hasGameError: Boolean(gameError),
-          gameError: gameError ? formatErrorForLog(gameError) : null,
-        });
-      },
     );
 
     await runJoinStep(
@@ -528,7 +481,7 @@ export async function joinGameAction(
     });
     return { error: formatError(error) };
   } finally {
-    console.info("[joinGameAction] end", {
+    console.info("[joinGameAction][perf] total action duration", {
       durationMs: Date.now() - actionStartedAt,
     });
   }
