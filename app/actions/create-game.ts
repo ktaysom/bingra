@@ -57,12 +57,6 @@ export async function createGameAction(
   _prevState: CreateGameFormState,
   formData: FormData
 ): Promise<CreateGameFormState> {
-  const actionStartedAt = Date.now();
-  const rawAuthCreateTraceId = formData.get("auth_create_trace_id");
-  const authCreateTraceId =
-    typeof rawAuthCreateTraceId === "string" && rawAuthCreateTraceId.trim().length > 0
-      ? rawAuthCreateTraceId.trim()
-      : null;
   const rawTitle = formData.get("title");
   const rawHostDisplayName = formData.get("hostDisplayName");
   const rawMode = formData.get("mode") ?? "quick_play";
@@ -75,8 +69,6 @@ export async function createGameAction(
   const rawVisibility = formData.get("visibility") ?? "private";
   const allowCustomCardsInput = formData.get("allowCustomCards");
   const rawSportProfile = formData.get("sport_profile") ?? DEFAULT_SPORT_PROFILE;
-
-  try {
 
   const parsed = formSchema.safeParse({
     title: typeof rawTitle === "string" ? rawTitle.trim() : "",
@@ -192,11 +184,4 @@ export async function createGameAction(
       sameSite: "lax",
     });
     redirect(`/g/${hostSlug}/play`);
-  } finally {
-    console.info("[createGameAction][perf] total action duration", {
-      traceId: authCreateTraceId,
-      actionEndAt: Date.now(),
-      durationMs: Date.now() - actionStartedAt,
-    });
-  }
 }

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { CardBuilderPanel } from "./CardBuilderPanel";
 import { EndGameCelebration } from "./EndGameCelebration";
@@ -120,8 +121,6 @@ export async function PlayPageContent({
   consumeJoinQueryOnMount = false,
   canManageRestrictedScoring,
 }: PlayPageContentProps) {
-  const contentStartedAt = Date.now();
-
   const supabase = createSupabaseAdminClient();
   const sportProfile = resolveSportProfileKey(game.sport_profile);
   const sportProfileLabel = getSportProfileLabel(sportProfile);
@@ -664,16 +663,6 @@ export async function PlayPageContent({
 
   const activityFeedIsScrollable = activityFeedItems.length > 7;
 
-  console.info("[play/content][perf] render end", {
-    slug,
-    gameId: game.id,
-    durationMs: Date.now() - contentStartedAt,
-    playerCount,
-    cardCount: cardsForGame.length,
-    scoredEventsCount: allScoredEvents.length,
-    completionsCount: liveCompletions.length,
-  });
-
   return (
     <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6">
       <PlayRealtimeBridgeMount gameId={game.id} slug={slug} />
@@ -717,7 +706,9 @@ export async function PlayPageContent({
       <header className="rounded-2xl bg-bingra-dark px-5 py-4 shadow-sm sm:px-6 sm:py-4.5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <BingraLogo variant="horizontal" className="h-10.5 w-auto sm:h-12" />
+            <Link href="/" aria-label="Bingra home">
+              <BingraLogo variant="horizontal" className="h-10.5 w-auto sm:h-12" />
+            </Link>
             <h1 className="mt-2.5 text-2xl font-bold text-bingra-white sm:text-3xl">{matchupHeadline}</h1>
             <p className="mt-1 text-sm text-bingra-white/85">Hosted by {displayHostName}</p>
             <p className="mt-1 text-xs text-bingra-white/70">{sportProfileLabel}</p>

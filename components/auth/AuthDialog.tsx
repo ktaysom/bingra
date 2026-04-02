@@ -60,6 +60,8 @@ export function AuthDialog({
   const expectedEmailOtpLength = getExpectedEmailOtpLength();
 
   const controlsDisabled = pendingEmailCodeSend || pendingEmailOtpVerify || postVerifyProgress;
+  const isCreateFlowContext = nextPath === "/create" && !linkPlayerId;
+  const isHomepageFlowContext = nextPath === "/" && !linkPlayerId;
 
   const pendingContext = normalizePendingAuthContext({
     nextPath,
@@ -159,11 +161,15 @@ export function AuthDialog({
       const verifySuccessAt = Date.now();
 
       setPostVerifyProgress(true);
-      setMessage("Code accepted. Signing you in and creating your Bingra game...");
+      setMessage(
+        isCreateFlowContext
+          ? "Code accepted. Signing you in and creating your Bingra game..."
+          : "Code accepted. Signing you in...",
+      );
 
       const redirectStartAt = Date.now();
 
-      if (typeof window !== "undefined") {
+      if (isCreateFlowContext && typeof window !== "undefined") {
         window.sessionStorage.setItem(CREATE_VERIFY_AT_STORAGE_KEY, String(verifySuccessAt));
         window.sessionStorage.setItem(
           CREATE_AUTH_CREATE_TRACE_KEY,
@@ -174,6 +180,14 @@ export function AuthDialog({
             redirectStartAt,
           }),
         );
+      }
+
+      // Homepage sign-in should complete with a hard navigation so server-rendered
+      // user state is immediately reflected and modal state cannot remain stale.
+      if (isHomepageFlowContext && typeof window !== "undefined") {
+        setIsOpen(false);
+        window.location.assign(finalizePath);
+        return;
       }
 
       router.push(finalizePath);

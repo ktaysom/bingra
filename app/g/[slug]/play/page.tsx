@@ -7,7 +7,6 @@ import { ensurePlayerLinkedToAuthenticatedUser } from "../../../../lib/auth/link
 import { resolveCanonicalAccountIdForAuthUserId } from "../../../../lib/auth/profiles";
 import type { CompletionMode } from "../../../../lib/bingra/card-progress";
 import { PlayPageContent } from "./PlayPageContent";
-import { getPublicBaseUrl } from "../../../../lib/share/share";
 
 type PlayPageProps = {
   params: Promise<{
@@ -45,7 +44,6 @@ export const metadata: Metadata = {
 const JOIN_PROMPT_COOKIE_NAME = "bingra-join-prompt-token";
 
 export default async function PlayPage(props: PlayPageProps) {
-  const renderStartedAt = Date.now();
   const { slug } = await props.params;
   const searchParams = (await props.searchParams) ?? {};
 
@@ -160,13 +158,6 @@ export default async function PlayPage(props: PlayPageProps) {
   const canManageRestrictedScoring =
     !game.restricted_scoring ||
     (Boolean(actorAccountId) && Boolean(game.host_account_id) && actorAccountId === game.host_account_id);
-
-  console.info("[play/page][perf] render end", {
-    slug,
-    durationMs: Date.now() - renderStartedAt,
-    currentPlayerId: resolvedSessionPlayerId,
-    canManageRestrictedScoring,
-  });
 
   return (
     <PlayPageContent
