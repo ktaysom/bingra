@@ -891,9 +891,39 @@ export async function PlayPageContent({
                         {(activity.scoreText || activity.detail) && (
                           <p className="text-xs text-slate-500">
                             {activity.scoreText ??
-                              (activity.playerNames.length > 0
-                                ? `Points awarded to ${activity.playerNames.join(", ")}`
-                                : "No points awarded")}
+                              (() => {
+                                const awardedPlayerNames = Array.isArray(activity.playerNames)
+                                  ? activity.playerNames.filter(
+                                      (name): name is string =>
+                                        typeof name === "string" && name.trim().length > 0,
+                                    )
+                                  : [];
+
+                                if (awardedPlayerNames.length === 0) {
+                                  return "No points awarded";
+                                }
+
+                                if (typeof awardedPlayerNames.join !== "function") {
+                                  return "No points awarded";
+                                }
+                                const joinFn = awardedPlayerNames.join;
+                                console.info("[play/content][join-check] awardedPlayerNames", {
+                                  context: "PlayPageContent:event_recorded_scoreText",
+                                  variable: "awardedPlayerNames",
+                                  isArray: Array.isArray(awardedPlayerNames),
+                                  type: typeof awardedPlayerNames,
+                                  hasCallableJoin: typeof joinFn === "function",
+                                });
+
+                                const joinedNames =
+                                  typeof joinFn === "function"
+                                    ? joinFn.call(awardedPlayerNames, ", ")
+                                    : "";
+
+                                return joinedNames
+                                  ? `Points awarded to ${joinedNames}`
+                                  : "No points awarded";
+                              })()}
                             {activity.scoreText && activity.detail ? ` · ${activity.detail}` : !activity.scoreText ? activity.detail : ""}
                           </p>
                         )}

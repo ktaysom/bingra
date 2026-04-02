@@ -291,6 +291,23 @@ function rarityToLabel(rarity: 1 | 2 | 3 | 4 | 5): string {
   return "Legendary";
 }
 
+function joinNonEmptyStrings(values: unknown[], separator: string): string {
+  const parts = values.filter(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+
+  if (parts.length === 0) {
+    return "";
+  }
+
+  const joinFn = parts.join;
+  if (typeof joinFn !== "function") {
+    return parts[0] ?? "";
+  }
+
+  return joinFn.call(parts, separator);
+}
+
 function formatSoccerCompatibilityEventName(input: {
   baseEventKey: string | null;
   fallbackLabel: string;
@@ -362,7 +379,8 @@ export function resolveRecordedEventDisplayName(input: {
     });
   }
 
-  return [teamLabel, fallbackLabel].filter(Boolean).join(": ");
+  const displayName = joinNonEmptyStrings([teamLabel, fallbackLabel], ": ");
+  return displayName || fallbackLabel;
 }
 
 export function formatRecordedEventFeedItem(input: {

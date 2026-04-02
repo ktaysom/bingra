@@ -24,6 +24,73 @@ const formSchema = z.object({
 
 const JOIN_PROMPT_COOKIE_NAME = "bingra-join-prompt-token";
 
+type JoinStepContext = {
+  step: string;
+  client: "admin" | "server" | "next_cookies" | "internal";
+  operation: string;
+};
+
+function isTransientNetworkError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /ECONNRESET|fetch failed|ETIMEDOUT|socket hang up|network/i.test(message);
+}
+
+async function runJoinStep<T>(context: JoinStepContext, action: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  console.info("[joinGameAction][step:start]", context);
+
+  try {
+    const result = await action();
+    console.info("[joinGameAction][step:end]", {
+      ...context,
+      durationMs: Date.now() - startedAt,
+      success: true,
+    });
+    return result;
+  } catch (error) {
+    if (isRedirectError(error)) {
+      console.info("[joinGameAction][step:redirect]", {
+        ...context,
+        durationMs: Date.now() - startedAt,
+      });
+      throw error;
+    }
+
+    console.error("[joinGameAction][step:error]", {
+      ...context,
+      durationMs: Date.now() - startedAt,
+      success: false,
+      message: error instanceof Error ? error.message : String(error),
+      error: formatErrorForLog(error),
+    });
+    throw error;
+  }
+}
+
+async function runJoinStepWithSingleRetry<T>(context: JoinStepContext, action: () => Promise<T>): Promise<T> {
+  try {
+    return await runJoinStep(context, action);
+  } catch (error) {
+    if (!isTransientNetworkError(error)) {
+      throw error;
+    }
+
+    console.warn("[joinGameAction][step:retry] transient network failure, retrying once", {
+      ...context,
+      message: error instanceof Error ? error.message : String(error),
+      error: formatErrorForLog(error),
+    });
+
+    return runJoinStep(
+      {
+        ...context,
+        step: `${context.step}:retry1`,
+      },
+      action,
+    );
+  }
+}
+
 async function redirectWithJoinPrompt(slug: string) {
   const token = randomUUID();
   const cookieStore = await cookies();
@@ -52,10 +119,55 @@ function formatError(error: unknown): string {
   }
 }
 
+function formatErrorForLog(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      type: "Error",
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause:
+        "cause" in error
+          ? (() => {
+              try {
+                return JSON.stringify((error as Error & { cause?: unknown }).cause);
+              } catch {
+                return String((error as Error & { cause?: unknown }).cause);
+              }
+            })()
+          : undefined,
+    };
+  }
+
+  if (typeof error === "object" && error !== null) {
+    try {
+      return {
+        type: "object",
+        json: JSON.stringify(error),
+      };
+    } catch {
+      return {
+        type: "object",
+        value: String(error),
+      };
+    }
+  }
+
+  return {
+    type: typeof error,
+    value: String(error),
+  };
+}
+
 export async function joinGameAction(
   _prevState: JoinGameFormState,
   formData: FormData
 ): Promise<JoinGameFormState> {
+  const actionStartedAt = Date.now();
+  console.info("[joinGameAction] start", {
+    startedAt: new Date(actionStartedAt).toISOString(),
+  });
+
   const rawSlug = formData.get("slug");
   const rawDisplayName = formData.get("displayName");
 
@@ -68,20 +180,55 @@ export async function joinGameAction(
     return { error: parsed.error.issues[0]?.message ?? "Invalid form submission" };
   }
 
-  const supabase = createSupabaseAdminClient();
-  const supabaseServer = await createSupabaseServerClient();
+  const supabase = await runJoinStep(
+    {
+      step: "create-admin-client",
+      client: "admin",
+      operation: "createSupabaseAdminClient",
+    },
+    async () => createSupabaseAdminClient(),
+  );
+  const supabaseServer = await runJoinStep(
+    {
+      step: "create-server-client",
+      client: "server",
+      operation: "createSupabaseServerClient",
+    },
+    async () => createSupabaseServerClient(),
+  );
 
   const {
     data: { user },
-  } = await supabaseServer.auth.getUser();
+  } = await runJoinStep(
+    {
+      step: "auth-get-user",
+      client: "server",
+      operation: "auth.getUser",
+    },
+    async () => supabaseServer.auth.getUser(),
+  );
 
   let profileId: string | null = null;
   let resolvedAuthenticatedDisplayName: string | null = null;
   if (user?.id) {
     // Compatibility-phase canonical write identity:
     // players.profile_id now stores canonical accounts.id for new authenticated writes.
-    profileId = await resolveCanonicalAccountIdForAuthUserId(user.id);
-    resolvedAuthenticatedDisplayName = await resolveProfileDefaultDisplayName(user.id);
+    profileId = await runJoinStep(
+      {
+        step: "resolve-canonical-account-id",
+        client: "internal",
+        operation: "resolveCanonicalAccountIdForAuthUserId",
+      },
+      async () => resolveCanonicalAccountIdForAuthUserId(user.id),
+    );
+    resolvedAuthenticatedDisplayName = await runJoinStep(
+      {
+        step: "resolve-profile-default-display-name",
+        client: "internal",
+        operation: "resolveProfileDefaultDisplayName",
+      },
+      async () => resolveProfileDefaultDisplayName(user.id),
+    );
   }
 
   const submittedDisplayName = parsed.data.displayName?.trim() ?? "";
@@ -94,70 +241,167 @@ export async function joinGameAction(
   }
 
   try {
-    const { data: game, error: gameError } = await supabase
-      .from("games")
-      .select("id")
-      .eq("slug", parsed.data.slug)
-      .maybeSingle<{ id: string }>();
+    const { data: game, error: gameError } = await runJoinStep(
+      {
+        step: "lookup-game-by-slug",
+        client: "admin",
+        operation: "from(games).select(id).eq(slug).maybeSingle",
+      },
+      async () =>
+        supabase
+          .from("games")
+          .select("id")
+          .eq("slug", parsed.data.slug)
+          .maybeSingle<{ id: string }>(),
+    );
 
-    if (gameError) {
-      throw gameError;
-    }
+    await runJoinStep(
+      {
+        step: "post-lookup-inspect-result",
+        client: "internal",
+        operation: "inspect lookup result flags",
+      },
+      async () => {
+        console.info("[joinGameAction][post-lookup] result snapshot", {
+          slug: parsed.data.slug,
+          hasGame: Boolean(game),
+          gameId: game?.id ?? null,
+          hasGameError: Boolean(gameError),
+          gameError: gameError ? formatErrorForLog(gameError) : null,
+        });
+      },
+    );
 
-    if (!game) {
+    await runJoinStep(
+      {
+        step: "post-lookup-check-game-error",
+        client: "internal",
+        operation: "throw when lookup returned error object",
+      },
+      async () => {
+        if (gameError) {
+          throw gameError;
+        }
+      },
+    );
+
+    const gameFound = await runJoinStep(
+      {
+        step: "post-lookup-check-game-found",
+        client: "internal",
+        operation: "verify lookup returned game row",
+      },
+      async () => Boolean(game),
+    );
+
+    if (!gameFound) {
       return { error: "Game not found" };
     }
 
-    const cookiePlayerId = (await cookies()).get("bingra-player-id")?.value ?? null;
+    const cookiePlayerId = await runJoinStep(
+      {
+        step: "read-cookie-player-id",
+        client: "next_cookies",
+        operation: "cookies().get(bingra-player-id)",
+      },
+      async () => (await cookies()).get("bingra-player-id")?.value ?? null,
+    );
 
     if (profileId && user?.id && cookiePlayerId) {
-      const { data: cookiePlayer, error: cookiePlayerError } = await supabase
-        .from("players")
-        .select("id, game_id")
-        .eq("id", cookiePlayerId)
-        .maybeSingle<{ id: string; game_id: string }>();
+      const { data: cookiePlayer, error: cookiePlayerError } = await runJoinStep(
+        {
+          step: "lookup-cookie-player",
+          client: "admin",
+          operation: "from(players).select(id,game_id).eq(id).maybeSingle",
+        },
+        async () =>
+          supabase
+            .from("players")
+            .select("id, game_id")
+            .eq("id", cookiePlayerId)
+            .maybeSingle<{ id: string; game_id: string }>(),
+      );
 
       if (cookiePlayerError) {
         throw cookiePlayerError;
       }
 
       if (cookiePlayer?.id && cookiePlayer.game_id === game.id) {
-        await ensurePlayerLinkedToAuthenticatedUser({
-          playerId: cookiePlayer.id,
-          authUserId: user.id,
-          context: "join-game/cookie-player",
-        });
+        await runJoinStep(
+          {
+            step: "ensure-cookie-player-linked",
+            client: "internal",
+            operation: "ensurePlayerLinkedToAuthenticatedUser",
+          },
+          async () =>
+            ensurePlayerLinkedToAuthenticatedUser({
+              playerId: cookiePlayer.id,
+              authUserId: user.id,
+              context: "join-game/cookie-player",
+            }),
+        );
 
-        await redirectWithJoinPrompt(parsed.data.slug);
+        await runJoinStep(
+          {
+            step: "redirect-with-join-prompt-cookie-player",
+            client: "next_cookies",
+            operation: "redirectWithJoinPrompt",
+          },
+          async () => redirectWithJoinPrompt(parsed.data.slug),
+        );
       }
     }
 
     if (profileId) {
-      const { data: existingLinkedPlayer, error: existingLinkedPlayerError } = await supabase
-        .from("players")
-        .select("id")
-        .eq("game_id", game.id)
-        .eq("profile_id", profileId)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle<{ id: string }>();
+      const { data: existingLinkedPlayer, error: existingLinkedPlayerError } = await runJoinStep(
+        {
+          step: "lookup-existing-linked-player",
+          client: "admin",
+          operation: "from(players).select(id).eq(game_id,profile_id).maybeSingle",
+        },
+        async () =>
+          supabase
+            .from("players")
+            .select("id")
+            .eq("game_id", game.id)
+            .eq("profile_id", profileId)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle<{ id: string }>(),
+      );
 
       if (existingLinkedPlayerError) {
         throw existingLinkedPlayerError;
       }
 
       if (existingLinkedPlayer?.id) {
-        const cookieStore = await cookies();
-        cookieStore.set({
-          name: "bingra-player-id",
-          value: existingLinkedPlayer.id,
-          path: `/g/${parsed.data.slug}`,
-          maxAge: 60 * 60 * 24 * 30,
-          httpOnly: true,
-          sameSite: "lax",
-        });
+        await runJoinStep(
+          {
+            step: "set-cookie-existing-linked-player",
+            client: "next_cookies",
+            operation: "cookies().set(bingra-player-id)",
+          },
+          async () => {
+            const cookieStore = await cookies();
+            cookieStore.set({
+              name: "bingra-player-id",
+              value: existingLinkedPlayer.id,
+              path: `/g/${parsed.data.slug}`,
+              maxAge: 60 * 60 * 24 * 30,
+              httpOnly: true,
+              sameSite: "lax",
+            });
+          },
+        );
 
-        await redirectWithJoinPrompt(parsed.data.slug);
+        await runJoinStep(
+          {
+            step: "redirect-with-join-prompt-existing-linked-player",
+            client: "next_cookies",
+            operation: "redirectWithJoinPrompt",
+          },
+          async () => redirectWithJoinPrompt(parsed.data.slug),
+        );
       }
     }
 
@@ -169,39 +413,71 @@ export async function joinGameAction(
       profile_id: profileId,
     };
 
-    const { data: playerData, error: playerError } = await supabase
-      .from("players")
-      .insert(insertPayload)
-      .select("id")
-      .maybeSingle();
+    const { data: playerData, error: playerError } = await runJoinStepWithSingleRetry(
+      {
+        step: "insert-player",
+        client: "admin",
+        operation: "from(players).insert(...).select(id).maybeSingle",
+      },
+      async () =>
+        supabase
+          .from("players")
+          .insert(insertPayload)
+          .select("id")
+          .maybeSingle(),
+    );
 
     if (playerError) {
       if (profileId && (playerError as { code?: string }).code === "23505") {
-        const { data: existingLinkedPlayer, error: existingLinkedPlayerError } = await supabase
-          .from("players")
-          .select("id")
-          .eq("game_id", game.id)
-          .eq("profile_id", profileId)
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .maybeSingle<{ id: string }>();
+        const { data: existingLinkedPlayer, error: existingLinkedPlayerError } = await runJoinStep(
+          {
+            step: "lookup-existing-linked-player-after-23505",
+            client: "admin",
+            operation: "from(players).select(id).eq(game_id,profile_id).maybeSingle",
+          },
+          async () =>
+            supabase
+              .from("players")
+              .select("id")
+              .eq("game_id", game.id)
+              .eq("profile_id", profileId)
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle<{ id: string }>(),
+        );
 
         if (existingLinkedPlayerError) {
           throw existingLinkedPlayerError;
         }
 
         if (existingLinkedPlayer?.id) {
-          const cookieStore = await cookies();
-          cookieStore.set({
-            name: "bingra-player-id",
-            value: existingLinkedPlayer.id,
-            path: `/g/${parsed.data.slug}`,
-            maxAge: 60 * 60 * 24 * 30,
-            httpOnly: true,
-            sameSite: "lax",
-          });
+          await runJoinStep(
+            {
+              step: "set-cookie-existing-linked-player",
+              client: "next_cookies",
+              operation: "cookies().set(bingra-player-id)",
+            },
+            async () => {
+              const cookieStore = await cookies();
+              cookieStore.set({
+                name: "bingra-player-id",
+                value: existingLinkedPlayer.id,
+                path: `/g/${parsed.data.slug}`,
+                maxAge: 60 * 60 * 24 * 30,
+                httpOnly: true,
+                sameSite: "lax",
+              });
+            },
+          );
 
-          await redirectWithJoinPrompt(parsed.data.slug);
+          await runJoinStep(
+            {
+              step: "redirect-with-join-prompt-existing-linked-player",
+              client: "next_cookies",
+              operation: "redirectWithJoinPrompt",
+            },
+            async () => redirectWithJoinPrompt(parsed.data.slug),
+          );
         }
       }
 
@@ -221,15 +497,39 @@ export async function joinGameAction(
       sameSite: "lax" as const,
     };
 
-    const cookieStore = await cookies();
-    cookieStore.set(cookieOptions);
+    await runJoinStep(
+      {
+        step: "set-cookie-inserted-player",
+        client: "next_cookies",
+        operation: "cookies().set(bingra-player-id)",
+      },
+      async () => {
+        const cookieStore = await cookies();
+        cookieStore.set(cookieOptions);
+      },
+    );
 
-    await redirectWithJoinPrompt(parsed.data.slug);
+    await runJoinStep(
+      {
+        step: "redirect-with-join-prompt-inserted-player",
+        client: "next_cookies",
+        operation: "redirectWithJoinPrompt",
+      },
+      async () => redirectWithJoinPrompt(parsed.data.slug),
+    );
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;
     }
-    console.error("[joinGameAction] error", error);
+    console.error("[joinGameAction] error", {
+      message: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - actionStartedAt,
+      error: formatErrorForLog(error),
+    });
     return { error: formatError(error) };
+  } finally {
+    console.info("[joinGameAction] end", {
+      durationMs: Date.now() - actionStartedAt,
+    });
   }
 }

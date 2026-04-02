@@ -6,6 +6,7 @@ import { UsernameForm } from "./UsernameForm";
 import { resolveAccountIdForAuthUserId } from "../../lib/auth/resolve-account";
 import { listAccountAuthMethods } from "../../lib/auth/account-auth-methods";
 import { SignInMethodsManager } from "./SignInMethodsManager";
+import { AccountSecuritySection } from "./AccountSecuritySection";
 import { AuthErrorRecoveryPanel } from "../../components/auth/AuthErrorRecoveryPanel";
 import type { PostAuthIntent } from "../../lib/auth/auth-redirect";
 import { readPendingAuthContextFromCookieValue, getPendingAuthContextCookieKey } from "../../lib/auth/auth-redirect";
@@ -275,6 +276,8 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
         </section>
 
         <SignInMethodsManager methods={signInMethods} />
+
+        <AccountSecuritySection />
 
         {linkError ? (
           <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">

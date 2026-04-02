@@ -11,6 +11,21 @@ import {
   verifyEmailOtpAndGetFinalizePath,
 } from "../../lib/auth/email-auth-client";
 
+const CREATE_VERIFY_AT_STORAGE_KEY = "bingra.create-after-login.verify-at.v1";
+const CREATE_AUTH_CREATE_TRACE_KEY = "bingra.create-after-login.trace.v1";
+
+function formatClientAuthError(error: unknown): { message: string; code: string | null; status: number | null } {
+  const asRecord = typeof error === "object" && error ? (error as Record<string, unknown>) : null;
+  const message =
+    (asRecord?.message && typeof asRecord.message === "string" ? asRecord.message : null) ||
+    (error instanceof Error ? error.message : null) ||
+    "Unknown auth error";
+  const code = asRecord?.code && typeof asRecord.code === "string" ? asRecord.code : null;
+  const status = asRecord?.status && typeof asRecord.status === "number" ? asRecord.status : null;
+
+  return { message, code, status };
+}
+
 type AuthDialogProps = {
   label?: string;
   nextPath: string;
@@ -39,9 +54,12 @@ export function AuthDialog({
   const [pendingEmailCodeSend, setPendingEmailCodeSend] = useState(false);
   const [emailOtpCode, setEmailOtpCode] = useState("");
   const [pendingEmailOtpVerify, setPendingEmailOtpVerify] = useState(false);
+  const [postVerifyProgress, setPostVerifyProgress] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const expectedEmailOtpLength = getExpectedEmailOtpLength();
+
+  const controlsDisabled = pendingEmailCodeSend || pendingEmailOtpVerify || postVerifyProgress;
 
   const pendingContext = normalizePendingAuthContext({
     nextPath,
@@ -65,9 +83,14 @@ export function AuthDialog({
   };
 
   const close = () => {
+    if (controlsDisabled) {
+      return;
+    }
+
     setIsOpen(false);
     setPendingEmailCodeSend(false);
     setPendingEmailOtpVerify(false);
+    setPostVerifyProgress(false);
   };
 
   const handleSendEmailCode = async () => {
@@ -96,10 +119,13 @@ export function AuthDialog({
       setMessage(`Code sent. Check your inbox, then enter the ${expectedEmailOtpLength}-digit code below.`);
       console.info("[auth/init] email code sent");
     } catch (authError) {
-      const nextError = authError instanceof Error ? authError.message : "Unable to send sign-in email";
+      const details = formatClientAuthError(authError);
+      const nextError = details.message || "Unable to send sign-in email";
       setError(nextError);
       console.error("[auth/init] email code sign-in initiation failed", {
         message: nextError,
+        code: details.code,
+        status: details.status,
       });
     } finally {
       setPendingEmailCodeSend(false);
@@ -115,12 +141,26 @@ export function AuthDialog({
     const token = emailOtpCode.trim().replace(/\s+/g, "");
     if (token.length !== expectedEmailOtpLength) {
       setError(`Enter the ${expectedEmailOtpLength}-digit code from your email.`);
+      setPostVerifyProgress(false);
       return;
     }
 
     setPendingEmailOtpVerify(true);
+    setPostVerifyProgress(false);
     setError(null);
     setMessage(null);
+
+    const verifyClickAt = Date.now();
+    const traceId =
+      typeof window !== "undefined" && typeof window.crypto?.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : `${verifyClickAt}-${Math.random().toString(16).slice(2)}`;
+
+    console.info("[auth/otp][perf] verify click", {
+      traceId,
+      verifyClickAt,
+      nextPath: pendingContext.nextPath,
+    });
 
     try {
       const { finalizePath } = await verifyEmailOtpAndGetFinalizePath({
@@ -129,23 +169,56 @@ export function AuthDialog({
         pendingContext,
       });
 
+      const verifySuccessAt = Date.now();
+
+      console.info("[auth/otp][perf] verify success", {
+        traceId,
+        verifySuccessAt,
+        verifyDurationMs: verifySuccessAt - verifyClickAt,
+      });
+
+      setPostVerifyProgress(true);
+      setMessage("Code accepted. Signing you in and creating your Bingra game...");
+
+      const redirectStartAt = Date.now();
       console.info("[auth/otp] verifyOtp(email) succeeded", {
         nextPath: pendingContext.nextPath,
         hasLinkPlayerId: Boolean(pendingContext.linkPlayerId),
       });
-      console.info("[auth/redirect] redirecting after email OTP verify", {
+      console.info("[auth/redirect][perf] redirect start", {
+        traceId,
+        redirectStartAt,
+        successToRedirectMs: redirectStartAt - verifySuccessAt,
         target: finalizePath,
       });
 
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(CREATE_VERIFY_AT_STORAGE_KEY, String(verifySuccessAt));
+        window.sessionStorage.setItem(
+          CREATE_AUTH_CREATE_TRACE_KEY,
+          JSON.stringify({
+            traceId,
+            verifyClickAt,
+            verifySuccessAt,
+            redirectStartAt,
+          }),
+        );
+      }
+
       router.push(finalizePath);
     } catch (authError) {
-      const nextError = authError instanceof Error ? authError.message : "Unable to verify email code";
+      setPostVerifyProgress(false);
+      const details = formatClientAuthError(authError);
+      const nextError = details.message || "Unable to verify email code";
       setError(nextError);
       console.error("[auth/otp] verifyOtp(email) failed", {
         message: nextError,
+        code: details.code,
+        status: details.status,
       });
-    } finally {
       setPendingEmailOtpVerify(false);
+    } finally {
+      // Keep pending state through redirect once verify succeeds; reset on error path above.
     }
   };
 
@@ -180,13 +253,14 @@ export function AuthDialog({
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              disabled={controlsDisabled}
               placeholder="you@example.com"
               className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-slate-400"
             />
             <button
               type="button"
               onClick={handleSendEmailCode}
-              disabled={pendingEmailCodeSend}
+              disabled={controlsDisabled}
               className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
               {pendingEmailCodeSend ? "Sending..." : "Send sign-in code"}
@@ -208,16 +282,21 @@ export function AuthDialog({
                     event.target.value.replace(/\s+/g, "").slice(0, expectedEmailOtpLength),
                   )
                 }
+                disabled={controlsDisabled}
                 placeholder={"0".repeat(expectedEmailOtpLength)}
                 className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.25em] text-slate-900 outline-none focus:border-slate-400"
               />
               <button
                 type="button"
                 onClick={handleVerifyEmailOtp}
-                disabled={pendingEmailOtpVerify}
+                disabled={controlsDisabled}
                 className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-800 transition hover:bg-slate-100 disabled:opacity-60"
               >
-                {pendingEmailOtpVerify ? "Verifying..." : "Verify code and continue"}
+                {postVerifyProgress
+                  ? "Continuing..."
+                  : pendingEmailOtpVerify
+                    ? "Verifying..."
+                    : "Verify code and continue"}
               </button>
             </div>
 

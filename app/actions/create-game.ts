@@ -1,6 +1,5 @@
 "use server";
 
-import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
@@ -59,6 +58,11 @@ export async function createGameAction(
   formData: FormData
 ): Promise<CreateGameFormState> {
   const actionStartedAt = Date.now();
+  const rawAuthCreateTraceId = formData.get("auth_create_trace_id");
+  const authCreateTraceId =
+    typeof rawAuthCreateTraceId === "string" && rawAuthCreateTraceId.trim().length > 0
+      ? rawAuthCreateTraceId.trim()
+      : null;
   const rawTitle = formData.get("title");
   const rawHostDisplayName = formData.get("hostDisplayName");
   const rawMode = formData.get("mode") ?? "quick_play";
@@ -73,6 +77,8 @@ export async function createGameAction(
   const rawSportProfile = formData.get("sport_profile") ?? DEFAULT_SPORT_PROFILE;
 
   console.info("[createGameAction][perf] action start", {
+    traceId: authCreateTraceId,
+    actionStartAt: actionStartedAt,
     startedAt: new Date(actionStartedAt).toISOString(),
     hasTitle: typeof rawTitle === "string" ? rawTitle.trim().length > 0 : false,
   });
@@ -141,10 +147,16 @@ export async function createGameAction(
       p_host_display_name: resolvedHostDisplayName,
       p_allow_custom_cards: parsed.data.allowCustomCards,
       p_visibility: parsed.data.visibility,
-      p_event_keys: null,
-      p_event_labels: null,
-      p_event_points: null,
+      p_completion_mode: parsed.data.completion_mode,
+      p_end_condition: parsed.data.end_condition,
+      p_team_a_name: parsed.data.teamAName,
+      p_team_b_name: parsed.data.teamBName,
+      p_team_scope: parsed.data.teamScope,
+      p_events_per_card: parsed.data.eventsPerCard,
+      p_sport_profile: parsed.data.sport_profile,
+      p_catalog_version: "v1",
       p_auth_user_id: user.id,
+      p_account_id: profileId,
     };
 
     let hostSlug: string | null = null;
@@ -152,9 +164,12 @@ export async function createGameAction(
 
     try {
       const rpcStartedAt = Date.now();
-      console.info("[createGameAction][perf] rpc_create_game start");
-      const { data, error } = await supabase.rpc("rpc_create_game", rpcPayload);
-      console.info("[createGameAction][perf] rpc_create_game end", {
+      console.info("[createGameAction][perf] rpc_create_game_full start", {
+        traceId: authCreateTraceId,
+      });
+      const { data, error } = await supabase.rpc("rpc_create_game_full", rpcPayload);
+      console.info("[createGameAction][perf] rpc_create_game_full end", {
+        traceId: authCreateTraceId,
         durationMs: Date.now() - rpcStartedAt,
       });
 
@@ -170,122 +185,11 @@ export async function createGameAction(
 
       const resultRow = rows[0] as {
         game_slug: string;
+        host_player_id: string | null;
       };
 
       hostSlug = resultRow.game_slug;
-
-      const verifyGameStartedAt = Date.now();
-      console.info("[createGameAction][perf] games verify query start", { hostSlug });
-      const { data: verifyRow, error: verifyError } = await supabase
-        .from("games")
-        .select("id, slug, title, created_at")
-        .eq("slug", hostSlug)
-        .maybeSingle();
-      console.info("[createGameAction][perf] games verify query end", {
-        durationMs: Date.now() - verifyGameStartedAt,
-      });
-
-      if (verifyError) {
-        throw verifyError;
-      }
-
-      if (!verifyRow?.id) {
-        throw new Error("Unable to resolve game configuration target");
-      }
-
-      const configUpdateStartedAt = Date.now();
-      console.info("[createGameAction][perf] games config update start", {
-        gameId: verifyRow.id,
-      });
-      const { error: configUpdateError } = await supabase
-        .from("games")
-        .update({
-          completion_mode: parsed.data.completion_mode,
-          end_condition: parsed.data.end_condition,
-          team_a_name: parsed.data.teamAName,
-          team_b_name: parsed.data.teamBName,
-          team_scope: parsed.data.teamScope,
-          events_per_card: parsed.data.eventsPerCard,
-          sport_profile: parsed.data.sport_profile,
-          catalog_version: "v1",
-          auth_user_id: user.id,
-          account_id: profileId,
-          host_account_id: profileId,
-          restricted_scoring: true,
-        })
-        .eq("id", verifyRow.id)
-        .limit(1);
-      console.info("[createGameAction][perf] games config update end", {
-        durationMs: Date.now() - configUpdateStartedAt,
-      });
-
-      if (configUpdateError) {
-        throw configUpdateError;
-      }
-
-      const hostPlayerLookupStartedAt = Date.now();
-      console.info("[createGameAction][perf] host player check start", {
-        gameId: verifyRow.id,
-      });
-      const { data: existingHostPlayer, error: hostPlayerLookupError } = await supabase
-        .from("players")
-        .select("id, profile_id")
-        .eq("game_id", verifyRow.id)
-        .eq("role", "host")
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle<{ id: string; profile_id: string | null }>();
-      console.info("[createGameAction][perf] host player check end", {
-        durationMs: Date.now() - hostPlayerLookupStartedAt,
-        foundExistingHost: Boolean(existingHostPlayer?.id),
-      });
-
-      if (hostPlayerLookupError) {
-        throw hostPlayerLookupError;
-      }
-
-      if (existingHostPlayer?.id) {
-        if (profileId && !existingHostPlayer.profile_id) {
-          const { error: hostBackfillError } = await supabase
-            .from("players")
-            .update({ profile_id: profileId })
-            .eq("id", existingHostPlayer.id)
-            .is("profile_id", null)
-            .limit(1);
-
-          if (hostBackfillError) {
-            throw hostBackfillError;
-          }
-        }
-
-        hostPlayerId = existingHostPlayer.id;
-      } else {
-        const hostPlayerCreateStartedAt = Date.now();
-        console.info("[createGameAction][perf] host player create start", {
-          gameId: verifyRow.id,
-        });
-        const { data: insertedHostPlayer, error: insertHostPlayerError } = await supabase
-          .from("players")
-          .insert({
-            game_id: verifyRow.id,
-            display_name: resolvedHostDisplayName,
-            role: "host",
-            join_token: randomUUID(),
-            profile_id: profileId,
-          })
-          .select("id")
-          .maybeSingle<{ id: string }>();
-        console.info("[createGameAction][perf] host player create end", {
-          durationMs: Date.now() - hostPlayerCreateStartedAt,
-          insertedHostPlayerId: insertedHostPlayer?.id ?? null,
-        });
-
-        if (insertHostPlayerError) {
-          throw insertHostPlayerError;
-        }
-
-        hostPlayerId = insertedHostPlayer?.id ?? null;
-      }
+      hostPlayerId = resultRow.host_player_id;
     } catch (error) {
       if (isRedirectError(error)) {
         throw error;
@@ -303,8 +207,11 @@ export async function createGameAction(
     }
 
     console.info("[createGameAction][perf] cookie set + redirect", {
+      traceId: authCreateTraceId,
+      redirectStartAt: Date.now(),
       hostSlug,
       hasHostPlayerId: Boolean(hostPlayerId),
+      redirectTarget: `/g/${hostSlug}/play`,
     });
     const cookieStore = await cookies();
     cookieStore.set({
@@ -318,6 +225,8 @@ export async function createGameAction(
     redirect(`/g/${hostSlug}/play`);
   } finally {
     console.info("[createGameAction][perf] total action duration", {
+      traceId: authCreateTraceId,
+      actionEndAt: Date.now(),
       durationMs: Date.now() - actionStartedAt,
     });
   }

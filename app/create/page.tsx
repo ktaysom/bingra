@@ -30,6 +30,7 @@ const initialState: CreateGameFormState = {};
 const CREATE_DRAFT_STORAGE_KEY = "bingra.create-draft.v1";
 const CREATE_AFTER_LOGIN_RETRY_KEY = "bingra.create-after-login.retry.v1";
 const CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY = "bingra.create-after-login.retry-consumed.v1";
+const CREATE_AUTH_CREATE_TRACE_KEY = "bingra.create-after-login.trace.v1";
 const AUTH_REQUIRED_CREATE_ERROR = "Please sign in to create a game.";
 
 const DEFAULT_TITLE = "Game On";
@@ -230,6 +231,7 @@ export default function CreatePage() {
   const autoRetryTriggeredRef = useRef(false);
   const autoRetryInProgressRef = useRef(false);
   const [autoRetrySignal, setAutoRetrySignal] = useState(0);
+  const [authCreateTraceId, setAuthCreateTraceId] = useState("");
 
   const [title, setTitle] = useState(DEFAULT_TITLE);
   const [hostDisplayName, setHostDisplayName] = useState("Host");
@@ -261,6 +263,44 @@ export default function CreatePage() {
       hasError: Boolean(state.error),
     });
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const remountAt = Date.now();
+    const traceRaw = window.sessionStorage.getItem(CREATE_AUTH_CREATE_TRACE_KEY);
+    if (!traceRaw) {
+      return;
+    }
+
+    try {
+      const trace = JSON.parse(traceRaw) as {
+        traceId?: string;
+        verifyClickAt?: number;
+        verifySuccessAt?: number;
+        redirectStartAt?: number;
+      };
+
+      if (trace.traceId) {
+        setAuthCreateTraceId(trace.traceId);
+      }
+
+      console.info("[create/page][perf] remount after verify", {
+        traceId: trace.traceId ?? null,
+        remountAt,
+        verifyClickToRemountMs:
+          typeof trace.verifyClickAt === "number" ? remountAt - trace.verifyClickAt : null,
+        verifySuccessToRemountMs:
+          typeof trace.verifySuccessAt === "number" ? remountAt - trace.verifySuccessAt : null,
+        redirectToRemountMs:
+          typeof trace.redirectStartAt === "number" ? remountAt - trace.redirectStartAt : null,
+      });
+    } catch {
+      // Ignore malformed trace payloads.
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -381,10 +421,20 @@ export default function CreatePage() {
 
     const retryFlag = window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY);
     const consumedFlag = window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY);
+    const traceRaw = window.sessionStorage.getItem(CREATE_AUTH_CREATE_TRACE_KEY);
+    const trace = traceRaw
+      ? (JSON.parse(traceRaw) as {
+          traceId?: string;
+          verifyClickAt?: number;
+          verifySuccessAt?: number;
+          redirectStartAt?: number;
+        })
+      : null;
     console.info("[create/page][perf] auto-retry flags read", {
       retryFlag,
       consumedFlag,
       signal: autoRetrySignal,
+      traceId: trace?.traceId ?? null,
     });
 
     if (autoRetryTriggeredRef.current) {
@@ -432,7 +482,16 @@ export default function CreatePage() {
       autoRetryInProgressRef.current = true;
       window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY, "1");
       window.sessionStorage.removeItem(CREATE_AFTER_LOGIN_RETRY_KEY);
+      const submitAt = Date.now();
       console.info("[create/page][perf] auto-retry submit", {
+        traceId: trace?.traceId ?? null,
+        autoRetrySubmitAt: submitAt,
+        verifyClickToSubmitMs:
+          trace && typeof trace.verifyClickAt === "number" ? submitAt - trace.verifyClickAt : null,
+        verifySuccessToSubmitMs:
+          trace && typeof trace.verifySuccessAt === "number" ? submitAt - trace.verifySuccessAt : null,
+        redirectToSubmitMs:
+          trace && typeof trace.redirectStartAt === "number" ? submitAt - trace.redirectStartAt : null,
         totalMs: Math.round(performance.now() - autoRetryStartedAt),
         consumedFlag: window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY),
         retryFlag: window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY),
@@ -599,6 +658,7 @@ export default function CreatePage() {
               <input type="hidden" name="allowCustomCards" value="on" />
               <input type="hidden" name="eventsPerCard" value={String(eventsPerCard)} />
               <input type="hidden" name="sport_profile" value={sportProfile} />
+              <input type="hidden" name="auth_create_trace_id" value={authCreateTraceId} />
 
               <div className="rounded-2xl bg-white/90 p-5 shadow-sm">
                 <SectionHeader
