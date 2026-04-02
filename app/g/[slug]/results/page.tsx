@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getPublicGameShareDataBySlug } from "../../../../lib/share/game-public";
 import { getPublicBaseUrl } from "../../../../lib/share/share";
@@ -12,14 +13,6 @@ type ResultsPageProps = {
   params: {
     slug: string;
   };
-};
-
-type GameWinnerRow = {
-  winner_player_id: string | null;
-};
-
-type WinnerRow = {
-  display_name: string | null;
 };
 
 type GameResultsRow = {
@@ -62,6 +55,19 @@ type PublicResultsData = {
   winnerName: string | null;
   leaderboard: GameScoreEntry[];
 };
+
+async function resolveMetadataOrigin(): Promise<string> {
+  const headerStore = await headers();
+  const forwardedHost = headerStore.get("x-forwarded-host");
+  const host = forwardedHost ?? headerStore.get("host");
+  const proto = headerStore.get("x-forwarded-proto") ?? "https";
+
+  if (host && !host.toLowerCase().includes("localhost") && !host.includes("127.0.0.1")) {
+    return `${proto}://${host}`;
+  }
+
+  return getPublicBaseUrl();
+}
 
 async function getPublicResultsDataByGameId(gameId: string): Promise<PublicResultsData> {
   const supabase = createSupabaseAdminClient();
@@ -154,31 +160,9 @@ async function getPublicResultsDataByGameId(gameId: string): Promise<PublicResul
   };
 }
 
-async function getWinnerNameForGame(gameId: string): Promise<string | null> {
-  const supabase = createSupabaseAdminClient();
-  const { data: gameRow } = await supabase
-    .from("games")
-    .select("winner_player_id")
-    .eq("id", gameId)
-    .maybeSingle<GameWinnerRow>();
-
-  if (!gameRow?.winner_player_id) {
-    return null;
-  }
-
-  const { data: winnerRow } = await supabase
-    .from("players")
-    .select("display_name")
-    .eq("game_id", gameId)
-    .eq("id", gameRow.winner_player_id)
-    .maybeSingle<WinnerRow>();
-
-  return winnerRow?.display_name?.trim() || null;
-}
-
 export async function generateMetadata(props: ResultsPageProps): Promise<Metadata> {
   const { slug } = await props.params;
-  const baseUrl = getPublicBaseUrl();
+  const baseUrl = await resolveMetadataOrigin();
   const metadataBase = new URL(baseUrl);
   const game = await getPublicGameShareDataBySlug(slug);
 
@@ -206,6 +190,15 @@ export async function generateMetadata(props: ResultsPageProps): Promise<Metadat
     ogImageUrl.searchParams.set("bingra", "1");
   }
 
+  if (process.env.DEBUG_RESULTS_METADATA === "1") {
+    console.info("[results-metadata]", {
+      slug,
+      resultsUrl,
+      ogImageUrl: ogImageUrl.toString(),
+      baseUrl,
+    });
+  }
+
   return {
     metadataBase,
     title,
@@ -224,6 +217,7 @@ export async function generateMetadata(props: ResultsPageProps): Promise<Metadat
           url: ogImageUrl,
           width: 1200,
           height: 630,
+          type: "image/png",
           alt: `Bingra results: ${description}`,
         },
       ],

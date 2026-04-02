@@ -24,7 +24,7 @@ function SubmitButton() {
       disabled={pending}
       className="inline-flex h-14 w-full items-center justify-center rounded-2xl bg-[#2f6df6] px-6 text-base font-semibold text-white transition-all duration-150 hover:scale-[1.02] hover:bg-[#295fda] disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {pending ? "Joining..." : "Join my Bingra game"}
+      {pending ? "Joining..." : "Get My Card"}
     </button>
   );
 }
@@ -33,7 +33,7 @@ export function JoinForm({ slug, initialDisplayName = "", action }: JoinFormProp
   const [state, formAction] = useActionState(action, initialState);
 
   return (
-    <form action={formAction} className="mt-8 space-y-6">
+    <form action={formAction} className="mt-6 space-y-5">
       <input type="hidden" name="slug" value={slug} />
 
       <div className="space-y-4">
@@ -50,6 +50,7 @@ export function JoinForm({ slug, initialDisplayName = "", action }: JoinFormProp
           aria-describedby={state?.error ? "displayName-error" : undefined}
           className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-5 text-base text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
         />
+        <p className="text-xs text-slate-500">This is the name other players will see.</p>
         {state?.error && (
           <p id="displayName-error" className="text-sm text-red-600">
             {state.error}
@@ -59,7 +60,10 @@ export function JoinForm({ slug, initialDisplayName = "", action }: JoinFormProp
 
       <div className="space-y-2">
         <SubmitButton />
-        <p className="text-center text-sm text-slate-500">No account required</p>
+        <div className="space-y-1 text-center text-sm text-slate-500">
+          <p>No account required</p>
+          <p>Sign in below to track your stats</p>
+        </div>
       </div>
     </form>
   );
