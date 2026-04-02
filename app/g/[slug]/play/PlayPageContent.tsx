@@ -724,8 +724,10 @@ export async function PlayPageContent({
               title={game.title ?? matchupHeadline}
               teamA={shareTeamA}
               teamB={shareTeamB}
+              isFinished={isGameFinished}
+              winnerName={winnerName}
               hostName={hostName}
-              promptInviteOnMount={joinedFromQuery}
+              promptInviteOnMount={joinedFromQuery && !isGameFinished}
               consumeJoinQueryOnMount={consumeJoinQueryOnMount}
             />
           </div>

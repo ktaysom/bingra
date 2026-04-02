@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
-  buildPreferredShareUrl,
-  buildGameUrl,
   buildResultsCardUrl,
-  buildResultsShareText,
+  shareResults,
   getPublicBaseUrl,
 } from "../../../../lib/share/share";
 import { ShareSheet } from "../../../../components/share/ShareSheet";
@@ -124,28 +122,18 @@ export function EndGameCelebration({
   const selectedTopPlayerCard =
     topPlayerCards.find((card) => card.player_id === selectedTopPlayerId) ?? null;
 
-  const { baseUrl, gameUrl, isLocalOnlyShare } = useMemo(() => {
+  const { baseUrl, resultsShare } = useMemo(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : getPublicBaseUrl();
-    const preferredShareUrl = buildPreferredShareUrl(slug, origin);
 
     return {
       baseUrl: origin,
-      gameUrl: preferredShareUrl ?? buildGameUrl(slug, origin),
-      isLocalOnlyShare: !preferredShareUrl,
+      resultsShare: shareResults(
+        { slug, teamA: matchup.teamA, teamB: matchup.teamB },
+        { name: winner?.name ?? null },
+        origin,
+      ),
     };
-  }, [slug]);
-
-  const resultsShareText = useMemo(
-    () =>
-      buildResultsShareText({
-        teamA: matchup.teamA,
-        teamB: matchup.teamB,
-        winnerName: winner?.name ?? null,
-        winnerFinalScore: winner?.finalScore ?? null,
-        gameUrl,
-      }),
-    [gameUrl, matchup.teamA, matchup.teamB, winner?.finalScore, winner?.name],
-  );
+  }, [matchup.teamA, matchup.teamB, slug, winner?.name]);
 
   const resultsCardUrl = useMemo(
     () =>
@@ -190,7 +178,7 @@ export function EndGameCelebration({
 
   const copyResultsText = async () => {
     try {
-      await navigator.clipboard.writeText(resultsShareText);
+      await navigator.clipboard.writeText(resultsShare.message);
       setShareFeedback("Results text copied");
     } catch {
       setShareFeedback("Could not copy results text");
@@ -417,9 +405,9 @@ export function EndGameCelebration({
         isOpen={shareSheetOpen}
         onClose={() => setShareSheetOpen(false)}
         title="Share results"
-        shareText={resultsShareText}
-        shareUrl={gameUrl}
-        isLocalOnly={isLocalOnlyShare}
+        shareText={resultsShare.text}
+        shareUrl={resultsShare.url}
+        isLocalOnly={resultsShare.isLocalOnly}
       />
 
       <style jsx>{`

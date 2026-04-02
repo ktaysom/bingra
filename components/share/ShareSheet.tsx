@@ -117,7 +117,8 @@ export function ShareSheet({
             </>
           ) : (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:col-span-2">
-              Local development link only. Set NEXT_PUBLIC_SITE_URL for production-shareable links.
+              Social share options are hidden in local development because localhost links are not publicly reachable.
+              You can still copy a local link for testing. Set NEXT_PUBLIC_SITE_URL to enable production-shareable links.
             </p>
           )}
         </div>

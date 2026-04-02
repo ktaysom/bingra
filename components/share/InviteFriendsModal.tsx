@@ -1,13 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  buildPreferredShareUrl,
-  buildGameUrl,
-  buildInviteMessage,
-  buildInviteShareText,
-  getPublicBaseUrl,
-} from "../../lib/share/share";
+import { shareInvite } from "../../lib/share/share";
 import { ShareSheet } from "./ShareSheet";
 
 type InviteFriendsModalProps = {
@@ -22,18 +16,10 @@ export function InviteFriendsModal({ isOpen, onClose, slug, teamA, teamB }: Invi
   const [feedback, setFeedback] = useState<string | null>(null);
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
 
-  const { gameUrl, isLocalOnly } = useMemo(() => {
-    const origin = typeof window !== "undefined" ? window.location.origin : getPublicBaseUrl();
-    const preferred = buildPreferredShareUrl(slug, origin);
-
-    return {
-      gameUrl: preferred ?? buildGameUrl(slug, origin),
-      isLocalOnly: !preferred,
-    };
-  }, [slug]);
-
-  const inviteText = useMemo(() => buildInviteShareText(teamA, teamB), [teamA, teamB]);
-  const inviteMessage = useMemo(() => buildInviteMessage(teamA, teamB, gameUrl), [teamA, teamB, gameUrl]);
+  const inviteShare = useMemo(() => {
+    const origin = typeof window !== "undefined" ? window.location.origin : undefined;
+    return shareInvite({ slug, teamA, teamB }, origin);
+  }, [slug, teamA, teamB]);
 
   if (!isOpen) {
     return null;
@@ -41,7 +27,7 @@ export function InviteFriendsModal({ isOpen, onClose, slug, teamA, teamB }: Invi
 
   const copyInviteMessage = async () => {
     try {
-      await navigator.clipboard.writeText(inviteMessage);
+      await navigator.clipboard.writeText(inviteShare.message);
       setFeedback("Invite message copied");
     } catch {
       setFeedback("Could not copy invite message");
@@ -65,7 +51,7 @@ export function InviteFriendsModal({ isOpen, onClose, slug, teamA, teamB }: Invi
           </button>
 
           <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            {inviteText}
+            {inviteShare.text}
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -93,9 +79,9 @@ export function InviteFriendsModal({ isOpen, onClose, slug, teamA, teamB }: Invi
         isOpen={shareSheetOpen}
         onClose={() => setShareSheetOpen(false)}
         title="Invite friends"
-        shareText={inviteText}
-        shareUrl={gameUrl}
-        isLocalOnly={isLocalOnly}
+        shareText={inviteShare.text}
+        shareUrl={inviteShare.url}
+        isLocalOnly={inviteShare.isLocalOnly}
       />
     </>
   );

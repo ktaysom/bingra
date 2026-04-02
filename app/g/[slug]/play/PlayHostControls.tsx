@@ -7,13 +7,10 @@ import {
   type SetGameStatusFormState,
 } from "../../../actions/set-game-status";
 import {
-  buildPreferredShareUrl,
-  buildGameUrl,
-  buildInviteShareText,
-  getPublicBaseUrl,
+  shareResults,
+  shareInvite,
 } from "../../../../lib/share/share";
 import { ShareSheet } from "../../../../components/share/ShareSheet";
-import { InviteFriendsModal } from "../../../../components/share/InviteFriendsModal";
 
 type ShareGameControlProps = {
   slug: string;
@@ -28,6 +25,8 @@ type InlineShareButtonProps = {
   title: string;
   teamA?: string | null;
   teamB?: string | null;
+  isFinished?: boolean;
+  winnerName?: string | null;
   hostName?: string | null;
   promptInviteOnMount?: boolean;
   consumeJoinQueryOnMount?: boolean;
@@ -38,11 +37,8 @@ export function ShareGameControl({ slug, title, teamA, teamB, hostName }: ShareG
   const resolvedTeamA = teamA?.trim() || "Team A";
   const resolvedTeamB = teamB?.trim() || "Team B";
   const invitePath = `/g/${slug}`;
-  const origin = typeof window !== "undefined" ? window.location.origin : getPublicBaseUrl();
-  const preferredInviteUrl = buildPreferredShareUrl(slug, origin);
-  const inviteUrl = preferredInviteUrl ?? buildGameUrl(slug, origin);
-  const isLocalOnly = !preferredInviteUrl;
-  const shareText = buildInviteShareText(resolvedTeamA, resolvedTeamB);
+  const origin = typeof window !== "undefined" ? window.location.origin : undefined;
+  const inviteShare = shareInvite({ slug, teamA: resolvedTeamA, teamB: resolvedTeamB }, origin);
 
   return (
     <section className="surface-card p-4 sm:p-6">
@@ -63,9 +59,9 @@ export function ShareGameControl({ slug, title, teamA, teamB, hostName }: ShareG
         isOpen={isShareSheetOpen}
         onClose={() => setIsShareSheetOpen(false)}
         title={title}
-        shareText={shareText}
-        shareUrl={inviteUrl}
-        isLocalOnly={isLocalOnly}
+        shareText={inviteShare.text}
+        shareUrl={inviteShare.url}
+        isLocalOnly={inviteShare.isLocalOnly}
       />
     </section>
   );
@@ -76,18 +72,22 @@ export function InlineShareButton({
   title,
   teamA,
   teamB,
+  isFinished = false,
+  winnerName = null,
   promptInviteOnMount = false,
   consumeJoinQueryOnMount = false,
 }: InlineShareButtonProps) {
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const resolvedTeamA = teamA?.trim() || "Team A";
   const resolvedTeamB = teamB?.trim() || "Team B";
-  const origin = typeof window !== "undefined" ? window.location.origin : getPublicBaseUrl();
-  const preferredInviteUrl = buildPreferredShareUrl(slug, origin);
-  const inviteUrl = preferredInviteUrl ?? buildGameUrl(slug, origin);
-  const isLocalOnly = !preferredInviteUrl;
-  const shareText = buildInviteShareText(resolvedTeamA, resolvedTeamB);
+  const origin = typeof window !== "undefined" ? window.location.origin : undefined;
+  const sharePayload = isFinished
+    ? shareResults(
+        { slug, teamA: resolvedTeamA, teamB: resolvedTeamB },
+        { name: winnerName },
+        origin,
+      )
+    : shareInvite({ slug, teamA: resolvedTeamA, teamB: resolvedTeamB }, origin);
 
   useEffect(() => {
     if (!consumeJoinQueryOnMount) {
@@ -118,44 +118,29 @@ export function InlineShareButton({
       }
 
       window.sessionStorage.setItem(storageKey, "1");
-      setIsInviteModalOpen(true);
+      setIsShareSheetOpen(true);
     } catch {
-      setIsInviteModalOpen(true);
+      setIsShareSheetOpen(true);
     }
-  }, [promptInviteOnMount, slug]);
+  }, [isFinished, promptInviteOnMount, slug]);
 
   return (
     <div className="flex items-center gap-2">
       <button
         type="button"
-        onClick={() => setIsInviteModalOpen(true)}
-        className="btn-secondary px-3 py-1.5 text-xs"
-      >
-        Invite friends
-      </button>
-      <button
-        type="button"
         onClick={() => setIsShareSheetOpen(true)}
         className="btn-secondary px-3 py-1.5 text-xs"
       >
-        Share
+        {isFinished ? "Share Results" : "Invite Friends"}
       </button>
 
       <ShareSheet
         isOpen={isShareSheetOpen}
         onClose={() => setIsShareSheetOpen(false)}
         title={title}
-        shareText={shareText}
-        shareUrl={inviteUrl}
-        isLocalOnly={isLocalOnly}
-      />
-
-      <InviteFriendsModal
-        isOpen={isInviteModalOpen}
-        onClose={() => setIsInviteModalOpen(false)}
-        slug={slug}
-        teamA={resolvedTeamA}
-        teamB={resolvedTeamB}
+        shareText={sharePayload.text}
+        shareUrl={sharePayload.url}
+        isLocalOnly={sharePayload.isLocalOnly}
       />
     </div>
   );

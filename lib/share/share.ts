@@ -59,18 +59,88 @@ export function buildGamePath(slug: string): string {
   return `/g/${encodeURIComponent(slug)}`;
 }
 
+export function buildResultsPath(slug: string): string {
+  return `${buildGamePath(slug)}/results`;
+}
+
 export function buildGameUrl(slug: string, baseUrl: string): string {
   return new URL(buildGamePath(slug), baseUrl).toString();
+}
+
+export function buildResultsUrl(slug: string, baseUrl: string): string {
+  return new URL(buildResultsPath(slug), baseUrl).toString();
+}
+
+type ShareGameArgs = {
+  slug: string;
+  teamA: string;
+  teamB: string;
+};
+
+type ShareWinnerArgs = {
+  name: string | null;
+};
+
+type SharePayload = {
+  text: string;
+  message: string;
+  url: string;
+  isLocalOnly: boolean;
+};
+
+function resolveShareUrl(slug: string, currentOrigin: string | null | undefined, kind: "invite" | "results") {
+  const preferredBase = resolveShareBaseUrl(currentOrigin);
+  const fallbackBase = sanitizeOrigin(currentOrigin) ?? getPublicBaseUrl();
+  const baseUrl = preferredBase ?? fallbackBase;
+  const url = kind === "results" ? buildResultsUrl(slug, baseUrl) : buildGameUrl(slug, baseUrl);
+
+  return {
+    url,
+    isLocalOnly: !preferredBase,
+  };
+}
+
+export function shareInvite(game: ShareGameArgs, currentOrigin?: string | null): SharePayload {
+  const teamA = game.teamA.trim() || "Team A";
+  const teamB = game.teamB.trim() || "Team B";
+  const { url, isLocalOnly } = resolveShareUrl(game.slug, currentOrigin, "invite");
+  const text = `Join my Bingra for ${teamA} vs ${teamB} \u{1F3C0}`;
+
+  return {
+    text,
+    message: `${text}\n\nPlay along here:\n${url}`,
+    url,
+    isLocalOnly,
+  };
+}
+
+export function shareResults(
+  game: ShareGameArgs,
+  winner: ShareWinnerArgs | null,
+  currentOrigin?: string | null,
+): SharePayload {
+  const teamA = game.teamA.trim() || "Team A";
+  const teamB = game.teamB.trim() || "Team B";
+  const winnerName = winner?.name?.trim() || null;
+  const { url, isLocalOnly } = resolveShareUrl(game.slug, currentOrigin, "results");
+  const text = `${winnerName ?? "Someone"} won Bingra \u{1F3C6}\n${teamA} vs ${teamB}\n\nSee the results:`;
+
+  return {
+    text,
+    message: `${text}\n${url}`,
+    url,
+    isLocalOnly,
+  };
 }
 
 export function buildInviteShareText(teamA: string, teamB: string): string {
   const safeTeamA = teamA.trim() || "Team A";
   const safeTeamB = teamB.trim() || "Team B";
-  return `Join my Bingra for ${safeTeamA} vs ${safeTeamB} — first Bingra wins 🏆`;
+  return `Join my Bingra for ${safeTeamA} vs ${safeTeamB} \u{1F3C0}`;
 }
 
 export function buildInviteMessage(teamA: string, teamB: string, gameUrl: string): string {
-  return `${buildInviteShareText(teamA, teamB)} ${gameUrl}`;
+  return `${buildInviteShareText(teamA, teamB)}\n\nPlay along here:\n${gameUrl}`;
 }
 
 export function buildPlatformShareUrls(shareText: string, shareUrl: string) {
