@@ -70,10 +70,18 @@ export function AuthErrorRecoveryPanel({ authError, initialContext }: AuthErrorR
         pendingContext,
       });
 
+      console.info("[auth][recovery] verifyOtp succeeded", {
+        hasPendingContext: Boolean(pendingContext),
+        finalizePath,
+      });
+
       setStatus("Code verified. Finishing sign-in...");
       router.push(finalizePath);
     } catch (verifyError) {
       const message = verifyError instanceof Error ? verifyError.message : "Unable to verify code";
+      console.error("[auth][recovery] verifyOtp failed", {
+        message,
+      });
       setError(message);
     } finally {
       setIsVerifying(false);
@@ -97,9 +105,16 @@ export function AuthErrorRecoveryPanel({ authError, initialContext }: AuthErrorR
         pendingContext,
       });
 
+      console.info("[auth][recovery] resend sign-in link succeeded", {
+        email: email.trim(),
+      });
+
       setStatus(`New sign-in code sent. Enter the ${expectedEmailOtpLength}-digit code from your email.`);
     } catch (sendError) {
       const message = sendError instanceof Error ? sendError.message : "Unable to send sign-in email";
+      console.error("[auth][recovery] resend sign-in link failed", {
+        message,
+      });
       setError(message);
     } finally {
       setIsResending(false);

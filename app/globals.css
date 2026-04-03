@@ -14,8 +14,20 @@
   --font-sans: "Inter", system-ui, sans-serif;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   font-family: "Inter", system-ui, sans-serif;
+}
+
+html, body {
+  overflow-x: hidden;
+}
+
+input, textarea, select {
+  font-size: 16px;
 }
 
 .btn-primary {
@@ -41,3 +53,4 @@ body {
 .event-state-active {
   @apply border border-bingra-blue/30 bg-bingra-white ring-1 ring-bingra-blue/20;
 }
+

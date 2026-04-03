@@ -55,6 +55,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  console.info("[auth][me] server auth snapshot", {
+    hasUser: Boolean(user?.id),
+    userId: user?.id ?? null,
+    hasPendingAuthContextCookie: Boolean(pendingContextFromCookie),
+  });
+
   if (!user?.id) {
     return (
       <main className="mx-auto flex min-h-[70vh] w-full max-w-3xl flex-col justify-center px-4 py-12 sm:px-6">

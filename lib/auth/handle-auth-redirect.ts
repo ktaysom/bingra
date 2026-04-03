@@ -170,9 +170,20 @@ export async function handleAuthRedirectRequest(request: NextRequest, options: H
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
-        return request.cookies.getAll();
+        const cookies = request.cookies.getAll();
+        console.info(`[${options.context}] supabase cookie getAll`, {
+          cookieCount: cookies.length,
+          hasSupabaseCookie: cookies.some((cookie) => cookie.name.includes("sb-")),
+        });
+        return cookies;
       },
       setAll(cookiesToSet) {
+        if (cookiesToSet.length > 0) {
+          console.info(`[${options.context}] supabase cookie setAll`, {
+            cookieCount: cookiesToSet.length,
+            cookieNames: cookiesToSet.map((cookie) => cookie.name),
+          });
+        }
         cookiesToSet.forEach(({ name, value, options: cookieOptions }) => {
           response.cookies.set(name, value, cookieOptions);
         });

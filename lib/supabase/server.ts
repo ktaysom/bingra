@@ -16,14 +16,28 @@ export async function createSupabaseServerClient() {
   return createServerClient(url, key, {
     cookies: {
       getAll() {
-        return cookieStore.getAll();
+        const allCookies = cookieStore.getAll();
+        console.info("[auth][server] createSupabaseServerClient.getAll", {
+          cookieCount: allCookies.length,
+          hasSupabaseCookie: allCookies.some((cookie) => cookie.name.includes("sb-")),
+        });
+        return allCookies;
       },
       setAll(cookiesToSet) {
         try {
+          if (cookiesToSet.length > 0) {
+            console.info("[auth][server] createSupabaseServerClient.setAll", {
+              cookieCount: cookiesToSet.length,
+              cookieNames: cookiesToSet.map((cookie) => cookie.name),
+            });
+          }
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
           });
-        } catch {
+        } catch (error) {
+          console.warn("[auth][server] createSupabaseServerClient.setAll failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
           // Safe in server components/actions where mutation may not always be allowed.
         }
       },

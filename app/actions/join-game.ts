@@ -72,7 +72,7 @@ async function redirectWithJoinPrompt(slug: string) {
     name: JOIN_PROMPT_COOKIE_NAME,
     value: token,
     path: `/g/${slug}/play`,
-    maxAge: 60 * 10,
+    maxAge: 60 * 15,
     httpOnly: true,
     sameSite: "lax",
   });
@@ -336,13 +336,17 @@ export async function joinGameAction(
           },
           async () => {
             const cookieStore = await cookies();
+            console.log("[auth] setting bingra-player-id cookie", {
+              maxAge: 60 * 60 * 24 * 365 * 2,
+            });
             cookieStore.set({
               name: "bingra-player-id",
               value: existingLinkedPlayer.id,
-              path: `/g/${parsed.data.slug}`,
-              maxAge: 60 * 60 * 24 * 30,
+              path: "/",
+              maxAge: 60 * 60 * 24 * 365 * 2,
               httpOnly: true,
               sameSite: "lax",
+              secure: process.env.NODE_ENV === "production",
             });
           },
         );
@@ -412,13 +416,17 @@ export async function joinGameAction(
             },
             async () => {
               const cookieStore = await cookies();
+              console.log("[auth] setting bingra-player-id cookie", {
+                maxAge: 60 * 60 * 24 * 365 * 2,
+              });
               cookieStore.set({
                 name: "bingra-player-id",
                 value: existingLinkedPlayer.id,
-                path: `/g/${parsed.data.slug}`,
-                maxAge: 60 * 60 * 24 * 30,
+                path: "/",
+                maxAge: 60 * 60 * 24 * 365 * 2,
                 httpOnly: true,
                 sameSite: "lax",
+                secure: process.env.NODE_ENV === "production",
               });
             },
           );
@@ -444,10 +452,11 @@ export async function joinGameAction(
     const cookieOptions = {
       name: "bingra-player-id",
       value: playerData.id,
-      path: `/g/${parsed.data.slug}`,
-      maxAge: 60 * 60 * 24 * 30,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365 * 2,
       httpOnly: true,
       sameSite: "lax" as const,
+      secure: process.env.NODE_ENV === "production",
     };
 
     await runJoinStep(
@@ -458,6 +467,9 @@ export async function joinGameAction(
       },
       async () => {
         const cookieStore = await cookies();
+        console.log("[auth] setting bingra-player-id cookie", {
+          maxAge: 60 * 60 * 24 * 365 * 2,
+        });
         cookieStore.set(cookieOptions);
       },
     );

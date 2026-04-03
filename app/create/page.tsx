@@ -421,6 +421,12 @@ export default function CreatePage() {
         data: { user },
       } = await supabase.auth.getUser();
 
+      console.info("[auth][create] auto-retry auth probe", {
+        source,
+        hasUser: Boolean(user?.id),
+        userId: user?.id ?? null,
+      });
+
       if (cancelled) {
         return;
       }
@@ -443,7 +449,13 @@ export default function CreatePage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.info("[auth][create] onAuthStateChange", {
+        event,
+        hasSessionUser: Boolean(session?.user?.id),
+        userId: session?.user?.id ?? null,
+      });
+
       if (!session?.user?.id) {
         return;
       }

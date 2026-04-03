@@ -78,6 +78,10 @@ export function AuthEntryPoint({ nextPath, linkPlayerId, subtle = true }: AuthEn
 
     const hydrateAccountState = async (user: User | null) => {
       const hydrateStartedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+      console.info("[auth][entry] hydrateAccountState", {
+        hasUser: Boolean(user?.id),
+        userId: user?.id ?? null,
+      });
       setIsAuthenticated(Boolean(user?.id));
 
       const label = await resolveAccountLabel(user);
@@ -102,7 +106,12 @@ export function AuthEntryPoint({ nextPath, linkPlayerId, subtle = true }: AuthEn
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.info("[auth][entry] onAuthStateChange", {
+        event,
+        hasSessionUser: Boolean(session?.user?.id),
+        userId: session?.user?.id ?? null,
+      });
       void hydrateAccountState(session?.user ?? null);
     });
 

@@ -175,13 +175,17 @@ export async function createGameAction(
     }
 
     const cookieStore = await cookies();
+    console.log("[auth] setting bingra-player-id cookie", {
+      maxAge: 60 * 60 * 24 * 365 * 2,
+    });
     cookieStore.set({
       name: "bingra-player-id",
       value: hostPlayerId,
-      path: `/g/${hostSlug}`,
-      maxAge: 60 * 60 * 24 * 30,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365 * 2,
       httpOnly: true,
       sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
     });
     redirect(`/g/${hostSlug}/play`);
 }

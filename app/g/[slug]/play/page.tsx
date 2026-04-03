@@ -83,6 +83,12 @@ export default async function PlayPage(props: PlayPageProps) {
     data: { user },
   } = authResponse;
 
+  console.info("[auth][play] server auth snapshot", {
+    slug,
+    hasUser: Boolean(user?.id),
+    userId: user?.id ?? null,
+  });
+
   let actorAccountId: string | null = null;
   if (user?.id) {
     actorAccountId = await resolveCanonicalAccountIdForAuthUserId(user.id);
@@ -96,6 +102,12 @@ export default async function PlayPage(props: PlayPageProps) {
 
   const cookiePlayerId = cookieStore.get("bingra-player-id")?.value ?? null;
   const joinPromptCookie = cookieStore.get(JOIN_PROMPT_COOKIE_NAME)?.value ?? null;
+
+  console.info("[auth][play] cookie/session snapshot", {
+    slug,
+    hasPlayerCookie: Boolean(cookiePlayerId),
+    hasJoinPromptCookie: Boolean(joinPromptCookie),
+  });
 
   const joinTokenFromQuery = typeof searchParams.jt === "string" ? searchParams.jt.trim() : "";
 
@@ -122,10 +134,20 @@ export default async function PlayPage(props: PlayPageProps) {
   }
 
   if (!resolvedSessionPlayerId && isSignedInHostForRestrictedGame && user?.id && actorAccountId) {
+    console.warn("[auth][play] signed-in host missing player session cookie; redirecting to recover-host", {
+      slug,
+      userId: user.id,
+      actorAccountId,
+    });
     redirect(`/g/${slug}/play/recover-host`);
   }
 
   if (!resolvedSessionPlayerId) {
+    console.warn("[auth][play] no resolved player session; redirecting to join page", {
+      slug,
+      hasServerUser: Boolean(user?.id),
+      hasPlayerCookie: Boolean(cookiePlayerId),
+    });
     redirect(`/g/${slug}`);
   }
 

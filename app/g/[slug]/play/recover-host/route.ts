@@ -113,13 +113,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   const response = NextResponse.redirect(new URL(`/g/${slug}/play`, request.url));
+  console.log("[auth] setting bingra-player-id cookie", {
+    maxAge: 60 * 60 * 24 * 365 * 2,
+  });
   response.cookies.set({
     name: "bingra-player-id",
     value: resolvedHostPlayerId,
-    path: `/g/${slug}`,
-    maxAge: 60 * 60 * 24 * 30,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365 * 2,
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
   });
 
   return response;
