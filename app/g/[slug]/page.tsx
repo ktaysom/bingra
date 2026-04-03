@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { createSupabaseAdminClient } from "../../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
 import { JoinForm } from "./JoinForm";
+import { JoinRecoveryGate } from "./JoinRecoveryGate";
 import { joinGameAction } from "../../actions/join-game";
 import { AuthEntryPoint } from "../../../components/auth/AuthEntryPoint";
 import {
@@ -227,7 +228,9 @@ export default async function JoinGamePage(props: JoinPageProps) {
           </div>
         </div>
 
-        <JoinForm slug={slug} initialDisplayName={initialDisplayName} action={joinGameAction} />
+        <JoinRecoveryGate slug={slug}>
+          <JoinForm slug={slug} initialDisplayName={initialDisplayName} action={joinGameAction} />
+        </JoinRecoveryGate>
 
         <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
           <span>Already have an account?</span>

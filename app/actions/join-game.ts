@@ -12,6 +12,11 @@ import {
   resolveProfileDefaultDisplayName,
 } from "../../lib/auth/profiles";
 import { ensurePlayerLinkedToAuthenticatedUser } from "../../lib/auth/link-player";
+import {
+  generatePlayerRecoveryToken,
+  getPlayerRecoveryTokenCookieName,
+  hashPlayerRecoveryToken,
+} from "../../lib/auth/player-recovery";
 
 export type JoinGameFormState = {
   error?: string;
@@ -78,6 +83,41 @@ async function redirectWithJoinPrompt(slug: string) {
   });
 
   redirect(`/g/${slug}/play?joined=1&jt=${encodeURIComponent(token)}`);
+}
+
+async function issueOrRotatePlayerRecoveryToken(params: {
+  supabase: ReturnType<typeof createSupabaseAdminClient>;
+  slug: string;
+  playerId: string;
+  mode: "issued" | "rotated";
+}) {
+  const recoveryToken = generatePlayerRecoveryToken();
+  const recoveryTokenHash = hashPlayerRecoveryToken(recoveryToken);
+
+  const { error } = await params.supabase
+    .from("players")
+    .update({ recovery_token_hash: recoveryTokenHash })
+    .eq("id", params.playerId)
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set({
+    name: getPlayerRecoveryTokenCookieName(params.slug),
+    value: recoveryToken,
+    path: `/g/${params.slug}`,
+    maxAge: 60 * 15,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+
+  console.log(`[auth] player recovery token ${params.mode}`, {
+    slug: params.slug,
+    playerId: params.playerId,
+  });
 }
 
 function formatError(error: unknown): string {
@@ -282,6 +322,21 @@ export async function joinGameAction(
       if (cookiePlayer?.id && cookiePlayer.game_id === game.id) {
         await runJoinStep(
           {
+            step: "rotate-recovery-token-cookie-player",
+            client: "admin",
+            operation: "issueOrRotatePlayerRecoveryToken(rotated)",
+          },
+          async () =>
+            issueOrRotatePlayerRecoveryToken({
+              supabase,
+              slug: parsed.data.slug,
+              playerId: cookiePlayer.id,
+              mode: "rotated",
+            }),
+        );
+
+        await runJoinStep(
+          {
             step: "ensure-cookie-player-linked",
             client: "internal",
             operation: "ensurePlayerLinkedToAuthenticatedUser",
@@ -328,6 +383,21 @@ export async function joinGameAction(
       }
 
       if (existingLinkedPlayer?.id) {
+        await runJoinStep(
+          {
+            step: "rotate-recovery-token-existing-linked-player",
+            client: "admin",
+            operation: "issueOrRotatePlayerRecoveryToken(rotated)",
+          },
+          async () =>
+            issueOrRotatePlayerRecoveryToken({
+              supabase,
+              slug: parsed.data.slug,
+              playerId: existingLinkedPlayer.id,
+              mode: "rotated",
+            }),
+        );
+
         await runJoinStep(
           {
             step: "set-cookie-existing-linked-player",
@@ -410,6 +480,21 @@ export async function joinGameAction(
         if (existingLinkedPlayer?.id) {
           await runJoinStep(
             {
+              step: "rotate-recovery-token-existing-linked-player-after-23505",
+              client: "admin",
+              operation: "issueOrRotatePlayerRecoveryToken(rotated)",
+            },
+            async () =>
+              issueOrRotatePlayerRecoveryToken({
+                supabase,
+                slug: parsed.data.slug,
+                playerId: existingLinkedPlayer.id,
+                mode: "rotated",
+              }),
+          );
+
+          await runJoinStep(
+            {
               step: "set-cookie-existing-linked-player",
               client: "next_cookies",
               operation: "cookies().set(bingra-player-id)",
@@ -448,6 +533,21 @@ export async function joinGameAction(
     if (!playerData) {
       throw new Error("Failed to create player record");
     }
+
+    await runJoinStep(
+      {
+        step: "issue-recovery-token-inserted-player",
+        client: "admin",
+        operation: "issueOrRotatePlayerRecoveryToken(issued)",
+      },
+      async () =>
+        issueOrRotatePlayerRecoveryToken({
+          supabase,
+          slug: parsed.data.slug,
+          playerId: playerData.id,
+          mode: "issued",
+        }),
+    );
 
     const cookieOptions = {
       name: "bingra-player-id",

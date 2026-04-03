@@ -16,6 +16,11 @@ import {
   type SportProfileKey,
 } from "../../lib/bingra/sport-profiles";
 import { resolveCreateGameSport } from "../../lib/bingra/create-game-payload";
+import {
+  generatePlayerRecoveryToken,
+  getPlayerRecoveryTokenCookieName,
+  hashPlayerRecoveryToken,
+} from "../../lib/auth/player-recovery";
 
 export type CreateGameFormState = {
   error?: string;
@@ -174,6 +179,29 @@ export async function createGameAction(
       return { error: "Failed to initialize host player session" };
     }
 
+    const recoveryToken = generatePlayerRecoveryToken();
+    const recoveryTokenHash = hashPlayerRecoveryToken(recoveryToken);
+
+    const { error: recoveryTokenUpdateError } = await supabase
+      .from("players")
+      .update({ recovery_token_hash: recoveryTokenHash })
+      .eq("id", hostPlayerId)
+      .limit(1);
+
+    if (recoveryTokenUpdateError) {
+      console.error("[auth] failed to issue player recovery token hash", {
+        playerId: hostPlayerId,
+        slug: hostSlug,
+        error: recoveryTokenUpdateError,
+      });
+      return { error: "Failed to initialize player recovery token" };
+    }
+
+    console.log("[auth] player recovery token issued", {
+      playerId: hostPlayerId,
+      slug: hostSlug,
+    });
+
     const cookieStore = await cookies();
     console.log("[auth] setting bingra-player-id cookie", {
       maxAge: 60 * 60 * 24 * 365 * 2,
@@ -184,6 +212,14 @@ export async function createGameAction(
       path: "/",
       maxAge: 60 * 60 * 24 * 365 * 2,
       httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+    cookieStore.set({
+      name: getPlayerRecoveryTokenCookieName(hostSlug),
+      value: recoveryToken,
+      path: `/g/${hostSlug}`,
+      maxAge: 60 * 15,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
     });
