@@ -28,7 +28,6 @@ type InlineShareButtonProps = {
   isFinished?: boolean;
   winnerName?: string | null;
   hostName?: string | null;
-  promptInviteOnMount?: boolean;
   consumeJoinQueryOnMount?: boolean;
 }
 
@@ -74,7 +73,6 @@ export function InlineShareButton({
   teamB,
   isFinished = false,
   winnerName = null,
-  promptInviteOnMount = false,
   consumeJoinQueryOnMount = false,
 }: InlineShareButtonProps) {
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
@@ -104,25 +102,6 @@ export function InlineShareButton({
       // no-op
     }
   }, [consumeJoinQueryOnMount]);
-
-  useEffect(() => {
-    if (!promptInviteOnMount) {
-      return;
-    }
-
-    const storageKey = `bingra-post-join-invite-${slug}`;
-    try {
-      const alreadyPrompted = window.sessionStorage.getItem(storageKey);
-      if (alreadyPrompted) {
-        return;
-      }
-
-      window.sessionStorage.setItem(storageKey, "1");
-      setIsShareSheetOpen(true);
-    } catch {
-      setIsShareSheetOpen(true);
-    }
-  }, [isFinished, promptInviteOnMount, slug]);
 
   return (
     <div className="flex items-center gap-2">

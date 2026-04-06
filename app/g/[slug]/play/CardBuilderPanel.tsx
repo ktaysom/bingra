@@ -19,6 +19,7 @@ import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { generateCardAction } from "../../../actions/generate-card";
 import { editCardAction } from "../../../actions/edit-card";
+import { AuthDialog } from "../../../../components/auth/AuthDialog";
 import {
   DEFAULT_SPORT_PROFILE,
   type SportProfileKey,
@@ -36,6 +37,8 @@ type CardBuilderEvent = GameEventType & {
 };
 
 type CardBuilderPanelProps = {
+  slug: string;
+  isAuthenticatedUser: boolean;
   mode: PlayMode;
   playerId: string | null;
   gameStatus: "lobby" | "live" | "finished";
@@ -219,6 +222,8 @@ function generateCardEvents(
 }
 
 export function CardBuilderPanel({
+  slug,
+  isAuthenticatedUser,
   mode,
   playerId,
   gameStatus,
@@ -252,6 +257,8 @@ export function CardBuilderPanel({
   const [acceptFeedback, setAcceptFeedback] = useState<string | null>(null);
   const [acceptActionError, setAcceptActionError] = useState<string | null>(null);
   const [showAutoBuildSuccess, setShowAutoBuildSuccess] = useState(false);
+  const [showPostLockSignInPrompt, setShowPostLockSignInPrompt] = useState(false);
+  const previousAcceptedAtRef = useRef<string | null>(cardAcceptedAt);
   const isAccepted = Boolean(cardAcceptedAt);
   const isPermanentlyLocked = isAccepted && gameStatus !== "lobby";
   const isTemporarilyAccepted = isAccepted && gameStatus === "lobby";
@@ -350,6 +357,10 @@ export function CardBuilderPanel({
   const picksSelectedCount = cardEvents.length;
   const picksProgressLabel = `${picksSelectedCount} / ${eventsPerCard} picks selected`;
   const onboardingHeadline = `Make ${eventsPerCard} picks to play`;
+  const visibleCardSlots = useMemo<(CardBuilderEvent | null)[]>(
+    () => Array.from({ length: 5 }, (_, index) => cardEvents[index] ?? null),
+    [cardEvents],
+  );
 
   const handleAutoBuildCard = () => {
     setCardEvents(
@@ -558,6 +569,36 @@ export function CardBuilderPanel({
   }, [gameStatus, generateState.success, router]);
 
   useEffect(() => {
+    const previousAcceptedAt = previousAcceptedAtRef.current;
+    const transitionedToAccepted = !previousAcceptedAt && Boolean(cardAcceptedAt);
+    previousAcceptedAtRef.current = cardAcceptedAt;
+
+    if (!transitionedToAccepted || !cardAcceptedAt || !playerId || isAuthenticatedUser) {
+      return;
+    }
+
+    const storageKey = `bingra-post-lock-signin-prompt:${slug}:${playerId}:${cardAcceptedAt}`;
+
+    try {
+      const alreadyPrompted = window.sessionStorage.getItem(storageKey);
+      if (alreadyPrompted) {
+        return;
+      }
+
+      window.sessionStorage.setItem(storageKey, "1");
+      setShowPostLockSignInPrompt(true);
+    } catch {
+      setShowPostLockSignInPrompt(true);
+    }
+  }, [cardAcceptedAt, isAuthenticatedUser, playerId, slug]);
+
+  useEffect(() => {
+    if (isAuthenticatedUser) {
+      setShowPostLockSignInPrompt(false);
+    }
+  }, [isAuthenticatedUser]);
+
+  useEffect(() => {
     if (generateState.error) {
       setAcceptActionError(generateState.error);
     }
@@ -723,6 +764,30 @@ export function CardBuilderPanel({
         </div>
 
         <div className="mt-6 space-y-4 rounded-2xl bg-white/90 p-4 shadow-sm">
+          {showPostLockSignInPrompt && !isAuthenticatedUser && (
+            <section className="rounded-2xl border border-violet-200 bg-violet-50/80 p-4 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900">Save your game</p>
+              <p className="mt-1 text-xs text-slate-600">
+                Sign in so it&apos;s easier to come back to this game later.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <AuthDialog
+                  label="Sign in"
+                  nextPath={`/g/${slug}/play`}
+                  linkPlayerId={playerId ?? undefined}
+                  emphasis="prominent"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPostLockSignInPrompt(false)}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Continue without signing in
+                </button>
+              </div>
+            </section>
+          )}
+
           {mode === "streak" ? (
             <>
               <p className="text-sm font-medium text-slate-600">Streak order</p>
@@ -898,6 +963,7 @@ export function CardBuilderPanel({
             </button>
             </div>
           </div>
+          <p className="text-xs text-slate-500">Choose 5 events to build your Bingra card.</p>
         </div>
 
         {mode === "streak" ? (
@@ -907,7 +973,21 @@ export function CardBuilderPanel({
               <p className="text-sm font-semibold text-slate-900">Streak order</p>
             </div>
             <ul className="divide-y divide-slate-200">
-              {cardEvents.map((event, index) => {
+              {visibleCardSlots.map((event, index) => {
+                if (!event) {
+                  return (
+                    <li
+                      key={`placeholder-streak-${index}`}
+                      className="flex items-center justify-between gap-3 border border-slate-200 border-l-4 border-l-slate-300 border-dashed bg-slate-50/80 px-4 py-3 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-400">{index + 1}. Choose an event</p>
+                        <p className="text-xs text-slate-400">Slot {index + 1} of 5</p>
+                      </div>
+                    </li>
+                  );
+                }
+
                 const itemId = getCardEventIdentityKey(event);
                 const tone = getIdentityTone(event.cardTeamKey ?? null);
                 const isTouchDragging = touchDragItemId === itemId;
@@ -975,7 +1055,21 @@ export function CardBuilderPanel({
           <div>
             <div className="mx-auto mt-3 max-w-2xl rounded-2xl bg-white/90 shadow-sm">
               <ul className="divide-y divide-slate-200">
-                {cardEvents.map((event, index) => {
+                {visibleCardSlots.map((event, index) => {
+                  if (!event) {
+                    return (
+                      <li
+                        key={`placeholder-blackout-${index}`}
+                        className="flex items-start justify-between gap-3 border border-slate-200 border-l-4 border-l-slate-300 border-dashed bg-slate-50/80 px-4 py-3 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-slate-400">Choose an event</p>
+                          <p className="text-xs text-slate-400">Slot {index + 1} of 5</p>
+                        </div>
+                      </li>
+                    );
+                  }
+
                   const tone = getIdentityTone(event.cardTeamKey ?? null);
                   const teamName = event.cardTeamKey ? teamNames[event.cardTeamKey] : null;
                 const requiredCount =

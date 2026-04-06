@@ -41,8 +41,6 @@ export const metadata: Metadata = {
   title: "Play Game",
 };
 
-const JOIN_PROMPT_COOKIE_NAME = "bingra-join-prompt-token";
-
 export default async function PlayPage(props: PlayPageProps) {
   const { slug } = await props.params;
   const searchParams = (await props.searchParams) ?? {};
@@ -101,21 +99,13 @@ export default async function PlayPage(props: PlayPageProps) {
     actorAccountId === game.host_account_id;
 
   const cookiePlayerId = cookieStore.get("bingra-player-id")?.value ?? null;
-  const joinPromptCookie = cookieStore.get(JOIN_PROMPT_COOKIE_NAME)?.value ?? null;
 
   console.info("[auth][play] cookie/session snapshot", {
     slug,
     hasPlayerCookie: Boolean(cookiePlayerId),
-    hasJoinPromptCookie: Boolean(joinPromptCookie),
   });
 
   const joinTokenFromQuery = typeof searchParams.jt === "string" ? searchParams.jt.trim() : "";
-
-  const shouldPromptInvite =
-    searchParams.joined === "1" &&
-    Boolean(joinTokenFromQuery) &&
-    Boolean(joinPromptCookie) &&
-    joinPromptCookie === joinTokenFromQuery;
 
   let resolvedSessionPlayerId: string | null = null;
   let resolvedSessionPlayerProfileId: string | null = null;
@@ -186,7 +176,7 @@ export default async function PlayPage(props: PlayPageProps) {
       game={game}
       currentPlayerId={resolvedSessionPlayerId}
       slug={slug}
-      joinedFromQuery={shouldPromptInvite}
+      hasAuthenticatedUser={Boolean(user?.id)}
       consumeJoinQueryOnMount={consumeJoinQueryOnMount}
       canManageRestrictedScoring={canManageRestrictedScoring}
     />

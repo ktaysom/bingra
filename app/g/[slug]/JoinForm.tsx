@@ -4,8 +4,15 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import type { JoinGameFormState } from "../../actions/join-game";
 
+export type JoinPreviewEvent = {
+  title: string;
+  pointsText: string;
+  accentTone: "team" | "neutral";
+};
+
 type JoinFormProps = {
   slug: string;
+  previewEvents: JoinPreviewEvent[];
   initialDisplayName?: string;
   action: (
     prevState: JoinGameFormState,
@@ -29,12 +36,39 @@ function SubmitButton() {
   );
 }
 
-export function JoinForm({ slug, initialDisplayName = "", action }: JoinFormProps) {
+export function JoinForm({ slug, previewEvents, initialDisplayName = "", action }: JoinFormProps) {
   const [state, formAction] = useActionState(action, initialState);
 
   return (
     <form action={formAction} className="mt-6 space-y-5">
       <input type="hidden" name="slug" value={slug} />
+
+      <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+          Example Bingra Card
+        </p>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5 shadow-sm">
+          <div className="space-y-2.5">
+            {previewEvents.map((event, index) => {
+              const toneClass =
+                event.accentTone === "team"
+                  ? "border-blue-200 border-l-blue-400"
+                  : "border-slate-200 border-l-slate-300";
+
+              return (
+                <div
+                  key={`${event.title}-${index}`}
+                  className={`min-h-[86px] rounded-xl border border-l-4 bg-white/90 px-4 py-3 shadow-sm ${toneClass}`}
+                >
+                  <p className="text-[15px] font-semibold leading-tight text-slate-900">{event.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">{event.pointsText}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
       <div className="space-y-4">
         <label className="block text-sm font-medium text-slate-700" htmlFor="displayName">

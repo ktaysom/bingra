@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { createSupabaseAdminClient } from "../../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
-import { JoinForm } from "./JoinForm";
+import { JoinForm, type JoinPreviewEvent } from "./JoinForm";
 import { JoinRecoveryGate } from "./JoinRecoveryGate";
 import { joinGameAction } from "../../actions/join-game";
 import { AuthEntryPoint } from "../../../components/auth/AuthEntryPoint";
@@ -9,7 +9,13 @@ import {
   getSportProfileDefinition,
   getSportProfileLabel,
   resolveSportProfileKey,
+  SPORT_PROFILES,
 } from "../../../lib/bingra/sport-profiles";
+import {
+  chooseRiskCalibratedCardCells,
+  getEventPointsForProfile,
+  getEventsForMode,
+} from "../../../lib/bingra/event-logic";
 import { getPublicGameShareDataBySlug } from "../../../lib/share/game-public";
 import { buildGameUrl, getPublicBaseUrl } from "../../../lib/share/share";
 
@@ -34,35 +40,42 @@ function getSportEmoji(sportProfile: string | null | undefined): string {
   return "🏀";
 }
 
-function getCardPreviewEvents(sportProfile: string | null | undefined): string[] {
-  const profileKey = resolveSportProfileKey(sportProfile);
-  const sport = getSportProfileDefinition(profileKey).sport;
+function buildJoinPreviewEvents(sportProfile: string | null | undefined): JoinPreviewEvent[] {
+  const profileIsKnown = SPORT_PROFILES.some((profile) => profile.key === sportProfile);
+  const profileKey = profileIsKnown ? resolveSportProfileKey(sportProfile) : null;
 
-  if (sport === "soccer") {
-    return [
-      "Goal in first half",
-      "Penalty kick",
-      "Yellow card",
-      "Corner kick",
-      "Halftime lead change",
-      "Big save",
-      "Late equalizer",
-      "Free kick chance",
-      "Final whistle upset",
-    ];
-  }
+  const generatedCells = profileKey
+    ? chooseRiskCalibratedCardCells(5, {
+        mode: "classic",
+        riskLevel: 3,
+        uniqueByEventId: true,
+        includeGameScopedEvents: true,
+        profile: profileKey,
+      })
+    : [];
 
-  return [
-    "Opening 3-pointer",
-    "Steal + fast break",
-    "And-1 finish",
-    "Charge drawn",
-    "Buzzer beater",
-    "Big block",
-    "Team timeout run",
-    "Clutch free throws",
-    "Lead change late",
-  ];
+  const generatedEvents = generatedCells.map((cell) => cell.event);
+  const fallbackPool = profileKey ? getEventsForMode("classic", profileKey) : [];
+
+  const uniqueEventIds = new Set<string>();
+  const orderedEvents = [...generatedEvents, ...fallbackPool].filter((event) => {
+    if (uniqueEventIds.has(event.id)) {
+      return false;
+    }
+
+    uniqueEventIds.add(event.id);
+    return true;
+  });
+
+  return orderedEvents.slice(0, 5).map((event) => {
+    const points = profileKey ? getEventPointsForProfile(event, profileKey) : 0;
+
+    return {
+      title: event.label,
+      pointsText: `${points} pts`,
+      accentTone: event.teamScope === "team" ? "team" : "neutral",
+    };
+  });
 }
 
 export async function generateMetadata(props: JoinPageProps): Promise<Metadata> {
@@ -161,7 +174,7 @@ export default async function JoinGamePage(props: JoinPageProps) {
   const hostName = host?.display_name?.trim() || "Host";
   const sportProfileLabel = getSportProfileLabel(resolveSportProfileKey(game.sportProfile));
   const sportEmoji = getSportEmoji(game.sportProfile);
-  const previewEvents = getCardPreviewEvents(game.sportProfile);
+  const previewEvents = buildJoinPreviewEvents(game.sportProfile);
   const joinedPlayersLabel =
     typeof joinedPlayersCount === "number" && joinedPlayersCount > 0
       ? `${joinedPlayersCount} ${joinedPlayersCount === 1 ? "player" : "players"} already joined`
@@ -200,36 +213,13 @@ export default async function JoinGamePage(props: JoinPageProps) {
           {game.title ? <p className="text-xs text-slate-400">Game: {game.title}</p> : null}
         </div>
 
-        <div className="mt-5 rounded-2xl border border-slate-300 bg-gradient-to-b from-slate-100 to-slate-50 p-4 shadow-sm">
-          <p className="mb-1 text-sm font-medium text-slate-700">Your Bingra card might look like this</p>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Bingra card preview</p>
-          <div className="grid grid-cols-3 gap-2">
-            {previewEvents.map((event, index) => {
-              const isCompletedSample = index === 1 || index === 5;
-
-              return (
-                <div
-                  key={`${event}-${index}`}
-                  className={`relative flex min-h-16 items-center justify-center rounded-xl border px-2 py-3 text-center text-[11px] font-medium leading-tight shadow-sm ${
-                    isCompletedSample
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                      : "border-slate-200 bg-white text-slate-600"
-                  }`}
-                >
-                  {isCompletedSample ? (
-                    <span className="absolute right-1.5 top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
-                      ✓
-                    </span>
-                  ) : null}
-                  {event}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
         <JoinRecoveryGate slug={slug}>
-          <JoinForm slug={slug} initialDisplayName={initialDisplayName} action={joinGameAction} />
+          <JoinForm
+            slug={slug}
+            previewEvents={previewEvents}
+            initialDisplayName={initialDisplayName}
+            action={joinGameAction}
+          />
         </JoinRecoveryGate>
 
         <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">

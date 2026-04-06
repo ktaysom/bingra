@@ -109,7 +109,7 @@ type PlayPageContentProps = {
   game: GameRecord;
   currentPlayerId: string;
   slug: string;
-  joinedFromQuery?: boolean;
+  hasAuthenticatedUser: boolean;
   consumeJoinQueryOnMount?: boolean;
   canManageRestrictedScoring: boolean;
 };
@@ -118,7 +118,7 @@ export async function PlayPageContent({
   game,
   currentPlayerId,
   slug,
-  joinedFromQuery = false,
+  hasAuthenticatedUser,
   consumeJoinQueryOnMount = false,
   canManageRestrictedScoring,
 }: PlayPageContentProps) {
@@ -749,7 +749,6 @@ export async function PlayPageContent({
               isFinished={isGameFinished}
               winnerName={winnerName}
               hostName={hostName}
-              promptInviteOnMount={joinedFromQuery && !isGameFinished}
               consumeJoinQueryOnMount={consumeJoinQueryOnMount}
             />
           </div>
@@ -757,6 +756,8 @@ export async function PlayPageContent({
       </header>
 
       <CardBuilderPanel
+        slug={slug}
+        isAuthenticatedUser={hasAuthenticatedUser}
         mode={playMode}
         playerId={currentPlayerId}
         gameStatus={game.status}
