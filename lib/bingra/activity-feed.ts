@@ -177,6 +177,8 @@ function buildScoreText(input: {
   primaryPlayerName: string | null;
   scoresBeforeByPlayerName: Map<string, number>;
   scoresAfterByPlayerName: Map<string, number>;
+  progressAdvancedPlayersCount?: number;
+  progressAdvancedCellsCount?: number;
 }): string {
   const {
     pointsAwarded,
@@ -184,7 +186,15 @@ function buildScoreText(input: {
     primaryPlayerName,
     scoresBeforeByPlayerName,
     scoresAfterByPlayerName,
+    progressAdvancedPlayersCount = 0,
+    progressAdvancedCellsCount = 0,
   } = input;
+
+  if (pointsAwarded <= 0 && progressAdvancedPlayersCount > 0 && progressAdvancedCellsCount > 0) {
+    const playersLabel = progressAdvancedPlayersCount === 1 ? "player" : "players";
+    const cardsLabel = progressAdvancedCellsCount === 1 ? "card" : "cards";
+    return `${progressAdvancedPlayersCount} ${playersLabel} moved closer on ${progressAdvancedCellsCount} ${cardsLabel}`;
+  }
 
   if (playerNames.length === 0) {
     return "No points awarded";
@@ -391,6 +401,8 @@ export function formatRecordedEventFeedItem(input: {
   resolvedEventName: string;
   scoresBeforeByPlayerName: Map<string, number>;
   scoresAfterByPlayerName: Map<string, number>;
+  progressAdvancedPlayersCount?: number;
+  progressAdvancedCellsCount?: number;
   sportProfile?: SportProfileKey;
 }): Extract<ActivityFeedItem, { type: "event_recorded" }> {
   const {
@@ -401,6 +413,8 @@ export function formatRecordedEventFeedItem(input: {
     resolvedEventName,
     scoresBeforeByPlayerName,
     scoresAfterByPlayerName,
+    progressAdvancedPlayersCount,
+    progressAdvancedCellsCount,
     sportProfile,
   } = input;
 
@@ -424,6 +438,8 @@ export function formatRecordedEventFeedItem(input: {
     primaryPlayerName,
     scoresBeforeByPlayerName,
     scoresAfterByPlayerName,
+    progressAdvancedPlayersCount,
+    progressAdvancedCellsCount,
   });
 
   return {
@@ -642,6 +658,8 @@ export function buildEventRecordedItems(input: {
     const progressAfterByPlayerId = new Map<string, ActivityFeedPlayerProgress>();
     const oneAwayDetailByPlayerId = new Map<string, string>();
     let pointsAwarded = 0;
+    let progressAdvancedPlayersCount = 0;
+    let progressAdvancedCellsCount = 0;
 
     for (const player of players) {
       const card = playerCardsByPlayerId.get(player.id);
@@ -730,6 +748,18 @@ export function buildEventRecordedItems(input: {
         playerDeltas.set(player.display_name, delta);
         pointsAwarded += delta;
       }
+
+      const advancedCellsForPlayer = after.cell_progress.reduce((count, afterCellProgress, cellIndex) => {
+        const beforeCellProgress = before.cell_progress[cellIndex];
+        const beforeCount = typeof beforeCellProgress?.current_count === "number" ? beforeCellProgress.current_count : 0;
+        const afterCount = typeof afterCellProgress?.current_count === "number" ? afterCellProgress.current_count : 0;
+        return afterCount > beforeCount ? count + 1 : count;
+      }, 0);
+
+      if (advancedCellsForPlayer > 0) {
+        progressAdvancedPlayersCount += 1;
+        progressAdvancedCellsCount += advancedCellsForPlayer;
+      }
     }
 
     const resolvedEventName = resolveRecordedEventDisplayName({
@@ -766,6 +796,8 @@ export function buildEventRecordedItems(input: {
         resolvedEventName,
         scoresBeforeByPlayerName,
         scoresAfterByPlayerName,
+        progressAdvancedPlayersCount,
+        progressAdvancedCellsCount,
         sportProfile,
       }),
     );

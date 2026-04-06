@@ -17,6 +17,7 @@ import {
   parseCardCellEventKey,
 } from "../lib/bingra/card-event-key.ts";
 import { getEventById } from "../lib/bingra/event-logic.ts";
+import { buildEventRecordedItems } from "../lib/bingra/activity-feed";
 
 test("team-key matching: match, mismatch, and neutral wildcard", () => {
   const cells: CardCell[] = [
@@ -454,4 +455,137 @@ test("card and leaderboard use identical threshold-adjusted points for made 3PT 
   assert.equal(cardPoints, eventScore.finalPoints);
   assert.equal(leaderboardPoints, eventScore.finalPoints);
   assert.equal(cardPoints, leaderboardPoints);
+});
+
+test("activity feed shows threshold progress context before completion when progress advances", () => {
+  const items = buildEventRecordedItems({
+    events: [
+      {
+        id: "evt-1",
+        event_key: "THREE_POINTER_MADE",
+        event_label: "Three-pointer made",
+        team_key: "A",
+        created_at: "2026-04-01T10:00:00.000Z",
+      },
+    ],
+    players: [
+      {
+        id: "p1",
+        display_name: "Ava",
+        created_at: "2026-04-01T09:00:00.000Z",
+        accepted_at: "2026-04-01T09:30:00.000Z",
+      },
+    ],
+    playerCardsByPlayerId: new Map([
+      [
+        "p1",
+        {
+          accepted_at: "2026-04-01T09:30:00.000Z",
+          card_cells: [
+            { event_key: "THREE_POINTER_MADE", team_key: "A", point_value: 7, threshold: 2 },
+          ],
+        },
+      ],
+    ]),
+    completionMode: "BLACKOUT",
+    teamNames: { A: "Team A", B: "Team B" },
+    sportProfile: "basketball_college",
+  });
+
+  const recorded = items.find((item) => item.type === "event_recorded");
+  assert.ok(recorded);
+  assert.equal(recorded?.scoreText, "1 player moved closer on 1 card");
+});
+
+test("activity feed threshold-progress context respects team scoping", () => {
+  const items = buildEventRecordedItems({
+    events: [
+      {
+        id: "evt-miss",
+        event_key: "STEAL",
+        event_label: "Steal",
+        team_key: "B",
+        created_at: "2026-04-01T10:00:00.000Z",
+      },
+      {
+        id: "evt-hit",
+        event_key: "STEAL",
+        event_label: "Steal",
+        team_key: "A",
+        created_at: "2026-04-01T10:00:01.000Z",
+      },
+    ],
+    players: [
+      {
+        id: "p1",
+        display_name: "Ava",
+        created_at: "2026-04-01T09:00:00.000Z",
+        accepted_at: "2026-04-01T09:30:00.000Z",
+      },
+    ],
+    playerCardsByPlayerId: new Map([
+      [
+        "p1",
+        {
+          accepted_at: "2026-04-01T09:30:00.000Z",
+          card_cells: [
+            { event_key: "STEAL", team_key: "A", point_value: 8, threshold: 2 },
+          ],
+        },
+      ],
+    ]),
+    completionMode: "BLACKOUT",
+    teamNames: { A: "Team A", B: "Team B" },
+    sportProfile: "basketball_college",
+  });
+
+  const recorded = items.filter((item) => item.type === "event_recorded");
+  assert.equal(recorded[0]?.scoreText, "No points awarded");
+  assert.equal(recorded[1]?.scoreText, "1 player moved closer on 1 card");
+});
+
+test("activity feed keeps stronger scoring message on threshold completion", () => {
+  const items = buildEventRecordedItems({
+    events: [
+      {
+        id: "evt-1",
+        event_key: "TIMEOUT_TAKEN",
+        event_label: "Timeout taken",
+        team_key: "A",
+        created_at: "2026-04-01T10:00:00.000Z",
+      },
+      {
+        id: "evt-2",
+        event_key: "TIMEOUT_TAKEN",
+        event_label: "Timeout taken",
+        team_key: "A",
+        created_at: "2026-04-01T10:00:01.000Z",
+      },
+    ],
+    players: [
+      {
+        id: "p1",
+        display_name: "Ava",
+        created_at: "2026-04-01T09:00:00.000Z",
+        accepted_at: "2026-04-01T09:30:00.000Z",
+      },
+    ],
+    playerCardsByPlayerId: new Map([
+      [
+        "p1",
+        {
+          accepted_at: "2026-04-01T09:30:00.000Z",
+          card_cells: [
+            { event_key: "TIMEOUT_TAKEN", team_key: "A", point_value: 5, threshold: 2 },
+          ],
+        },
+      ],
+    ]),
+    completionMode: "BLACKOUT",
+    teamNames: { A: "Team A", B: "Team B" },
+  });
+
+  const recorded = items.filter((item) => item.type === "event_recorded");
+  assert.equal(recorded[0]?.scoreText, "1 player moved closer on 1 card");
+  assert.ok((recorded[1]?.scoreText ?? "").startsWith("+"));
 });

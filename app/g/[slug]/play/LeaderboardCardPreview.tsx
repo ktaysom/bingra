@@ -116,7 +116,7 @@ export function LeaderboardCardPreview({
         </div>
         <p className="mt-2 text-xs text-bingra-gray-medium">
           {isLive
-            ? "Points update live. Bingra badge means this player gets a 2x multiplier when the game ends."
+            ? "Scores update live. Main score reflects ranking total (includes Bingra 2x when earned)."
             : "Final score = raw points ×2 with Bingra, otherwise raw points."}
         </p>
         <div className="mt-4 space-y-3">
@@ -144,7 +144,7 @@ export function LeaderboardCardPreview({
                   {!entry.is_active
                     ? "0 Points • Not active"
                     : isLive
-                      ? `${entry.raw_points} Points`
+                      ? `${entry.final_score} Points${entry.has_bingra ? ` • Raw ${entry.raw_points}` : ""}`
                       : `Final ${entry.final_score} • Raw ${entry.raw_points}${entry.has_bingra ? " • Bingra x2" : ""}`}
                 </p>
                 <p className="mt-0.5 text-[11px] font-medium text-slate-500 sm:hidden">Tap to view card</p>
