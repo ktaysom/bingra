@@ -37,6 +37,7 @@ import {
 import { AuthEntryPoint } from "../../../../components/auth/AuthEntryPoint";
 import { EndGameSaveStatsPrompt } from "../../../../components/auth/EndGameSaveStatsPrompt";
 import { BingraLogo } from "../../../../components/BingraLogo";
+import { ViewerLocalTimestamp } from "../../../../components/date-time/ViewerLocalTimestamp";
 
 type GameRecord = {
   id: string;
@@ -616,14 +617,6 @@ export async function PlayPageContent({
     sportProfile,
   });
 
-  const formatActivityTimestamp = (iso: string) =>
-    new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(iso));
-
   const getFeedItemContainerClass = (activity: ActivityFeedItem) => {
     const base = "rounded-2xl border shadow-sm";
 
@@ -929,7 +922,10 @@ export async function PlayPageContent({
                         Rare {activity.rarity}
                       </span>
                     )}
-                    <p className="mt-1 text-xs text-slate-500">{formatActivityTimestamp(activity.createdAt)}</p>
+                    <ViewerLocalTimestamp
+                      iso={activity.createdAt}
+                      className="mt-1 text-xs text-slate-500"
+                    />
                   </div>
                 </div>
               </div>
