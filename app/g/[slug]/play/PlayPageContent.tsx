@@ -88,6 +88,7 @@ type RecentScoredEvent = {
   event_label: string | null;
   team_key: string | null;
   created_at: string | null;
+  client_submission_id?: string | null;
 };
 
 type CardRow = {
@@ -218,7 +219,7 @@ export async function PlayPageContent({
     try {
       const { data, error } = await supabase
         .from("scored_events")
-        .select("id, event_key, event_label, team_key, created_at")
+        .select("id, event_key, event_label, team_key, created_at, client_submission_id")
         .eq("game_id", game.id)
         .order("created_at", { ascending: true })
         .order("id", { ascending: true });
@@ -967,6 +968,7 @@ export async function PlayPageContent({
           teamNames={teamNames}
           sportProfile={sportProfile}
           canManageRestrictedScoring={canManageRestrictedScoring}
+          recentConfirmedEvents={allScoredEvents.slice(-20)}
         />
       ) : isLobby ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm sm:p-6">

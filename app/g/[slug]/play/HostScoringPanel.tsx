@@ -38,14 +38,26 @@ type HostScoringPanelProps = {
     B: string;
   };
   sportProfile?: SportProfileKey;
+  recentConfirmedEvents?: Array<{
+    id: string;
+    event_key: string | null;
+    event_label: string | null;
+    team_key: string | null;
+    created_at: string | null;
+    client_submission_id?: string | null;
+  }>;
 };
 
 type RecentEvent = {
+  localId: string;
   recordedEventId?: string;
+  clientSubmissionId?: string;
   eventKey?: string;
   label: string;
   team?: string | null;
   timestamp: string;
+  status: "pending" | "failed" | "confirmed";
+  error?: string;
 };
 
 type Stage =
@@ -139,6 +151,7 @@ export function HostScoringPanel({
   teamScope = "both_teams",
   teamNames = { A: "Team A", B: "Team B" },
   sportProfile = DEFAULT_SPORT_PROFILE,
+  recentConfirmedEvents = [],
 }: HostScoringPanelProps) {
   const router = useRouter();
   const isSoccer = getSportProfileDefinition(sportProfile).sport === "soccer";
@@ -162,7 +175,9 @@ export function HostScoringPanel({
   const [selectedSoccerOutOfBoundsOption, setSelectedSoccerOutOfBoundsOption] =
     useState<SoccerOutOfBoundsOption | null>(null);
 
-  const lastSubmissionRef = useRef<RecentEvent | null>(null);
+  const lastProcessedRecordCompletedAtRef = useRef<string | null>(null);
+  const lastTapRef = useRef<{ actionKey: string; atMs: number } | null>(null);
+  const [activeTapActionKey, setActiveTapActionKey] = useState<string | null>(null);
 
   const parentOptions = useMemo(() => getScorerParentOptions(undefined, sportProfile), [sportProfile]);
   const eventOptions = useMemo(() => {
@@ -198,7 +213,7 @@ export function HostScoringPanel({
     return SOCCER_ACTIONS.filter((action) => action.parent === selectedSoccerParentId);
   }, [selectedSoccerParentId]);
 
-  useEffect(() => {
+  function resetScorerFlow() {
     setStage(isSoccer ? "soccer-parent" : "parent");
     setParent(null);
     setSelectedEventId(null);
@@ -207,33 +222,124 @@ export function HostScoringPanel({
     setSelectedSoccerParentId(null);
     setSelectedSoccerActionId(null);
     setSelectedSoccerOutOfBoundsOption(null);
+  }
+
+  useEffect(() => {
+    resetScorerFlow();
   }, [isSoccer]);
 
   useEffect(() => {
-    if (recordState.success && recordState.completedAt && lastSubmissionRef.current) {
-      const recordedEventId = recordState.recordedEventId;
-      const nextEvent: RecentEvent = {
-        ...lastSubmissionRef.current,
-        recordedEventId: recordedEventId ?? lastSubmissionRef.current.recordedEventId,
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "numeric",
-          minute: "2-digit",
-        }),
-      };
-
-      setRecentEvents((prev) => [nextEvent, ...prev].slice(0, 5));
-      setStage(isSoccer ? "soccer-parent" : "parent");
-      setParent(null);
-      setSelectedEventId(null);
-      setSelectedSubtypeId(null);
-      setSelectedSubtypeGroup(null);
-      setSelectedSoccerParentId(null);
-      setSelectedSoccerActionId(null);
-      setSelectedSoccerOutOfBoundsOption(null);
-      lastSubmissionRef.current = null;
-      router.refresh();
+    if (!recordState.completedAt || lastProcessedRecordCompletedAtRef.current === recordState.completedAt) {
+      return;
     }
-  }, [isSoccer, recordState.success, recordState.completedAt, recordState.recordedEventId, router]);
+    lastProcessedRecordCompletedAtRef.current = recordState.completedAt;
+
+    const submissionId = recordState.clientSubmissionId;
+    if (!submissionId) {
+      if (recordState.success) {
+        router.refresh();
+      }
+      return;
+    }
+
+    if (recordState.success) {
+      setRecentEvents((prev) =>
+        prev.map((entry) =>
+          entry.clientSubmissionId === submissionId
+            ? {
+                ...entry,
+                recordedEventId: recordState.recordedEventId ?? entry.recordedEventId,
+                status: "confirmed",
+                error: undefined,
+              }
+            : entry,
+        ),
+      );
+      router.refresh();
+      return;
+    }
+
+    if (recordState.error || recordState.blocked) {
+      setRecentEvents((prev) =>
+        prev.map((entry) =>
+          entry.clientSubmissionId === submissionId
+            ? {
+                ...entry,
+                status: "failed",
+                error: recordState.error ?? recordState.blockedReason ?? "Failed to save",
+              }
+            : entry,
+        ),
+      );
+    }
+  }, [
+    recordState.success,
+    recordState.error,
+    recordState.blocked,
+    recordState.blockedReason,
+    recordState.completedAt,
+    recordState.recordedEventId,
+    recordState.clientSubmissionId,
+    router,
+  ]);
+
+  useEffect(() => {
+    const confirmedRows: RecentEvent[] = recentConfirmedEvents
+      .slice()
+      .sort((left, right) => {
+        const leftValue = left.created_at ?? "";
+        const rightValue = right.created_at ?? "";
+        if (leftValue < rightValue) return 1;
+        if (leftValue > rightValue) return -1;
+        return left.id.localeCompare(right.id);
+      })
+      .map((row) => ({
+        localId: `confirmed-${row.id}`,
+        recordedEventId: row.id,
+        clientSubmissionId: row.client_submission_id ?? undefined,
+        eventKey: row.event_key ?? undefined,
+        label: row.event_label ?? row.event_key ?? "Recorded event",
+        team: row.team_key,
+        timestamp: (() => {
+          const iso = row.created_at;
+          if (!iso) return "";
+          const date = new Date(iso);
+          if (Number.isNaN(date.getTime())) return "";
+          return date.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          });
+        })(),
+        status: "confirmed",
+      }));
+
+    const confirmedBySubmissionId = new Set(
+      confirmedRows
+        .map((entry) => entry.clientSubmissionId)
+        .filter((value): value is string => Boolean(value)),
+    );
+    const confirmedByEventId = new Set(
+      confirmedRows
+        .map((entry) => entry.recordedEventId)
+        .filter((value): value is string => Boolean(value)),
+    );
+
+    setRecentEvents((prev) => {
+      const unresolvedOptimistic = prev.filter((entry) => {
+        if (entry.clientSubmissionId && confirmedBySubmissionId.has(entry.clientSubmissionId)) {
+          return false;
+        }
+
+        if (entry.recordedEventId && confirmedByEventId.has(entry.recordedEventId)) {
+          return false;
+        }
+
+        return true;
+      });
+
+      return [...unresolvedOptimistic, ...confirmedRows].slice(0, 5);
+    });
+  }, [recentConfirmedEvents]);
 
   useEffect(() => {
     if (deleteState.success && deleteState.completedAt && deleteState.removedEventId) {
@@ -252,19 +358,67 @@ export function HostScoringPanel({
     recordState.blockedReason ??
     (isFinished ? "Scoring is locked because this game has ended." : undefined);
 
-  function submitEvent(eventId: string, label: string, team?: "A" | "B" | null) {
+  function submitEvent(
+    eventId: string,
+    label: string,
+    team?: "A" | "B" | null,
+    existingClientSubmissionId?: string,
+  ) {
     if (isScoringLocked) return;
 
-    lastSubmissionRef.current = {
-      eventKey: eventId,
-      label: label || getEventById(eventId)?.label || eventId,
-      team: team ?? null,
-      timestamp: "",
-    };
+    const actionKey = `${eventId}:${team ?? "none"}`;
+    const nowMs = Date.now();
+    if (
+      !existingClientSubmissionId &&
+      lastTapRef.current &&
+      lastTapRef.current.actionKey === actionKey &&
+      nowMs - lastTapRef.current.atMs < 450
+    ) {
+      return;
+    }
+
+    lastTapRef.current = { actionKey, atMs: nowMs };
+    setActiveTapActionKey(actionKey);
+    window.setTimeout(() => {
+      setActiveTapActionKey((prev) => (prev === actionKey ? null : prev));
+    }, 220);
+
+    const clientSubmissionId = existingClientSubmissionId ?? crypto.randomUUID();
+
+    setRecentEvents((prev) => {
+      const existingIndex = prev.findIndex((entry) => entry.clientSubmissionId === clientSubmissionId);
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = {
+          ...next[existingIndex],
+          status: "pending",
+          error: undefined,
+        };
+        return next.slice(0, 5);
+      }
+
+      const optimisticEvent: RecentEvent = {
+        localId: `optimistic-${clientSubmissionId}`,
+        clientSubmissionId,
+        eventKey: eventId,
+        label: label || getEventById(eventId)?.label || eventId,
+        team: team ?? null,
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+        status: "pending",
+      };
+
+      return [optimisticEvent, ...prev].slice(0, 5);
+    });
+
+    resetScorerFlow();
 
     const formData = new FormData();
     formData.set("slug", slug);
     formData.set("eventKey", eventId);
+    formData.set("clientSubmissionId", clientSubmissionId);
     formData.set("sportProfile", sportProfile);
     if (team) {
       formData.set("team", team);
@@ -273,6 +427,23 @@ export function HostScoringPanel({
     startTransition(() => {
       recordAction(formData);
     });
+  }
+
+  function retryRecent(entry: RecentEvent) {
+    if (!entry.clientSubmissionId || !entry.eventKey) {
+      return;
+    }
+
+    submitEvent(
+      entry.eventKey,
+      entry.label,
+      entry.team === "A" || entry.team === "B" ? entry.team : null,
+      entry.clientSubmissionId,
+    );
+  }
+
+  function dismissRecent(localId: string) {
+    setRecentEvents((prev) => prev.filter((entry) => entry.localId !== localId));
   }
 
   function undoRecent(recordedEventId?: string) {
@@ -531,6 +702,12 @@ export function HostScoringPanel({
     !isScoringLocked &&
     (isSoccer ? stage !== "soccer-parent" : stage !== "parent");
 
+  function getActionButtonClass(baseClassName: string, actionKey: string) {
+    return `${baseClassName} ${
+      activeTapActionKey === actionKey ? "scale-[0.99] opacity-80 ring-2 ring-blue-200" : ""
+    }`;
+  }
+
   return (
     <section className="surface-card p-4 sm:p-6">
       <div className="flex items-center justify-between">
@@ -559,7 +736,7 @@ export function HostScoringPanel({
 
       {recordState.error && <p className="mt-3 text-xs text-red-600">{recordState.error}</p>}
       {deleteState.error && <p className="mt-3 text-xs text-red-600">{deleteState.error}</p>}
-      {recordState.success && <p className="mt-3 text-xs text-bingra-green">Recorded.</p>}
+      {recordState.success && <p className="mt-3 text-xs text-bingra-green">Saved.</p>}
 
       {lockReason && (
         <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -622,7 +799,10 @@ export function HostScoringPanel({
                   key={team}
                   type="button"
                   onClick={() => handleTeamSelect(team)}
-                  className="btn-primary min-h-20 w-full rounded-2xl px-4 py-5 text-center text-base"
+                  className={getActionButtonClass(
+                    "btn-primary min-h-20 w-full rounded-2xl px-4 py-5 text-center text-base",
+                    `${selectedSoccerOutOfBoundsOption?.eventKey ?? selectedSoccerAction?.eventKey ?? "soccer"}:${team}`,
+                  )}
                 >
                   {teamNames[team]}
                 </button>
@@ -682,7 +862,10 @@ export function HostScoringPanel({
                   key={team}
                   type="button"
                   onClick={() => handleTeamSelect(team)}
-                  className="btn-primary min-h-20 w-full rounded-2xl px-4 py-5 text-center text-base"
+                  className={getActionButtonClass(
+                    "btn-primary min-h-20 w-full rounded-2xl px-4 py-5 text-center text-base",
+                    `${finalEvent?.id ?? "event"}:${team}`,
+                  )}
                 >
                   {teamNames[team]}
                 </button>
@@ -707,12 +890,20 @@ export function HostScoringPanel({
               const baseEventKey = resolveBaseEventKey(entry.eventKey);
               const catalogEvent = baseEventKey ? getEventById(baseEventKey) : undefined;
               const label = catalogEvent?.label ?? entry.label ?? "Recorded event";
-              const isNewest = index === 0 && !!entry.recordedEventId;
+              const isNewestConfirmed = index === 0 && !!entry.recordedEventId && entry.status === "confirmed";
+              const isPending = entry.status === "pending";
+              const isFailed = entry.status === "failed";
 
               return (
                 <li
-                  key={`${entry.recordedEventId ?? entry.eventKey ?? entry.label}-${index}`}
-                  className="flex items-center justify-between gap-3 rounded-2xl bg-white/90 px-4 py-3 shadow-sm"
+                  key={entry.localId}
+                  className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 shadow-sm ${
+                    isPending
+                      ? "bg-slate-50 text-slate-500"
+                      : isFailed
+                        ? "bg-red-50/70"
+                        : "bg-white/90"
+                  }`}
                 >
                   <div className="min-w-0">
                     <p className="truncate font-medium text-slate-900">{label}</p>
@@ -721,11 +912,20 @@ export function HostScoringPanel({
                         {entry.team === "A" ? teamNames.A : teamNames.B}
                       </p>
                     ) : null}
+                    {isPending ? (
+                      <p className="mt-1 inline-flex items-center gap-1.5 text-[11px] text-slate-500">
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border border-slate-400 border-t-transparent" />
+                        Saving…
+                      </p>
+                    ) : null}
+                    {isFailed ? (
+                      <p className="mt-1 text-[11px] text-red-700">{entry.error ?? "Save failed"}</p>
+                    ) : null}
                   </div>
 
                   <div className="flex items-center gap-3">
                     <span className="shrink-0 text-[11px] text-slate-400">{entry.timestamp}</span>
-                    {isNewest && (
+                    {isNewestConfirmed && (
                       <button
                         type="button"
                         onClick={() => undoRecent(entry.recordedEventId)}
@@ -733,6 +933,24 @@ export function HostScoringPanel({
                       >
                         Undo
                       </button>
+                    )}
+                    {isFailed && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => retryRecent(entry)}
+                          className="btn-secondary rounded-2xl px-3 py-1 text-xs font-medium text-slate-700"
+                        >
+                          Retry
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => dismissRecent(entry.localId)}
+                          className="btn-secondary rounded-2xl px-3 py-1 text-xs font-medium text-red-600"
+                        >
+                          Dismiss
+                        </button>
+                      </>
                     )}
                   </div>
                 </li>

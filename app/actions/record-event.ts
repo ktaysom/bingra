@@ -30,6 +30,7 @@ export type RecordEventFormState = {
   error?: string;
   success?: boolean;
   recordedEventId?: string;
+  clientSubmissionId?: string;
   completedAt?: string;
   blocked?: boolean;
   blockedReason?: string;
@@ -43,6 +44,7 @@ const recordEventSchema = z.object({
   outcomeType: z.enum(SOCCER_OUTCOME_TYPES).optional(),
   causingTeam: z.union([z.literal("A"), z.literal("B"), z.null()]).optional(),
   beneficiaryTeam: z.union([z.literal("A"), z.literal("B"), z.null()]).optional(),
+  clientSubmissionId: z.string().uuid("Invalid submission id").optional(),
   team: z.union([
     z.literal("A"),
     z.literal("B"),
@@ -75,6 +77,7 @@ export async function recordEventAction(
   const rawOutcomeType = formData.get("outcomeType");
   const rawCausingTeam = formData.get("causingTeam");
   const rawBeneficiaryTeam = formData.get("beneficiaryTeam");
+  const rawClientSubmissionId = formData.get("clientSubmissionId");
 
   console.info("[recordEventAction][perf] action start", {
     startedAt: new Date(actionStartedAt).toISOString(),
@@ -104,6 +107,10 @@ export async function recordEventAction(
       rawCausingTeam === "A" || rawCausingTeam === "B" ? rawCausingTeam : null,
     beneficiaryTeam:
       rawBeneficiaryTeam === "A" || rawBeneficiaryTeam === "B" ? rawBeneficiaryTeam : null,
+    clientSubmissionId:
+      typeof rawClientSubmissionId === "string" && rawClientSubmissionId.trim().length > 0
+        ? rawClientSubmissionId.trim()
+        : undefined,
     team:
       rawTeam === "A" || rawTeam === "B" ? rawTeam : null,
   });
@@ -231,6 +238,10 @@ export async function recordEventAction(
     created_at: new Date().toISOString(),
   };
 
+  if (parsed.data.clientSubmissionId) {
+    insertPayload.client_submission_id = parsed.data.clientSubmissionId;
+  }
+
   if (compatibleTeam) {
     insertPayload.team_key = compatibleTeam;
   }
@@ -243,12 +254,39 @@ export async function recordEventAction(
   const { data: inserted, error: insertError } = await supabase
     .from("scored_events")
     .insert(insertPayload)
-    .select("id")
+    .select("id, client_submission_id")
     .maybeSingle();
   console.info("[recordEventAction][perf] scored_events insert end", {
     durationMs: Date.now() - scoredEventInsertStartedAt,
     insertedEventId: inserted?.id ?? null,
   });
+
+  if (insertError && insertError.code === "23505" && parsed.data.clientSubmissionId) {
+    const { data: existing, error: existingLookupError } = await supabase
+      .from("scored_events")
+      .select("id, client_submission_id")
+      .eq("game_id", game.id)
+      .eq("client_submission_id", parsed.data.clientSubmissionId)
+      .maybeSingle();
+
+    if (existingLookupError) {
+      logTotalDuration();
+      return {
+        error: formatError(existingLookupError),
+        completedAt: new Date().toISOString(),
+      };
+    }
+
+    if (existing?.id) {
+      logTotalDuration();
+      return {
+        success: true,
+        recordedEventId: existing.id,
+        clientSubmissionId: existing.client_submission_id ?? parsed.data.clientSubmissionId,
+        completedAt: new Date().toISOString(),
+      };
+    }
+  }
 
   if (insertError) {
     const schemaHint = insertError.code === "PGRST204" ? " (schema mismatch: column missing)" : "";
@@ -458,6 +496,7 @@ export async function recordEventAction(
     return {
       success: true,
       recordedEventId: inserted.id,
+      clientSubmissionId: inserted.client_submission_id ?? parsed.data.clientSubmissionId,
       completedAt: currentTime,
     };
   }
@@ -466,6 +505,7 @@ export async function recordEventAction(
   return {
     success: true,
     recordedEventId: inserted.id,
+    clientSubmissionId: inserted.client_submission_id ?? parsed.data.clientSubmissionId,
     completedAt: new Date().toISOString(),
   };
 }
