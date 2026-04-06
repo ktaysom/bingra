@@ -2,8 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
+import { useEffect, useState } from "react";
+import { normalizePendingAuthContext } from "../../lib/auth/auth-redirect";
+import {
+  getExpectedPhoneOtpLength,
+  normalizePhoneToE164,
+  PHONE_RESEND_COOLDOWN_SECONDS,
+  sendPhoneSignInOtp,
+  verifyPhoneOtpAndGetFinalizePath,
+} from "../../lib/auth/phone-auth-client";
 
 const CONSENT_TEXT =
   "By continuing, you agree to receive a one-time SMS code from Bingra for login. Message & data rates may apply.";
@@ -16,65 +23,6 @@ type PhoneAuthFormProps = {
 
 type PhoneStep = "enter_phone" | "enter_code";
 
-function getAppBaseUrl(): string {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (configured) {
-    return configured;
-  }
-
-  return window.location.origin;
-}
-
-function buildFinalizeUrl(nextPath: string, linkPlayerId?: string): string {
-  const finalizeUrl = new URL("/auth/finalize", getAppBaseUrl());
-  finalizeUrl.searchParams.set("next", nextPath);
-
-  if (linkPlayerId) {
-    finalizeUrl.searchParams.set("link_player_id", linkPlayerId);
-  }
-
-  return finalizeUrl.toString();
-}
-
-function normalizePhoneToE164(input: string): { phone?: string; error?: string } {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    return { error: "Please enter a phone number" };
-  }
-
-  const compact = trimmed.replace(/[\s().-]/g, "");
-
-  if (compact.startsWith("+")) {
-    const internationalDigits = compact.slice(1).replace(/\D/g, "");
-
-    if (internationalDigits.length < 8 || internationalDigits.length > 15) {
-      return { error: "Enter a valid phone number with country code (example: +1 555 123 4567)" };
-    }
-
-    return { phone: `+${internationalDigits}` };
-  }
-
-  const digits = compact.replace(/\D/g, "");
-
-  if (digits.length === 10) {
-    return { phone: `+1${digits}` };
-  }
-
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return { phone: `+${digits}` };
-  }
-
-  if (digits.startsWith("00") && digits.length > 3) {
-    const converted = digits.slice(2);
-
-    if (converted.length >= 8 && converted.length <= 15) {
-      return { phone: `+${converted}` };
-    }
-  }
-
-  return { error: "Enter a valid US phone number, or include country code for non-US numbers" };
-}
-
 export function PhoneAuthForm({ nextPath, linkPlayerId, onUseEmailInstead }: PhoneAuthFormProps) {
   const router = useRouter();
   const [step, setStep] = useState<PhoneStep>("enter_phone");
@@ -84,6 +32,29 @@ export function PhoneAuthForm({ nextPath, linkPlayerId, onUseEmailInstead }: Pho
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
+  const expectedOtpLength = getExpectedPhoneOtpLength();
+
+  const pendingContext = normalizePendingAuthContext({
+    nextPath,
+    linkPlayerId,
+    playerId: linkPlayerId,
+    intent: linkPlayerId ? "save_stats" : "sign_in",
+  });
+
+  useEffect(() => {
+    if (!resendSecondsLeft) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setResendSecondsLeft((previous) => (previous <= 1 ? 0 : previous - 1));
+    }, 1_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [resendSecondsLeft]);
 
   const handleSendCode = async () => {
     const normalized = normalizePhoneToE164(phoneNumber);
@@ -97,18 +68,16 @@ export function PhoneAuthForm({ nextPath, linkPlayerId, onUseEmailInstead }: Pho
     setStatus(null);
 
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { error: sendError } = await supabase.auth.signInWithOtp({
+      const { phone } = await sendPhoneSignInOtp({
         phone: normalized.phone,
+        pendingContext,
+        shouldCreateUser: true,
       });
 
-      if (sendError) {
-        throw sendError;
-      }
-
-      setNormalizedPhone(normalized.phone);
+      setNormalizedPhone(phone);
       setStep("enter_code");
-      setStatus("Verification code sent. Enter the 6-digit code to continue.");
+      setResendSecondsLeft(PHONE_RESEND_COOLDOWN_SECONDS);
+      setStatus(`Verification code sent. Enter the ${expectedOtpLength}-digit code to continue.`);
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Unable to send verification code");
     } finally {
@@ -126,8 +95,8 @@ export function PhoneAuthForm({ nextPath, linkPlayerId, onUseEmailInstead }: Pho
     }
 
     const token = code.replace(/\D/g, "");
-    if (token.length !== 6) {
-      setError("Enter the 6-digit code sent to your phone");
+    if (token.length !== expectedOtpLength) {
+      setError(`Enter the ${expectedOtpLength}-digit code sent to your phone`);
       return;
     }
 
@@ -136,22 +105,51 @@ export function PhoneAuthForm({ nextPath, linkPlayerId, onUseEmailInstead }: Pho
     setStatus(null);
 
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { error: verifyError } = await supabase.auth.verifyOtp({
+      const { finalizePath, phone: verifiedPhone } = await verifyPhoneOtpAndGetFinalizePath({
         phone,
         token,
-        type: "sms",
+        pendingContext,
       });
 
-      if (verifyError) {
-        throw verifyError;
-      }
-
+      setNormalizedPhone(verifiedPhone);
       setStatus("Signed in. Redirecting...");
-      const finalizeUrl = buildFinalizeUrl(nextPath, linkPlayerId);
-      router.push(finalizeUrl);
+      router.push(finalizePath);
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Unable to verify code");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (resendSecondsLeft > 0) {
+      return;
+    }
+
+    const sourcePhone = normalizedPhone ?? phoneNumber;
+    const normalized = normalizePhoneToE164(sourcePhone);
+    if (!normalized.phone) {
+      setError(normalized.error ?? "Enter a valid phone number");
+      setStep("enter_phone");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    setStatus(null);
+
+    try {
+      const { phone } = await sendPhoneSignInOtp({
+        phone: normalized.phone,
+        pendingContext,
+        shouldCreateUser: true,
+      });
+
+      setNormalizedPhone(phone);
+      setResendSecondsLeft(PHONE_RESEND_COOLDOWN_SECONDS);
+      setStatus(`New ${expectedOtpLength}-digit code sent.`);
+    } catch (authError) {
+      setError(authError instanceof Error ? authError.message : "Unable to resend verification code");
     } finally {
       setIsSubmitting(false);
     }
@@ -201,19 +199,27 @@ export function PhoneAuthForm({ nextPath, linkPlayerId, onUseEmailInstead }: Pho
 
           <div>
             <label htmlFor="phone-code" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Enter the 6-digit code
+              Enter the {expectedOtpLength}-digit code
             </label>
             <input
               id="phone-code"
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={6}
+              maxLength={expectedOtpLength}
               value={code}
-              onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="123456"
+              onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, expectedOtpLength))}
+              placeholder={"0".repeat(expectedOtpLength)}
               className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm tracking-[0.25em] text-slate-900 outline-none focus:border-slate-400"
             />
+            <button
+              type="button"
+              onClick={handleResendCode}
+              disabled={isSubmitting || resendSecondsLeft > 0}
+              className="mt-2 inline-flex h-8 items-center justify-center text-xs font-semibold text-slate-600 underline disabled:opacity-60"
+            >
+              {resendSecondsLeft > 0 ? `Resend code in ${resendSecondsLeft}s` : "Resend code"}
+            </button>
           </div>
         </>
       ) : null}

@@ -24,6 +24,7 @@ import {
   type RecordedEvent,
   type CardCell as ProgressCardCell,
 } from "../../../../lib/bingra/card-progress";
+import { getEventScoreForCell } from "../../../../lib/bingra/game-scoring";
 import { buildGameScores } from "../../../../lib/bingra/game-results";
 import {
   buildActivityFeedItems,
@@ -508,18 +509,39 @@ export async function PlayPageContent({
           cell.team_key === "A" || cell.team_key === "B"
             ? cell.team_key
             : parsedEventKey.qualifiedTeamKey;
+        const thresholdLevel =
+          typeof cellProgress[index]?.threshold === "number"
+            ? cellProgress[index].threshold
+            : typeof cell.threshold === "number"
+              ? cell.threshold
+              : 1;
+        const basePoints = typeof cell.point_value === "number" ? cell.point_value : 0;
+        const eventScore = getEventScoreForCell({
+          basePoints,
+          thresholdLevel,
+        });
+
+        if (process.env.DEBUG_BINGRA_SCORING === "1" && cellProgress[index]?.is_completed) {
+          console.info("[bingra][scoring-debug]", {
+            playerId: player.id,
+            event: parsedEventKey.baseEventKey ?? cell.event_key ?? `Event ${index + 1}`,
+            threshold: `${cellProgress[index]?.required_count ?? thresholdLevel}+`,
+            basePoints: eventScore.basePoints,
+            multiplier: eventScore.thresholdMultiplier,
+            computedPoints: eventScore.finalPoints,
+            pointsUsedInLeaderboard: eventScore.finalPoints,
+            pointsShownInCard: eventScore.finalPoints,
+          });
+        }
 
         return {
           order_index: cell.order_index,
           event_label: cell.event_label ?? parsedEventKey.baseEventKey ?? `Event ${index + 1}`,
           team_key: resolvedTeamKey,
-          point_value: typeof cell.point_value === "number" ? cell.point_value : 0,
-          threshold:
-            typeof cellProgress[index]?.threshold === "number"
-              ? cellProgress[index].threshold
-              : typeof cell.threshold === "number"
-                ? cell.threshold
-                : 1,
+          point_value: basePoints,
+          final_points: eventScore.finalPoints,
+          threshold_multiplier: eventScore.thresholdMultiplier,
+          threshold: thresholdLevel,
           required_count:
             typeof cellProgress[index]?.required_count === "number"
               ? cellProgress[index].required_count

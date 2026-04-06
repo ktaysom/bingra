@@ -20,6 +20,8 @@ type PreviewCardCell = {
   event_label: string;
   team_key: "A" | "B" | null;
   point_value: number;
+  final_points: number;
+  threshold_multiplier: number;
   threshold: number;
   required_count?: number;
   current_count: number;
@@ -247,7 +249,7 @@ export function LeaderboardCardPreview({
                             </p>
                             {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                             <div className="mt-1 flex items-center justify-between text-xs">
-                              <span className="text-slate-500">{cell.point_value} pts</span>
+                              <span className="text-slate-500">{cell.final_points} pts</span>
                               <span
                                 className={cell.is_completed ? "font-semibold text-blue-600" : "text-slate-500"}
                               >
@@ -286,7 +288,7 @@ export function LeaderboardCardPreview({
                             </p>
                             {teamName && <p className="text-[11px] text-slate-500">{teamName}</p>}
                             <div className="mt-1 flex items-center justify-between text-xs">
-                              <span className="text-slate-500">{cell.point_value} pts</span>
+                              <span className="text-slate-500">{cell.final_points} pts</span>
                               <span
                                 className={cell.is_completed ? "font-semibold text-blue-600" : "text-slate-500"}
                               >

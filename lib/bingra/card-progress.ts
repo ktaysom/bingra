@@ -3,7 +3,7 @@ export type CompletionMode = "BLACKOUT" | "STREAK";
 import { cardCellEventMatchesRecordedEvent } from "./card-event-key";
 import { resolveBaseEventKey } from "./card-event-key";
 import { getEventById } from "./event-logic";
-import { getThresholdScoreMultiplier } from "./game-scoring";
+import { getEventScoreForCell } from "./game-scoring";
 import { DEFAULT_SPORT_PROFILE, type SportProfileKey } from "./sport-profiles";
 import {
   getRequiredCountForThresholdLevel,
@@ -62,7 +62,10 @@ function toPointValue(value: number | null | undefined): number {
 }
 
 function calculateThresholdAdjustedPoints(basePoints: number, threshold: number): number {
-  return Math.round(basePoints * getThresholdScoreMultiplier(threshold));
+  return getEventScoreForCell({
+    basePoints,
+    thresholdLevel: threshold,
+  }).finalPoints;
 }
 
 function toThreshold(value: number | null | undefined): number {

@@ -22,6 +22,7 @@ type AccountPageProps = {
     expected_link?: string;
     auth_intent?: string;
     email?: string;
+    phone?: string;
   }>;
 };
 
@@ -45,6 +46,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
     expectedLink: params?.expected_link === "1",
     intent: authIntent,
     email: typeof params?.email === "string" ? params.email : undefined,
+    phone: typeof params?.phone === "string" ? params.phone : undefined,
   };
   const supabase = await createSupabaseServerClient();
   const cookieStore = await (await import("next/headers")).cookies();

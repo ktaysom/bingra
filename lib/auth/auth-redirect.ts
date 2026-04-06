@@ -8,6 +8,7 @@ export type PendingAuthContext = {
   expectedLink?: boolean;
   intent?: PostAuthIntent;
   email?: string;
+  phone?: string;
 };
 
 const PENDING_AUTH_STORAGE_KEY = "bingra.pending-auth-context.v1";
@@ -171,6 +172,7 @@ export function normalizePendingAuthContext(
     expectedLink: Boolean(context?.expectedLink),
     intent: context?.intent,
     email: context?.email?.trim() || undefined,
+    phone: context?.phone?.trim() || undefined,
   };
 }
 
@@ -197,6 +199,7 @@ export function readPendingAuthContextFromSearchParams(
       linkPlayerId: readParamWithNestedFallback(searchParams, nestedParams, "link_player_id") ?? undefined,
       expectedLink: readParamWithNestedFallback(searchParams, nestedParams, "expected_link") === "1",
       email: readParamWithNestedFallback(searchParams, nestedParams, "email") ?? undefined,
+      phone: readParamWithNestedFallback(searchParams, nestedParams, "phone") ?? undefined,
       intent:
         intentValue === "save_stats" ||
         intentValue === "account_link" ||
@@ -209,9 +212,17 @@ export function readPendingAuthContextFromSearchParams(
 }
 
 export function hasPendingAuthContextInSearchParams(searchParams: URLSearchParams): boolean {
-  return ["next", "redirect_to", "game_slug", "player_id", "link_player_id", "expected_link", "auth_intent", "email"].some((key) =>
-    searchParams.has(key),
-  );
+  return [
+    "next",
+    "redirect_to",
+    "game_slug",
+    "player_id",
+    "link_player_id",
+    "expected_link",
+    "auth_intent",
+    "email",
+    "phone",
+  ].some((key) => searchParams.has(key));
 }
 
 function buildCookiePayload(context: PendingAuthContext) {
@@ -338,6 +349,10 @@ export function buildAuthConfirmPath(context: PendingAuthContext): string {
 
   if (normalized.email) {
     confirmUrl.searchParams.set("email", normalized.email);
+  }
+
+  if (normalized.phone) {
+    confirmUrl.searchParams.set("phone", normalized.phone);
   }
 
   return `${confirmUrl.pathname}${confirmUrl.search}`;

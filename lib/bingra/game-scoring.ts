@@ -15,6 +15,38 @@ export function getThresholdScoreMultiplier(threshold: number): number {
   return THRESHOLD_SCORE_MULTIPLIER_BY_LEVEL[clampedThreshold];
 }
 
+export type EventScoreForCellInput = {
+  basePoints: number;
+  thresholdLevel: number;
+};
+
+export type EventScoreForCell = {
+  basePoints: number;
+  thresholdLevel: number;
+  thresholdMultiplier: number;
+  finalPoints: number;
+};
+
+function normalizeBasePoints(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
+
+export function getEventScoreForCell(input: EventScoreForCellInput): EventScoreForCell {
+  const basePoints = normalizeBasePoints(input.basePoints);
+  const thresholdLevel = Number.isFinite(input.thresholdLevel)
+    ? Math.max(1, Math.ceil(input.thresholdLevel))
+    : 1;
+  const thresholdMultiplier = getThresholdScoreMultiplier(thresholdLevel);
+  const finalPoints = Math.round(basePoints * thresholdMultiplier);
+
+  return {
+    basePoints,
+    thresholdLevel,
+    thresholdMultiplier,
+    finalPoints,
+  };
+}
+
 export type ScoreBreakdown = {
   raw_points: number;
   has_bingra: boolean;

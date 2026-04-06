@@ -9,6 +9,8 @@ import {
   type CardCell,
   type RecordedEvent,
 } from "../lib/bingra/card-progress.ts";
+import { getEventScoreForCell } from "../lib/bingra/game-scoring.ts";
+import { buildGameScores } from "../lib/bingra/game-results.ts";
 import {
   assertUniqueCardCellEventKeys,
   buildCardCellEventKey,
@@ -410,4 +412,46 @@ test("college/pro basketball base points are rebalanced for threshold-required-c
     assert.ok(event, `${eventId} should exist`);
     assert.equal(event?.scoringByProfile.basketball_pro, points, `${eventId} pro points`);
   }
+});
+
+test("card and leaderboard use identical threshold-adjusted points for made 3PT threshold card cells", () => {
+  const acceptedAt = "2026-04-01T10:00:00.000Z";
+  const cells: CardCell[] = [
+    { event_key: "THREE_POINTER_MADE", team_key: "A", point_value: 7, threshold: 2 },
+  ];
+
+  const events: RecordedEvent[] = Array.from({ length: 8 }, (_, index) => ({
+    event_key: "THREE_POINTER_MADE",
+    team_key: "A",
+    created_at: `2026-04-01T10:00:${String(index).padStart(2, "0")}.000Z`,
+  }));
+
+  const cellProgress = calculateCardCellProgress(events, cells, "BLACKOUT", "basketball_college");
+  assert.equal(cellProgress[0]?.required_count, 8);
+  assert.equal(cellProgress[0]?.is_completed, true);
+
+  const cardProgress = calculateCardProgress(events, cells, "BLACKOUT", "basketball_college");
+  const eventScore = getEventScoreForCell({
+    basePoints: 7,
+    thresholdLevel: cellProgress[0]?.threshold ?? 1,
+  });
+
+  const leaderboard = buildGameScores({
+    players: [{ id: "p1", display_name: "Kyle", created_at: acceptedAt }],
+    cards: [{ player_id: "p1", accepted_at: acceptedAt, card_cells: cells }],
+    recordedEvents: events,
+    completionMode: "BLACKOUT",
+    sportProfile: "basketball_college",
+    bingraPlayerIds: new Set<string>(),
+    bingraCompletedAtByPlayerId: new Map<string, string>(),
+  });
+
+  const leaderboardPoints = leaderboard[0]?.raw_points ?? 0;
+  const cardPoints = cardProgress.score;
+
+  assert.equal(eventScore.thresholdMultiplier, 2.2);
+  assert.equal(eventScore.finalPoints, 15);
+  assert.equal(cardPoints, eventScore.finalPoints);
+  assert.equal(leaderboardPoints, eventScore.finalPoints);
+  assert.equal(cardPoints, leaderboardPoints);
 });

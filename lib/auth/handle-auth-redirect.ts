@@ -57,6 +57,9 @@ function buildAuthErrorResponse(request: NextRequest, message: string, pendingCo
   if (pendingContext.email) {
     fallbackRedirect.searchParams.set("email", pendingContext.email);
   }
+  if (pendingContext.phone) {
+    fallbackRedirect.searchParams.set("phone", pendingContext.phone);
+  }
   return redirectWithRequestMethod(request, fallbackRedirect);
 }
 
