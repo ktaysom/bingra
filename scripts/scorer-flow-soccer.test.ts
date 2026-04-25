@@ -14,7 +14,6 @@ const SOCCER_EVENT_IDS = [
   "SHOT_ON_GOAL_GOAL",
   "SHOT_ON_GOAL_ASSISTED_GOAL",
   "SHOT_ON_GOAL_GOAL_OFF_REBOUND",
-  "SHOT_ON_GOAL_SAVE",
   "SHOT_ON_GOAL_BLOCKED",
   "SHOT_ON_GOAL_HIT_POST_CROSSBAR",
   "SHOT_OFF_TARGET",
@@ -23,9 +22,13 @@ const SOCCER_EVENT_IDS = [
   "OUT_OF_BOUNDS_GOAL_KICK",
   "FOUL",
   "HANDBALL_CALL",
-  "LIVE_BALL_TURNOVER",
   "YELLOW_CARD",
   "RED_CARD",
+] as const;
+
+const SOCCER_NON_YOUTH_EVENT_IDS = [
+  "SHOT_ON_GOAL_SAVE",
+  "LIVE_BALL_TURNOVER",
 ] as const;
 
 const REMOVED_SOCCER_EVENT_IDS = [
@@ -52,6 +55,22 @@ test("soccer events only appear for soccer profiles", () => {
   for (const eventId of SOCCER_EVENT_IDS) {
     assert.ok(soccerIds.has(eventId), `${eventId} should be enabled for soccer`);
     assert.equal(basketballIds.has(eventId), false, `${eventId} should not be enabled for basketball`);
+  }
+});
+
+test("save and live ball turnover are excluded from Youth Soccer but remain in older soccer levels", () => {
+  const youthIds = new Set(getEventsForMode("classic", "soccer_youth").map((event) => event.id));
+  const highSchoolIds = new Set(
+    getEventsForMode("classic", "soccer_high_school").map((event) => event.id),
+  );
+
+  for (const eventId of SOCCER_NON_YOUTH_EVENT_IDS) {
+    assert.equal(youthIds.has(eventId), false, `${eventId} should be removed from youth soccer`);
+    assert.equal(
+      highSchoolIds.has(eventId),
+      true,
+      `${eventId} should still be enabled for non-youth soccer`,
+    );
   }
 });
 
@@ -89,7 +108,12 @@ test("ANY_GOAL stays in soccer catalog pool but is hidden from host scorer", () 
   const anyGoal = getEventById("ANY_GOAL");
   assert.ok(anyGoal);
   assert.equal(anyGoal?.enabled, true);
-  assert.deepEqual(anyGoal?.enabledProfiles, ["soccer_youth", "soccer_high_school"]);
+  assert.deepEqual(anyGoal?.enabledProfiles, [
+    "soccer_youth",
+    "soccer_high_school",
+    "soccer_college",
+    "soccer_pro",
+  ]);
   assert.equal(anyGoal?.scorerEnabled, false);
 
   const soccerEventIds = new Set(getEventsForMode("classic", "soccer_youth").map((event) => event.id));
@@ -122,6 +146,35 @@ test("soccer subtype flows resolve for score and change-of-possession", () => {
       (option) => option.subtypeGroup === "soccer-out-of-bounds" && option.label === "Out of bounds",
     ),
   );
+});
+
+test("youth soccer shot-on-goal subtype excludes save while retaining blocked shot", () => {
+  const youthShotOnGoalSubtypes = getScorerSubtypeOptions(
+    "soccer-shot-on-goal",
+    "classic",
+    "soccer_youth",
+  );
+  const highSchoolShotOnGoalSubtypes = getScorerSubtypeOptions(
+    "soccer-shot-on-goal",
+    "classic",
+    "soccer_high_school",
+  );
+
+  assert.equal(youthShotOnGoalSubtypes.some((option) => option.id === "SHOT_ON_GOAL_SAVE"), false);
+  assert.equal(youthShotOnGoalSubtypes.some((option) => option.id === "SHOT_ON_GOAL_BLOCKED"), true);
+  assert.equal(highSchoolShotOnGoalSubtypes.some((option) => option.id === "SHOT_ON_GOAL_SAVE"), true);
+});
+
+test("youth soccer change-of-possession options exclude live ball turnover", () => {
+  const youthOptions = getScorerEventsForParent("change-of-possession", "classic", "soccer_youth");
+  const highSchoolOptions = getScorerEventsForParent(
+    "change-of-possession",
+    "classic",
+    "soccer_high_school",
+  );
+
+  assert.equal(youthOptions.some((option) => option.id === "LIVE_BALL_TURNOVER"), false);
+  assert.equal(highSchoolOptions.some((option) => option.id === "LIVE_BALL_TURNOVER"), true);
 });
 
 test("SHOT_OFF_TARGET is direct score event, not part of shot-on-goal subtype flow", () => {

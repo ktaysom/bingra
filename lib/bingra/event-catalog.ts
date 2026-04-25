@@ -136,6 +136,12 @@ const SOCCER_PROFILES: SportProfileKey[] = [
   "soccer_pro",
 ];
 
+const SOCCER_NON_YOUTH_PROFILES: SportProfileKey[] = [
+  "soccer_high_school",
+  "soccer_college",
+  "soccer_pro",
+];
+
 const BASKETBALL_YOUTH_PROFILES: SportProfileKey[] = ["basketball_youth"];
 
 const BASKETBALL_HIGH_SCHOOL_PROFILES: SportProfileKey[] = ["basketball_high_school"];
@@ -826,7 +832,7 @@ export const EVENT_CATALOG: GameEventType[] = [
       soccer_college: 3,
       soccer_pro: 4,
     }),
-    enabledProfiles: SOCCER_PROFILES,
+    enabledProfiles: SOCCER_NON_YOUTH_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
     teamScope: "team",
@@ -1125,7 +1131,7 @@ export const EVENT_CATALOG: GameEventType[] = [
       soccer_college: 3,
       soccer_pro: 3,
     }),
-    enabledProfiles: SOCCER_PROFILES,
+    enabledProfiles: SOCCER_NON_YOUTH_PROFILES,
     enabled: true,
     allowedModes: ["classic", "streak"],
     teamScope: "team",

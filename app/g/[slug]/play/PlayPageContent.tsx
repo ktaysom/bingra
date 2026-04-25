@@ -116,6 +116,124 @@ type PlayPageContentProps = {
   canManageRestrictedScoring: boolean;
 };
 
+type PlayDataClient = ReturnType<typeof createSupabaseAdminClient>;
+
+async function fetchPlayers(
+  supabase: PlayDataClient,
+  gameId: string,
+  logTiming: (segment: string, startedAt: number, extra?: Record<string, unknown>) => void,
+) {
+  const startedAt = Date.now();
+  const { data, error } = await supabase
+    .from("players")
+    .select("id, display_name, role, created_at")
+    .eq("game_id", gameId)
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .returns<PlayerRecord[]>();
+
+  logTiming("players-fetch", startedAt, {
+    count: data?.length ?? 0,
+    hasError: Boolean(error),
+  });
+
+  return {
+    players: data,
+    playersError: error?.message ?? null,
+  };
+}
+
+async function fetchCards(
+  supabase: PlayDataClient,
+  gameId: string,
+  logTiming: (segment: string, startedAt: number, extra?: Record<string, unknown>) => void,
+) {
+  const startedAt = Date.now();
+  const { data, error } = await supabase
+    .from("cards")
+    .select("id, player_id, accepted_at, card_cells(order_index, event_key, event_label, team_key, point_value, threshold)")
+    .eq("game_id", gameId)
+    .returns<CardRow[]>();
+
+  logTiming("player-card-fetch", startedAt, {
+    count: data?.length ?? 0,
+    hasError: Boolean(error),
+  });
+
+  return {
+    cardsForGame: !error && data ? data : [],
+  };
+}
+
+async function fetchScoredEvents(
+  supabase: PlayDataClient,
+  gameId: string,
+  logTiming: (segment: string, startedAt: number, extra?: Record<string, unknown>) => void,
+) {
+  const startedAt = Date.now();
+  try {
+    const { data, error } = await supabase
+      .from("scored_events")
+      .select("id, event_key, event_label, team_key, created_at, client_submission_id")
+      .eq("game_id", gameId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+
+    const rows = (data as RecentScoredEvent[] | null) ?? [];
+    logTiming("scored-events-fetch", startedAt, {
+      count: rows.length,
+      hasError: Boolean(error),
+    });
+    return {
+      allScoredEvents: rows,
+    };
+  } catch (error) {
+    console.error("Unable to load scored events", error);
+    logTiming("scored-events-fetch", startedAt, {
+      count: 0,
+      hasError: true,
+    });
+    return {
+      allScoredEvents: [] as RecentScoredEvent[],
+    };
+  }
+}
+
+async function fetchCompletions(
+  supabase: PlayDataClient,
+  gameId: string,
+  logTiming: (segment: string, startedAt: number, extra?: Record<string, unknown>) => void,
+) {
+  const startedAt = Date.now();
+  try {
+    const { data, error } = await supabase
+      .from("game_completions")
+      .select("id, player_id, completed_at_event_id, created_at")
+      .eq("game_id", gameId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+
+    const rows = (data as LiveCompletionRow[] | null) ?? [];
+    logTiming("completions-fetch", startedAt, {
+      count: rows.length,
+      hasError: Boolean(error),
+    });
+    return {
+      liveCompletions: rows,
+      liveCompletionsError: error?.message ?? null,
+    };
+  } catch (error) {
+    logTiming("completions-fetch", startedAt, {
+      count: 0,
+      hasError: true,
+    });
+    return {
+      liveCompletions: [] as LiveCompletionRow[],
+      liveCompletionsError: String(error),
+    };
+  }
+}
+
 export async function PlayPageContent({
   game,
   currentPlayerId,
@@ -124,36 +242,22 @@ export async function PlayPageContent({
   consumeJoinQueryOnMount = false,
   canManageRestrictedScoring,
 }: PlayPageContentProps) {
+  const renderStartedAt = Date.now();
+  const logTiming = (segment: string, startedAt: number, extra?: Record<string, unknown>) => {
+    console.info("[play/content][timing]", {
+      slug,
+      gameId: game.id,
+      segment,
+      durationMs: Date.now() - startedAt,
+      ...(extra ?? {}),
+    });
+  };
   const supabase = createSupabaseAdminClient();
   const sportProfile = resolveSportProfileKey(game.sport_profile);
   const sportProfileLabel = getSportProfileLabel(sportProfile);
 
-  const playersFetchPromise = (async () => {
-    const { data, error } = await supabase
-      .from("players")
-      .select("id, display_name, role, created_at")
-      .eq("game_id", game.id)
-      .order("created_at", { ascending: true })
-      .order("id", { ascending: true })
-      .returns<PlayerRecord[]>();
-
-    return {
-      players: data,
-      playersError: error?.message ?? null,
-    };
-  })();
-
-  const cardsFetchPromise = (async () => {
-    const { data, error } = await supabase
-      .from("cards")
-      .select("id, player_id, accepted_at, card_cells(order_index, event_key, event_label, team_key, point_value, threshold)")
-      .eq("game_id", game.id)
-      .returns<CardRow[]>();
-
-    return {
-      cardsForGame: !error && data ? data : [],
-    };
-  })();
+  const playersFetchPromise = fetchPlayers(supabase, game.id, logTiming);
+  const cardsFetchPromise = fetchCards(supabase, game.id, logTiming);
 
   const playMode = game.completion_mode === "STREAK" ? "streak" : "quick_play";
   const initialRiskLevel: RiskLevel = 3;
@@ -216,48 +320,8 @@ export async function PlayPageContent({
   const isLobby = game.status === "lobby";
   const isLive = game.status === "live";
   const isGameFinished = game.status === "finished";
-  const scoredEventsFetchPromise = (async () => {
-    try {
-      const { data, error } = await supabase
-        .from("scored_events")
-        .select("id, event_key, event_label, team_key, created_at, client_submission_id")
-        .eq("game_id", game.id)
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true });
-
-      const rows = (data as RecentScoredEvent[] | null) ?? [];
-      return {
-        allScoredEvents: rows,
-      };
-    } catch (error) {
-      console.error("Unable to load scored events", error);
-      return {
-        allScoredEvents: [] as RecentScoredEvent[],
-      };
-    }
-  })();
-
-  const completionsFetchPromise = (async () => {
-    try {
-      const { data, error } = await supabase
-        .from("game_completions")
-        .select("id, player_id, completed_at_event_id, created_at")
-        .eq("game_id", game.id)
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true });
-
-      const rows = (data as LiveCompletionRow[] | null) ?? [];
-      return {
-        liveCompletions: rows,
-        liveCompletionsError: error?.message ?? null,
-      };
-    } catch (error) {
-      return {
-        liveCompletions: [] as LiveCompletionRow[],
-        liveCompletionsError: String(error),
-      };
-    }
-  })();
+  const scoredEventsFetchPromise = fetchScoredEvents(supabase, game.id, logTiming);
+  const completionsFetchPromise = fetchCompletions(supabase, game.id, logTiming);
 
   const [playersResult, cardsResult, scoredEventsResult, completionsResult] = await Promise.all([
     playersFetchPromise,
@@ -265,6 +329,12 @@ export async function PlayPageContent({
     scoredEventsFetchPromise,
     completionsFetchPromise,
   ]);
+  logTiming("parallel-data-fetches", renderStartedAt, {
+    playerCount: playersResult.players?.length ?? 0,
+    cardCount: cardsResult.cardsForGame.length,
+    scoredEventCount: scoredEventsResult.allScoredEvents.length,
+    completionCount: completionsResult.liveCompletions.length,
+  });
 
   const players = playersResult.players;
   const playersError = playersResult.playersError;
@@ -293,41 +363,50 @@ export async function PlayPageContent({
   const cardsByPlayerId = new Map(cardsForGame.map((card) => [card.player_id, card]));
   const playersById = new Map((players ?? []).map((player) => [player.id, player]));
 
-  const scoringLeaderboardEntries: LeaderboardEntry[] = buildGameScores({
-    players: (players ?? []).map((player) => ({
-      id: player.id,
-      display_name: player.display_name,
-      created_at: player.created_at,
-    })),
-    cards: cardsForGame.map((card) => ({
-      player_id: card.player_id,
-      accepted_at: card.accepted_at,
-      card_cells: normalizeCardCells(
-        (card.card_cells ?? []).map((cell) => ({
-          event_key: cell.event_key,
-          team_key: cell.team_key,
-          order_index: cell.order_index,
-          point_value: cell.point_value,
-          threshold: cell.threshold,
-        })),
-      ),
-    })),
-    recordedEvents,
-    completionMode,
-    sportProfile,
-    bingraPlayerIds,
-    bingraCompletedAtByPlayerId,
-  }).map((entry) => ({
-    id: entry.player_id,
-    name: entry.player_name,
-    raw_points: entry.raw_points,
-    final_score: entry.final_score,
-    has_bingra: entry.has_bingra,
-    is_one_away: entry.is_one_away,
-    completed_cells_count: entry.completed_cells_count,
-    join_order: entry.join_order,
-    is_active: true,
-  }));
+  const scoringLeaderboardEntries: LeaderboardEntry[] = (() => {
+    const startedAt = Date.now();
+    const entries = buildGameScores({
+      players: (players ?? []).map((player) => ({
+        id: player.id,
+        display_name: player.display_name,
+        created_at: player.created_at,
+      })),
+      cards: cardsForGame.map((card) => ({
+        player_id: card.player_id,
+        accepted_at: card.accepted_at,
+        card_cells: normalizeCardCells(
+          (card.card_cells ?? []).map((cell) => ({
+            event_key: cell.event_key,
+            team_key: cell.team_key,
+            order_index: cell.order_index,
+            point_value: cell.point_value,
+            threshold: cell.threshold,
+          })),
+        ),
+      })),
+      recordedEvents,
+      completionMode,
+      sportProfile,
+      bingraPlayerIds,
+      bingraCompletedAtByPlayerId,
+    }).map((entry) => ({
+      id: entry.player_id,
+      name: entry.player_name,
+      raw_points: entry.raw_points,
+      final_score: entry.final_score,
+      has_bingra: entry.has_bingra,
+      is_one_away: entry.is_one_away,
+      completed_cells_count: entry.completed_cells_count,
+      join_order: entry.join_order,
+      is_active: true,
+    }));
+
+    logTiming("leaderboard-scoring-computation", startedAt, {
+      count: entries.length,
+    });
+
+    return entries;
+  })();
 
   const scoringEntriesByPlayerId = new Map(scoringLeaderboardEntries.map((entry) => [entry.id, entry]));
 
@@ -466,97 +545,106 @@ export async function PlayPageContent({
 
   const leaderboardEntryByPlayerId = new Map(leaderboardEntries.map((entry) => [entry.id, entry]));
 
-  const playerCardPreviews = (players ?? []).map((player) => {
-    const playerCard = cardsByPlayerId.get(player.id) ?? null;
-    const sortedCells = [...(playerCard?.card_cells ?? [])].sort(
-      (left, right) => left.order_index - right.order_index,
-    );
+  const playerCardPreviews = (() => {
+    const startedAt = Date.now();
+    const previews = (players ?? []).map((player) => {
+      const playerCard = cardsByPlayerId.get(player.id) ?? null;
+      const sortedCells = [...(playerCard?.card_cells ?? [])].sort(
+        (left, right) => left.order_index - right.order_index,
+      );
 
-    const progressCells: ProgressCardCell[] = normalizeCardCells(
-      sortedCells.map((cell) => ({
-        event_key: cell.event_key,
-        team_key: cell.team_key,
-        order_index: cell.order_index,
-        point_value: cell.point_value,
-        threshold: cell.threshold,
-      })),
-    );
-
-    const eligibleRecordedEvents = filterRecordedEventsByAcceptedAt(
-      recordedEvents,
-      playerCard?.accepted_at ?? null,
-    );
-
-    const cardProgress = calculateCardProgress(
-      eligibleRecordedEvents,
-      progressCells,
-      completionMode,
-      sportProfile,
-    );
-    const cellProgress = cardProgress.cell_progress;
-
-    const leaderboardEntry = leaderboardEntryByPlayerId.get(player.id);
-
-    return {
-      player_id: player.id,
-      player_name: player.display_name,
-      card_accepted_at: playerCard?.accepted_at ?? null,
-      completed_cells_count: leaderboardEntry?.completed_cells_count ?? 0,
-      total_cells_count: sortedCells.length,
-      is_one_away: leaderboardEntry?.is_one_away ?? false,
-      has_bingra: leaderboardEntry?.has_bingra ?? false,
-      card_cells: sortedCells.map((cell, index) => {
-        const parsedEventKey = parseCardCellEventKey(cell.event_key);
-        const resolvedTeamKey: TeamKey | null =
-          cell.team_key === "A" || cell.team_key === "B"
-            ? cell.team_key
-            : parsedEventKey.qualifiedTeamKey;
-        const thresholdLevel =
-          typeof cellProgress[index]?.threshold === "number"
-            ? cellProgress[index].threshold
-            : typeof cell.threshold === "number"
-              ? cell.threshold
-              : 1;
-        const basePoints = typeof cell.point_value === "number" ? cell.point_value : 0;
-        const eventScore = getEventScoreForCell({
-          basePoints,
-          thresholdLevel,
-        });
-
-        if (process.env.DEBUG_BINGRA_SCORING === "1" && cellProgress[index]?.is_completed) {
-          console.info("[bingra][scoring-debug]", {
-            playerId: player.id,
-            event: parsedEventKey.baseEventKey ?? cell.event_key ?? `Event ${index + 1}`,
-            threshold: `${cellProgress[index]?.required_count ?? thresholdLevel}+`,
-            basePoints: eventScore.basePoints,
-            multiplier: eventScore.thresholdMultiplier,
-            computedPoints: eventScore.finalPoints,
-            pointsUsedInLeaderboard: eventScore.finalPoints,
-            pointsShownInCard: eventScore.finalPoints,
-          });
-        }
-
-        return {
+      const progressCells: ProgressCardCell[] = normalizeCardCells(
+        sortedCells.map((cell) => ({
+          event_key: cell.event_key,
+          team_key: cell.team_key,
           order_index: cell.order_index,
-          event_label: cell.event_label ?? parsedEventKey.baseEventKey ?? `Event ${index + 1}`,
-          team_key: resolvedTeamKey,
-          point_value: basePoints,
-          final_points: eventScore.finalPoints,
-          threshold_multiplier: eventScore.thresholdMultiplier,
-          threshold: thresholdLevel,
-          required_count:
-            typeof cellProgress[index]?.required_count === "number"
-              ? cellProgress[index].required_count
-              : 1,
-          current_count:
-            typeof cellProgress[index]?.current_count === "number"
-              ? cellProgress[index].current_count
-              : 0,
-          is_completed: cellProgress[index]?.is_completed ?? false,
-        };
-      }),
-    };
-  });
+          point_value: cell.point_value,
+          threshold: cell.threshold,
+        })),
+      );
+
+      const eligibleRecordedEvents = filterRecordedEventsByAcceptedAt(
+        recordedEvents,
+        playerCard?.accepted_at ?? null,
+      );
+
+      const cardProgress = calculateCardProgress(
+        eligibleRecordedEvents,
+        progressCells,
+        completionMode,
+        sportProfile,
+      );
+      const cellProgress = cardProgress.cell_progress;
+
+      const leaderboardEntry = leaderboardEntryByPlayerId.get(player.id);
+
+      return {
+        player_id: player.id,
+        player_name: player.display_name,
+        card_accepted_at: playerCard?.accepted_at ?? null,
+        completed_cells_count: leaderboardEntry?.completed_cells_count ?? 0,
+        total_cells_count: sortedCells.length,
+        is_one_away: leaderboardEntry?.is_one_away ?? false,
+        has_bingra: leaderboardEntry?.has_bingra ?? false,
+        card_cells: sortedCells.map((cell, index) => {
+          const parsedEventKey = parseCardCellEventKey(cell.event_key);
+          const resolvedTeamKey: TeamKey | null =
+            cell.team_key === "A" || cell.team_key === "B"
+              ? cell.team_key
+              : parsedEventKey.qualifiedTeamKey;
+          const thresholdLevel =
+            typeof cellProgress[index]?.threshold === "number"
+              ? cellProgress[index].threshold
+              : typeof cell.threshold === "number"
+                ? cell.threshold
+                : 1;
+          const basePoints = typeof cell.point_value === "number" ? cell.point_value : 0;
+          const eventScore = getEventScoreForCell({
+            basePoints,
+            thresholdLevel,
+          });
+
+          if (process.env.DEBUG_BINGRA_SCORING === "1" && cellProgress[index]?.is_completed) {
+            console.info("[bingra][scoring-debug]", {
+              playerId: player.id,
+              event: parsedEventKey.baseEventKey ?? cell.event_key ?? `Event ${index + 1}`,
+              threshold: `${cellProgress[index]?.required_count ?? thresholdLevel}+`,
+              basePoints: eventScore.basePoints,
+              multiplier: eventScore.thresholdMultiplier,
+              computedPoints: eventScore.finalPoints,
+              pointsUsedInLeaderboard: eventScore.finalPoints,
+              pointsShownInCard: eventScore.finalPoints,
+            });
+          }
+
+          return {
+            order_index: cell.order_index,
+            event_label: cell.event_label ?? parsedEventKey.baseEventKey ?? `Event ${index + 1}`,
+            team_key: resolvedTeamKey,
+            point_value: basePoints,
+            final_points: eventScore.finalPoints,
+            threshold_multiplier: eventScore.thresholdMultiplier,
+            threshold: thresholdLevel,
+            required_count:
+              typeof cellProgress[index]?.required_count === "number"
+                ? cellProgress[index].required_count
+                : 1,
+            current_count:
+              typeof cellProgress[index]?.current_count === "number"
+                ? cellProgress[index].current_count
+                : 0,
+            is_completed: cellProgress[index]?.is_completed ?? false,
+          };
+        }),
+      };
+    });
+
+    logTiming("player-card-preview-computation", startedAt, {
+      previewCount: previews.length,
+    });
+
+    return previews;
+  })();
 
   const playerCardsForScoring = new Map(
     cardsForGame.map((card) => [
@@ -593,29 +681,38 @@ export async function PlayPageContent({
     currentPlayerId != null &&
     unacceptedPlayerIds.has(currentPlayerId);
 
-  const activityFeedItems: ActivityFeedItem[] = buildActivityFeedItems({
-    players: (players ?? []).map((player) => ({
-      id: player.id,
-      display_name: player.display_name,
-      created_at: player.created_at,
-      accepted_at: cardsByPlayerId.get(player.id)?.accepted_at ?? null,
-    })),
-    events: allScoredEvents,
-    playerCardsByPlayerId: playerCardsForScoring,
-    completionMode,
-    teamNames,
-    gameId: game.id,
-    gameStatus: game.status,
-    completedAt: game.completed_at,
-    winnerName,
-    leaderboardEntries: leaderboardEntries.map((entry) => ({
-      name: entry.name,
-      final_score: entry.final_score,
-      raw_points: entry.raw_points,
-      has_bingra: entry.has_bingra,
-    })),
-    sportProfile,
-  });
+  const activityFeedItems: ActivityFeedItem[] = (() => {
+    const startedAt = Date.now();
+    const items = buildActivityFeedItems({
+      players: (players ?? []).map((player) => ({
+        id: player.id,
+        display_name: player.display_name,
+        created_at: player.created_at,
+        accepted_at: cardsByPlayerId.get(player.id)?.accepted_at ?? null,
+      })),
+      events: allScoredEvents,
+      playerCardsByPlayerId: playerCardsForScoring,
+      completionMode,
+      teamNames,
+      gameId: game.id,
+      gameStatus: game.status,
+      completedAt: game.completed_at,
+      winnerName,
+      leaderboardEntries: leaderboardEntries.map((entry) => ({
+        name: entry.name,
+        final_score: entry.final_score,
+        raw_points: entry.raw_points,
+        has_bingra: entry.has_bingra,
+      })),
+      sportProfile,
+    });
+
+    logTiming("activity-feed-preparation", startedAt, {
+      itemCount: items.length,
+    });
+
+    return items;
+  })();
 
   const getFeedItemContainerClass = (activity: ActivityFeedItem) => {
     const base = "rounded-2xl border shadow-sm";
@@ -678,6 +775,10 @@ export async function PlayPageContent({
   };
 
   const activityFeedIsScrollable = activityFeedItems.length > 7;
+  logTiming("final-page-assembly", renderStartedAt, {
+    leaderboardCount: leaderboardEntries.length,
+    activityFeedCount: activityFeedItems.length,
+  });
 
   return (
     <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6">

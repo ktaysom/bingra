@@ -8,7 +8,6 @@ import { generateGameName } from "../../lib/bingra/game-name-generator";
 import { AuthEntryPoint } from "../../components/auth/AuthEntryPoint";
 import { AuthDialog } from "../../components/auth/AuthDialog";
 import { BingraLogo } from "../../components/BingraLogo";
-import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 import {
   getEventMaxThreshold,
   getEventsForMode,
@@ -230,8 +229,8 @@ export default function CreatePage() {
   const submitAttemptedRef = useRef(false);
   const autoRetryTriggeredRef = useRef(false);
   const autoRetryInProgressRef = useRef(false);
-  const [autoRetrySignal, setAutoRetrySignal] = useState(0);
   const [authCreateTraceId, setAuthCreateTraceId] = useState("");
+  const [isResumingCreate, setIsResumingCreate] = useState(false);
 
   const [title, setTitle] = useState(DEFAULT_TITLE);
   const [hostDisplayName, setHostDisplayName] = useState("Host");
@@ -362,7 +361,7 @@ export default function CreatePage() {
     }
 
     window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_KEY, "1");
-    setAutoRetrySignal((current) => current + 1);
+    setIsResumingCreate(true);
   }, [state.error]);
 
   useEffect(() => {
@@ -372,12 +371,6 @@ export default function CreatePage() {
 
     const retryFlag = window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_KEY);
     const consumedFlag = window.sessionStorage.getItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY);
-    const traceRaw = window.sessionStorage.getItem(CREATE_AUTH_CREATE_TRACE_KEY);
-    const trace = traceRaw
-      ? (JSON.parse(traceRaw) as {
-          traceId?: string;
-        })
-      : null;
     if (autoRetryTriggeredRef.current) {
       return;
     }
@@ -397,9 +390,6 @@ export default function CreatePage() {
 
     let cancelled = false;
     let submitted = false;
-    let pollTimer: number | null = null;
-    let pollAttempt = 0;
-    const maxPollAttempts = 20;
 
     const consumeAndSubmit = () => {
       if (submitted || cancelled) {
@@ -409,72 +399,28 @@ export default function CreatePage() {
       submitted = true;
       autoRetryTriggeredRef.current = true;
       autoRetryInProgressRef.current = true;
+      setIsResumingCreate(true);
       window.sessionStorage.setItem(CREATE_AFTER_LOGIN_RETRY_CONSUMED_KEY, "1");
       window.sessionStorage.removeItem(CREATE_AFTER_LOGIN_RETRY_KEY);
-      form.requestSubmit();
-    };
-
-    const supabase = createSupabaseBrowserClient();
-
-    const maybeAutoRetryAfterAuth = async (source: "initial" | "auth_change" | "poll") => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      console.info("[auth][create] auto-retry auth probe", {
-        source,
-        hasUser: Boolean(user?.id),
-        userId: user?.id ?? null,
-      });
-
-      if (cancelled) {
-        return;
-      }
-
-      if (!user?.id) {
-        if (pollAttempt < maxPollAttempts) {
-          const nextAttempt = pollAttempt + 1;
-          pollAttempt = nextAttempt;
-          pollTimer = window.setTimeout(() => {
-            void maybeAutoRetryAfterAuth("poll");
-          }, 300);
+      window.requestAnimationFrame(() => {
+        if (!cancelled) {
+          form.requestSubmit();
         }
-        return;
-      }
-
-      consumeAndSubmit();
+      });
     };
 
-    void maybeAutoRetryAfterAuth("initial");
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      console.info("[auth][create] onAuthStateChange", {
-        event,
-        hasSessionUser: Boolean(session?.user?.id),
-        userId: session?.user?.id ?? null,
-      });
-
-      if (!session?.user?.id) {
-        return;
-      }
-
-      void maybeAutoRetryAfterAuth("auth_change");
-    });
+    console.info("[auth][create] resuming deferred create after finalize redirect");
+    consumeAndSubmit();
 
     return () => {
       cancelled = true;
-      if (pollTimer) {
-        window.clearTimeout(pollTimer);
-      }
-      subscription.unsubscribe();
     };
-  }, [autoRetrySignal]);
+  }, []);
 
   useEffect(() => {
     if (autoRetryInProgressRef.current && state.error) {
       autoRetryInProgressRef.current = false;
+      setIsResumingCreate(state.error === AUTH_REQUIRED_CREATE_ERROR);
     }
   }, [state.error]);
 
@@ -519,6 +465,21 @@ export default function CreatePage() {
 
   return (
     <main className="min-h-screen text-[#2f2925]">
+      {isResumingCreate ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#f7f0e8]/90 px-6 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border border-[#d9cdc1] bg-white px-6 py-7 text-center shadow-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a7d71]">
+              Continuing
+            </p>
+            <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-[#2c2622]">
+              Creating your Bingra game...
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-[#6b6159]">
+              Your sign-in worked. We&apos;re resuming the game setup automatically.
+            </p>
+          </div>
+        </div>
+      ) : null}
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-8 sm:px-6 md:py-10">
         <header className="mb-10 rounded-2xl bg-bingra-dark px-4 py-3 shadow-sm sm:px-5 sm:py-3.5">
           <div className="flex items-center justify-between gap-3">

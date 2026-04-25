@@ -319,6 +319,26 @@ export function buildFinalizePath(params: {
   return `${finalizeUrl.pathname}${finalizeUrl.search}`;
 }
 
+export function shouldUseHardNavigationAfterOtp(params: {
+  nextPath: string;
+  linkPlayerId?: string;
+}): boolean {
+  const normalized = normalizePendingAuthContext(
+    {
+      nextPath: params.nextPath,
+      linkPlayerId: params.linkPlayerId,
+    },
+    "/",
+  );
+
+  if (normalized.linkPlayerId) {
+    return false;
+  }
+
+  const pathname = new URL(normalized.nextPath, "http://localhost").pathname;
+  return pathname === "/" || pathname === "/me" || pathname === "/create";
+}
+
 export function buildAuthConfirmPath(context: PendingAuthContext): string {
   const normalized = normalizePendingAuthContext(context, "/");
   const confirmUrl = new URL("/auth/confirm", "http://localhost");

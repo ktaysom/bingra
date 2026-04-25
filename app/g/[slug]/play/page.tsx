@@ -42,13 +42,25 @@ export const metadata: Metadata = {
 };
 
 export default async function PlayPage(props: PlayPageProps) {
+  const renderStartedAt = Date.now();
   const { slug } = await props.params;
   const searchParams = (await props.searchParams) ?? {};
+  const logTiming = (segment: string, startedAt: number, extra?: Record<string, unknown>) => {
+    console.info("[play/page][timing]", {
+      slug,
+      segment,
+      durationMs: Date.now() - startedAt,
+      ...(extra ?? {}),
+    });
+  };
 
   const supabase = createSupabaseAdminClient();
+  const authClientStartedAt = Date.now();
   const supabaseServer = await createSupabaseServerClient();
+  logTiming("auth-client-setup", authClientStartedAt);
   const cookieStore = await cookies();
 
+  const gameFetchStartedAt = Date.now();
   const gamePromise = supabase
     .from("games")
     .select(
@@ -57,12 +69,20 @@ export default async function PlayPage(props: PlayPageProps) {
     .eq("slug", slug)
     .maybeSingle<GameRecord>();
 
+  const authFetchStartedAt = Date.now();
   const authPromise = supabaseServer.auth.getUser();
 
   const [{ data: game, error: gameError }, authResponse] = await Promise.all([
     gamePromise,
     authPromise,
   ]);
+  logTiming("game-fetch", gameFetchStartedAt, {
+    foundGame: Boolean(game),
+    hasError: Boolean(gameError),
+  });
+  logTiming("auth-session-fetch", authFetchStartedAt, {
+    hasUser: Boolean(authResponse.data.user?.id),
+  });
 
   if (gameError || !game) {
     return (
@@ -88,16 +108,6 @@ export default async function PlayPage(props: PlayPageProps) {
   });
 
   let actorAccountId: string | null = null;
-  if (user?.id) {
-    actorAccountId = await resolveCanonicalAccountIdForAuthUserId(user.id);
-  }
-
-  const isSignedInHostForRestrictedGame =
-    game.restricted_scoring &&
-    Boolean(actorAccountId) &&
-    Boolean(game.host_account_id) &&
-    actorAccountId === game.host_account_id;
-
   const cookiePlayerId = cookieStore.get("bingra-player-id")?.value ?? null;
 
   console.info("[auth][play] cookie/session snapshot", {
@@ -111,17 +121,43 @@ export default async function PlayPage(props: PlayPageProps) {
   let resolvedSessionPlayerProfileId: string | null = null;
 
   if (cookiePlayerId) {
+    const playerResolutionStartedAt = Date.now();
     const { data: sessionPlayer, error: sessionPlayerError } = await supabase
       .from("players")
       .select("id, game_id, profile_id")
       .eq("id", cookiePlayerId)
       .maybeSingle<{ id: string; game_id: string; profile_id: string | null }>();
+    logTiming("player-resolution", playerResolutionStartedAt, {
+      hasSessionPlayer: Boolean(sessionPlayer?.id),
+      hasSessionPlayerError: Boolean(sessionPlayerError),
+    });
 
     if (!sessionPlayerError && sessionPlayer && sessionPlayer.game_id === game.id) {
       resolvedSessionPlayerId = sessionPlayer.id;
       resolvedSessionPlayerProfileId = sessionPlayer.profile_id;
+      if (!actorAccountId && resolvedSessionPlayerProfileId) {
+        actorAccountId = resolvedSessionPlayerProfileId;
+      }
     }
   }
+
+  const shouldResolveActorAccountId =
+    Boolean(user?.id) &&
+    (game.restricted_scoring || !resolvedSessionPlayerId || !resolvedSessionPlayerProfileId);
+
+  if (user?.id && shouldResolveActorAccountId && !actorAccountId) {
+    const actorAccountResolveStartedAt = Date.now();
+    actorAccountId = await resolveCanonicalAccountIdForAuthUserId(user.id);
+    logTiming("actor-account-resolve", actorAccountResolveStartedAt, {
+      resolvedActorAccountId: Boolean(actorAccountId),
+    });
+  }
+
+  const isSignedInHostForRestrictedGame =
+    game.restricted_scoring &&
+    Boolean(actorAccountId) &&
+    Boolean(game.host_account_id) &&
+    actorAccountId === game.host_account_id;
 
   if (!resolvedSessionPlayerId && isSignedInHostForRestrictedGame && user?.id && actorAccountId) {
     console.warn("[auth][play] signed-in host missing player session cookie; redirecting to recover-host", {
@@ -151,11 +187,15 @@ export default async function PlayPage(props: PlayPageProps) {
 
   if (shouldEnsureLink && user?.id) {
     try {
+      const playerLinkStartedAt = Date.now();
       await ensurePlayerLinkedToAuthenticatedUser({
         playerId: resolvedSessionPlayerId,
         authUserId: user.id,
         accountId: actorAccountId ?? undefined,
         context: "play/page",
+      });
+      logTiming("player-link-ensure", playerLinkStartedAt, {
+        playerId: resolvedSessionPlayerId,
       });
     } catch (error) {
       console.error("[play/page] failed to ensure authenticated player linkage", {
@@ -170,6 +210,11 @@ export default async function PlayPage(props: PlayPageProps) {
   const canManageRestrictedScoring =
     !game.restricted_scoring ||
     (Boolean(actorAccountId) && Boolean(game.host_account_id) && actorAccountId === game.host_account_id);
+
+  logTiming("final-page-assembly", renderStartedAt, {
+    hasAuthenticatedUser: Boolean(user?.id),
+    hasResolvedPlayer: Boolean(resolvedSessionPlayerId),
+  });
 
   return (
     <PlayPageContent

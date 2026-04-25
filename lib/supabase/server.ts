@@ -1,8 +1,45 @@
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-export async function createSupabaseServerClient() {
+type CookieSnapshot = {
+  name: string;
+  value: string;
+};
+
+function applyCookieUpdates(
+  existing: CookieSnapshot[],
+  updates: Array<{
+    name: string;
+    value: string;
+    options?: {
+      maxAge?: number;
+    };
+  }>,
+): CookieSnapshot[] {
+  const cookieMap = new Map(existing.map((cookie) => [cookie.name, cookie]));
+
+  for (const update of updates) {
+    if (typeof update.options?.maxAge === "number" && update.options.maxAge <= 0) {
+      cookieMap.delete(update.name);
+      continue;
+    }
+
+    cookieMap.set(update.name, {
+      name: update.name,
+      value: update.value,
+    });
+  }
+
+  return [...cookieMap.values()];
+}
+
+export const createSupabaseServerClient = cache(async function createSupabaseServerClient() {
   const cookieStore = await cookies();
+  let cookieSnapshot = cookieStore.getAll().map((cookie) => ({
+    name: cookie.name,
+    value: cookie.value,
+  }));
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key =
@@ -16,12 +53,11 @@ export async function createSupabaseServerClient() {
   return createServerClient(url, key, {
     cookies: {
       getAll() {
-        const allCookies = cookieStore.getAll();
         console.info("[auth][server] createSupabaseServerClient.getAll", {
-          cookieCount: allCookies.length,
-          hasSupabaseCookie: allCookies.some((cookie) => cookie.name.includes("sb-")),
+          cookieCount: cookieSnapshot.length,
+          hasSupabaseCookie: cookieSnapshot.some((cookie) => cookie.name.includes("sb-")),
         });
-        return allCookies;
+        return cookieSnapshot;
       },
       setAll(cookiesToSet) {
         try {
@@ -34,6 +70,7 @@ export async function createSupabaseServerClient() {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
           });
+          cookieSnapshot = applyCookieUpdates(cookieSnapshot, cookiesToSet);
         } catch (error) {
           console.warn("[auth][server] createSupabaseServerClient.setAll failed", {
             error: error instanceof Error ? error.message : String(error),
@@ -43,4 +80,4 @@ export async function createSupabaseServerClient() {
       },
     },
   });
-}
+});

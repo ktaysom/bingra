@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   normalizePendingAuthContext,
+  shouldUseHardNavigationAfterOtp,
 } from "../../lib/auth/auth-redirect";
 import {
   getExpectedEmailOtpLength,
@@ -85,14 +86,15 @@ export function AuthDialog({
     pendingPhoneOtpVerify ||
     postVerifyProgress;
   const isCreateFlowContext = nextPath === "/create" && !linkPlayerId;
-  const isHomepageFlowContext = nextPath === "/" && !linkPlayerId;
-  const isAccountPageFlowContext = nextPath === "/me";
-
   const pendingContext = normalizePendingAuthContext({
     nextPath,
     linkPlayerId,
     playerId: linkPlayerId,
     intent: linkPlayerId ? "save_stats" : "sign_in",
+  });
+  const shouldHardNavigateAfterOtp = shouldUseHardNavigationAfterOtp({
+    nextPath,
+    linkPlayerId,
   });
 
   const buttonClassName = useMemo(() => {
@@ -175,9 +177,9 @@ export function AuthDialog({
       );
     }
 
-    // Homepage sign-in should complete with a hard navigation so server-rendered
-    // user state is immediately reflected and modal state cannot remain stale.
-    if ((isHomepageFlowContext || isAccountPageFlowContext) && typeof window !== "undefined") {
+    // Create/home/account flows should complete with a hard navigation so
+    // server-rendered auth state is fresh and same-route modal UI cannot remain stale.
+    if (shouldHardNavigateAfterOtp && typeof window !== "undefined") {
       setIsOpen(false);
       window.location.assign(finalizePath);
       return;

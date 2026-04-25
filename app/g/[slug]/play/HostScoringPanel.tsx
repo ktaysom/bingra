@@ -18,6 +18,11 @@ import {
   getSportProfileDefinition,
   type SportProfileKey,
 } from "../../../../lib/bingra/sport-profiles";
+import {
+  getScopedTeamForGameTeamScope,
+  resolveSoccerShotBackFromAction,
+  resolveSoccerShotFlowStart,
+} from "../../../../lib/bingra/host-scoring-soccer-flow";
 import { resolveBaseEventKey } from "../../../../lib/bingra/card-event-key";
 import {
   recordEventAction,
@@ -154,7 +159,9 @@ export function HostScoringPanel({
   recentConfirmedEvents = [],
 }: HostScoringPanelProps) {
   const router = useRouter();
-  const isSoccer = getSportProfileDefinition(sportProfile).sport === "soccer";
+  const sportDefinition = getSportProfileDefinition(sportProfile);
+  const isSoccer = sportDefinition.sport === "soccer";
+  const isYouthSoccer = sportDefinition.key === "soccer_youth";
 
   const [recordState, recordAction] = useActionState(recordEventAction, initialRecordState);
   const [deleteState, deleteAction] = useActionState(
@@ -174,6 +181,7 @@ export function HostScoringPanel({
   const [selectedSoccerActionId, setSelectedSoccerActionId] = useState<SoccerActionId | null>(null);
   const [selectedSoccerOutOfBoundsOption, setSelectedSoccerOutOfBoundsOption] =
     useState<SoccerOutOfBoundsOption | null>(null);
+  const [selectedSoccerTeamKey, setSelectedSoccerTeamKey] = useState<"A" | "B" | null>(null);
 
   const lastProcessedRecordCompletedAtRef = useRef<string | null>(null);
   const lastTapRef = useRef<{ actionKey: string; atMs: number } | null>(null);
@@ -210,8 +218,21 @@ export function HostScoringPanel({
       return [];
     }
 
-    return SOCCER_ACTIONS.filter((action) => action.parent === selectedSoccerParentId);
-  }, [selectedSoccerParentId]);
+    return SOCCER_ACTIONS.filter((action) => {
+      if (action.parent !== selectedSoccerParentId) {
+        return false;
+      }
+
+      if (
+        isYouthSoccer &&
+        (action.id === "live_ball_turnover" || action.id === "save")
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [isYouthSoccer, selectedSoccerParentId]);
 
   function resetScorerFlow() {
     setStage(isSoccer ? "soccer-parent" : "parent");
@@ -222,6 +243,7 @@ export function HostScoringPanel({
     setSelectedSoccerParentId(null);
     setSelectedSoccerActionId(null);
     setSelectedSoccerOutOfBoundsOption(null);
+    setSelectedSoccerTeamKey(null);
   }
 
   useEffect(() => {
@@ -459,9 +481,7 @@ export function HostScoringPanel({
   }
 
   function getScopedTeamForCurrentGame(): "A" | "B" | null {
-    if (teamScope === "team_a_only") return "A";
-    if (teamScope === "team_b_only") return "B";
-    return null;
+    return getScopedTeamForGameTeamScope(teamScope);
   }
 
   function handleParentSelect(nextParent: ScorerParentCategory) {
@@ -530,6 +550,7 @@ export function HostScoringPanel({
       setSelectedSoccerParentId(nextParent);
       setSelectedSoccerActionId(nextParent);
       setSelectedSoccerOutOfBoundsOption(null);
+      setSelectedSoccerTeamKey(null);
 
       const scopedTeam = getScopedTeamForCurrentGame();
       if (scopedTeam) {
@@ -544,6 +565,15 @@ export function HostScoringPanel({
     setSelectedSoccerParentId(nextParent);
     setSelectedSoccerActionId(null);
     setSelectedSoccerOutOfBoundsOption(null);
+    setSelectedSoccerTeamKey(null);
+
+    if (nextParent === "shot") {
+      const shotFlowStart = resolveSoccerShotFlowStart(teamScope);
+      setSelectedSoccerTeamKey(shotFlowStart.selectedTeamKey);
+      setStage(shotFlowStart.stage);
+      return;
+    }
+
     setStage("soccer-action");
   }
 
@@ -556,6 +586,17 @@ export function HostScoringPanel({
     if (actionId === "out_of_bounds") {
       setSelectedSoccerOutOfBoundsOption(null);
       setStage("soccer-out-of-bounds");
+      return;
+    }
+
+    if (selectedSoccerParentId === "shot") {
+      const shotTeam = selectedSoccerTeamKey ?? getScopedTeamForCurrentGame();
+      if (!shotTeam) {
+        setStage("soccer-team");
+        return;
+      }
+
+      submitEvent(action.eventKey, action.label, shotTeam);
       return;
     }
 
@@ -585,6 +626,12 @@ export function HostScoringPanel({
 
   function handleTeamSelect(team: "A" | "B") {
     if (isSoccer) {
+      if (selectedSoccerParentId === "shot" && !selectedSoccerActionId) {
+        setSelectedSoccerTeamKey(team);
+        setStage("soccer-action");
+        return;
+      }
+
       if (selectedSoccerActionId === "out_of_bounds") {
         if (!selectedSoccerOutOfBoundsOption) return;
         submitEvent(
@@ -607,6 +654,12 @@ export function HostScoringPanel({
   function handleBack() {
     if (isSoccer) {
       if (stage === "soccer-team") {
+        if (selectedSoccerParentId === "shot" && !selectedSoccerActionId) {
+          setSelectedSoccerTeamKey(null);
+          setStage("soccer-parent");
+          return;
+        }
+
         if (selectedSoccerActionId === "out_of_bounds") {
           setStage("soccer-out-of-bounds");
           return;
@@ -632,6 +685,14 @@ export function HostScoringPanel({
       }
 
       if (stage === "soccer-action") {
+        if (selectedSoccerParentId === "shot") {
+          setSelectedSoccerActionId(null);
+          const shotBackState = resolveSoccerShotBackFromAction(teamScope);
+          setSelectedSoccerTeamKey(shotBackState.selectedTeamKey);
+          setStage(shotBackState.stage);
+          return;
+        }
+
         setStage("soccer-parent");
         setSelectedSoccerActionId(null);
         setSelectedSoccerOutOfBoundsOption(null);
@@ -669,10 +730,25 @@ export function HostScoringPanel({
   function getTitle() {
     if (isSoccer) {
       if (stage === "soccer-action") {
+        if (selectedSoccerParentId === "shot") {
+          const selectedTeamName =
+            selectedSoccerTeamKey === "A"
+              ? teamNames.A
+              : selectedSoccerTeamKey === "B"
+                ? teamNames.B
+                : null;
+
+          return selectedTeamName ? `${selectedTeamName} shot result` : "Shot result";
+        }
+
         return SOCCER_PARENT_OPTIONS.find((option) => option.id === selectedSoccerParentId)?.label ?? "Record event";
       }
 
       if (stage === "soccer-team") {
+        if (selectedSoccerParentId === "shot" && !selectedSoccerActionId) {
+          return "Choose shooting team";
+        }
+
         return "Choose team";
       }
 
