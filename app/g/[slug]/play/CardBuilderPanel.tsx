@@ -16,7 +16,6 @@ import { mapPlayModeToGameMode, type PlayMode } from "../../../../lib/bingra/typ
 import { getThresholdScoreMultiplier } from "../../../../lib/bingra/game-scoring";
 import { getRequiredCountForThresholdLevel } from "../../../../lib/bingra/threshold-levels";
 import { useActionState } from "react";
-import { useRouter } from "next/navigation";
 import { generateCardAction } from "../../../actions/generate-card";
 import { editCardAction } from "../../../actions/edit-card";
 import { AuthDialog } from "../../../../components/auth/AuthDialog";
@@ -250,16 +249,19 @@ export function CardBuilderPanel({
   const touchLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchPointerStateRef = useRef<{ pointerId: number; itemId: string } | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const router = useRouter();
-
   const [generateState, generateAction, isSubmitting] = useActionState(generateCardAction, {});
   const [editState, editAction, isEditSubmitting] = useActionState(editCardAction, {});
   const [acceptFeedback, setAcceptFeedback] = useState<string | null>(null);
   const [acceptActionError, setAcceptActionError] = useState<string | null>(null);
+  const [optimisticAcceptedAt, setOptimisticAcceptedAt] = useState<string | null>(null);
+  const [optimisticLockedCardEvents, setOptimisticLockedCardEvents] = useState<CardBuilderEvent[]>(
+    [],
+  );
   const [showAutoBuildSuccess, setShowAutoBuildSuccess] = useState(false);
   const [showPostLockSignInPrompt, setShowPostLockSignInPrompt] = useState(false);
   const previousAcceptedAtRef = useRef<string | null>(cardAcceptedAt);
-  const isAccepted = Boolean(cardAcceptedAt);
+  const effectiveAcceptedAt = optimisticAcceptedAt ?? cardAcceptedAt;
+  const isAccepted = Boolean(effectiveAcceptedAt);
   const isPermanentlyLocked = isAccepted && gameStatus !== "lobby";
   const isTemporarilyAccepted = isAccepted && gameStatus === "lobby";
   const shouldRenderLockedPreview = isPermanentlyLocked || isTemporarilyAccepted;
@@ -444,6 +446,8 @@ export function CardBuilderPanel({
     startTransition(() => {
       generateAction({
         playerId,
+        gameSlug: slug,
+        sportProfile,
         targetCount: selectedEventKeys.length,
         selectedEventKeys,
         acceptedEvents,
@@ -559,25 +563,26 @@ export function CardBuilderPanel({
   useEffect(() => {
     if (generateState.success) {
       setAcceptActionError(null);
+      setOptimisticAcceptedAt(generateState.acceptedAt ?? new Date().toISOString());
+      setOptimisticLockedCardEvents(cardEvents);
       setAcceptFeedback(
         gameStatus === "live"
           ? "You're live — scoring has started"
           : "Card locked. You can still edit before game starts",
       );
-      router.refresh();
     }
-  }, [gameStatus, generateState.success, router]);
+  }, [cardEvents, gameStatus, generateState.acceptedAt, generateState.success]);
 
   useEffect(() => {
     const previousAcceptedAt = previousAcceptedAtRef.current;
-    const transitionedToAccepted = !previousAcceptedAt && Boolean(cardAcceptedAt);
-    previousAcceptedAtRef.current = cardAcceptedAt;
+    const transitionedToAccepted = !previousAcceptedAt && Boolean(effectiveAcceptedAt);
+    previousAcceptedAtRef.current = effectiveAcceptedAt;
 
-    if (!transitionedToAccepted || !cardAcceptedAt || !playerId || isAuthenticatedUser) {
+    if (!transitionedToAccepted || !effectiveAcceptedAt || !playerId || isAuthenticatedUser) {
       return;
     }
 
-    const storageKey = `bingra-post-lock-signin-prompt:${slug}:${playerId}:${cardAcceptedAt}`;
+    const storageKey = `bingra-post-lock-signin-prompt:${slug}:${playerId}:${effectiveAcceptedAt}`;
 
     try {
       const alreadyPrompted = window.sessionStorage.getItem(storageKey);
@@ -590,7 +595,7 @@ export function CardBuilderPanel({
     } catch {
       setShowPostLockSignInPrompt(true);
     }
-  }, [cardAcceptedAt, isAuthenticatedUser, playerId, slug]);
+  }, [effectiveAcceptedAt, isAuthenticatedUser, playerId, slug]);
 
   useEffect(() => {
     if (isAuthenticatedUser) {
@@ -606,9 +611,11 @@ export function CardBuilderPanel({
 
   useEffect(() => {
     if (editState.success) {
-      router.refresh();
+      setAcceptActionError(null);
+      setOptimisticAcceptedAt(null);
+      setOptimisticLockedCardEvents([]);
     }
-  }, [editState.success, router]);
+  }, [editState.success]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -739,7 +746,12 @@ export function CardBuilderPanel({
   };
 
   if (shouldRenderLockedPreview) {
-    const lockedCard = lockedCardEvents.length > 0 ? lockedCardEvents : cardEvents;
+    const lockedCard =
+      optimisticLockedCardEvents.length > 0
+        ? optimisticLockedCardEvents
+        : lockedCardEvents.length > 0
+          ? lockedCardEvents
+          : cardEvents;
 
     return (
       <section className="rounded-2xl bg-white/90 p-6 shadow-sm">

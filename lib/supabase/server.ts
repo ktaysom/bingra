@@ -2,6 +2,8 @@ import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+const SERVER_CLIENT_MODULE_LOADED_AT = Date.now();
+
 type CookieSnapshot = {
   name: string;
   value: string;
@@ -35,7 +37,9 @@ function applyCookieUpdates(
 }
 
 export const createSupabaseServerClient = cache(async function createSupabaseServerClient() {
+  const startedAt = Date.now();
   const cookieStore = await cookies();
+  const cookiesResolvedAt = Date.now();
   let cookieSnapshot = cookieStore.getAll().map((cookie) => ({
     name: cookie.name,
     value: cookie.value,
@@ -50,7 +54,7 @@ export const createSupabaseServerClient = cache(async function createSupabaseSer
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or publishable/anon key.");
   }
 
-  return createServerClient(url, key, {
+  const client = createServerClient(url, key, {
     cookies: {
       getAll() {
         console.info("[auth][server] createSupabaseServerClient.getAll", {
@@ -80,4 +84,15 @@ export const createSupabaseServerClient = cache(async function createSupabaseSer
       },
     },
   });
+
+  console.info("[auth][server][timing]", {
+    segment: "createSupabaseServerClient",
+    durationMs: Date.now() - startedAt,
+    cookiesResolveMs: cookiesResolvedAt - startedAt,
+    moduleLoadAgeMs: startedAt - SERVER_CLIENT_MODULE_LOADED_AT,
+    cookieCount: cookieSnapshot.length,
+    hasSupabaseCookie: cookieSnapshot.some((cookie) => cookie.name.includes("sb-")),
+  });
+
+  return client;
 });

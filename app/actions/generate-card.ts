@@ -1,7 +1,6 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "../../lib/supabase/admin";
 import {
@@ -20,10 +19,14 @@ export type GenerateCardFormState = {
   success?: boolean;
   error?: string;
   cardId?: string;
+  acceptedAt?: string;
+  gameSlug?: string;
 };
 
 const inputSchema = z.object({
   playerId: z.string().uuid().optional(),
+  gameSlug: z.string().min(1).optional(),
+  sportProfile: z.string().min(1).optional(),
   targetCount: z.number().int().positive().optional(),
   selectedEventKeys: z.array(z.string().min(1)).optional(),
   acceptedEvents: z
@@ -60,12 +63,27 @@ export async function generateCardAction(
   _prevState: GenerateCardFormState,
   input: unknown,
 ): Promise<GenerateCardFormState> {
+  const startedAt = Date.now();
+  const logTiming = (segment: string, segmentStartedAt: number, extra?: Record<string, unknown>) => {
+    console.info("[generateCardAction][timing]", {
+      segment,
+      durationMs: Date.now() - segmentStartedAt,
+      totalDurationMs: Date.now() - startedAt,
+      ...(extra ?? {}),
+    });
+  };
+
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) {
+    logTiming("validation-failed", startedAt, {
+      error: parsed.error.issues[0]?.message ?? "Invalid card payload",
+    });
     return { error: parsed.error.issues[0]?.message ?? "Invalid card payload" };
   }
 
+  const cookieStoreStartedAt = Date.now();
   const cookieStore = await cookies();
+  logTiming("cookies-store-resolve", cookieStoreStartedAt);
   const cookiePlayerId = cookieStore.get("bingra-player-id")?.value ?? null;
 
   if (!cookiePlayerId) {
@@ -80,26 +98,25 @@ export async function generateCardAction(
 
   try {
     const acceptedEvents = parsed.data.acceptedEvents ?? [];
+    logTiming("accepted-events-parse", startedAt, {
+      acceptedEventsCount: acceptedEvents.length,
+      hasLockEventKey: Boolean(parsed.data.lockEventKey),
+      hasPlayerId: Boolean(parsed.data.playerId),
+      hasGameSlug: Boolean(parsed.data.gameSlug?.trim()),
+    });
+
     if (!acceptedEvents.length) {
       throw new Error("No accepted card events were provided.");
     }
 
-    const { data: playerRecord, error: playerError } = await supabase
-      .from("players")
-      .select("game_id, games!players_game_id_fkey(slug, sport_profile)")
-      .eq("id", cookiePlayerId)
-      .maybeSingle<{ game_id?: string; games?: { slug?: string; sport_profile?: string | null } }>();
-
-    if (playerError) {
-      throw playerError;
+    const gameSlug = parsed.data.gameSlug?.trim();
+    if (!gameSlug) {
+      throw new Error("Missing game slug.");
     }
 
-    const gameId = playerRecord?.game_id;
-    const sportProfile = resolveSportProfileKey(playerRecord?.games?.sport_profile ?? null);
-    if (!gameId) {
-      throw new Error("Player is not associated with an active game.");
-    }
+    const sportProfile = resolveSportProfileKey(parsed.data.sportProfile ?? null);
 
+    const validationStartedAt = Date.now();
     for (const acceptedEvent of acceptedEvents) {
       const parsedEventKey = parseCardCellEventKey(acceptedEvent.eventKey);
       const baseEventKey = parsedEventKey.baseEventKey;
@@ -124,95 +141,88 @@ export async function generateCardAction(
         );
       }
     }
+    logTiming("accepted-events-validate", validationStartedAt, {
+      acceptedEventsCount: acceptedEvents.length,
+      sportProfile,
+    });
 
-    const { data: existingCards, error: existingCardsError } = await supabase
-      .from("cards")
-      .select("id")
-      .eq("game_id", gameId)
-      .eq("player_id", cookiePlayerId)
-      .order("id", { ascending: true });
-
-    if (existingCardsError) {
-      throw existingCardsError;
-    }
-
-    let cardId = existingCards?.[0]?.id as string | undefined;
-    const acceptedAt = new Date().toISOString();
-
-    if (!cardId) {
-      const resolvedTargetCount = parsed.data.targetCount ?? acceptedEvents.length;
-      const { data: insertedCard, error: insertCardError } = await supabase
-        .from("cards")
-        .insert({
-          game_id: gameId,
-          player_id: cookiePlayerId,
-          target_count: resolvedTargetCount,
-          selection_mode: parsed.data.selectionMode ?? "custom",
-          accepted_at: acceptedAt,
-        })
-        .select("id")
-        .maybeSingle<{ id: string }>();
-
-      if (insertCardError) {
-        throw insertCardError;
-      }
-
-      cardId = insertedCard?.id;
-    }
-
-    if (!cardId) {
-      throw new Error("Failed to create or load card.");
-    }
-
-    const { error: deleteCellsError } = await supabase
-      .from("card_cells")
-      .delete()
-      .eq("card_id", cardId);
-
-    if (deleteCellsError) {
-      throw deleteCellsError;
-    }
-
+    const cellsPayloadStartedAt = Date.now();
     const cellsPayload = buildCardCellsPayload({
-      cardId,
+      cardId: "00000000-0000-0000-0000-000000000000",
       acceptedEvents,
       lockEventKey: parsed.data.lockEventKey,
     });
 
     assertUniqueCardCellEventKeys(cellsPayload.map((cell) => cell.event_key));
+    logTiming("card-cells-payload-build", cellsPayloadStartedAt, {
+      cellCount: cellsPayload.length,
+      firstEventKey: cellsPayload[0]?.event_key ?? null,
+      lastEventKey: cellsPayload.at(-1)?.event_key ?? null,
+    });
 
-    const { error: insertCellsError } = await supabase
-      .from("card_cells")
-      .insert(cellsPayload);
-
-    if (insertCellsError) {
-      throw insertCellsError;
-    }
-
-    const { error: updateCardError } = await supabase
-      .from("cards")
-      .update({
-        target_count: parsed.data.targetCount ?? acceptedEvents.length,
-        selection_mode: parsed.data.selectionMode ?? "custom",
-        accepted_at: acceptedAt,
+    console.info("[generateCardAction] dispatching lock_player_card RPC", {
+      playerId: cookiePlayerId,
+      gameSlug,
+      targetCount: parsed.data.targetCount ?? acceptedEvents.length,
+      selectionMode: parsed.data.selectionMode ?? "custom",
+      cellCount: cellsPayload.length,
+    });
+    const rpcStartedAt = Date.now();
+    const { data: lockedCard, error: lockCardError } = await supabase
+      .rpc("lock_player_card", {
+        p_player_id: cookiePlayerId,
+        p_game_slug: gameSlug,
+        p_target_count: parsed.data.targetCount ?? acceptedEvents.length,
+        p_selection_mode: parsed.data.selectionMode ?? "custom",
+        p_card_cells: cellsPayload.map(({ card_id: _ignoredCardId, ...cell }) => cell),
       })
-      .eq("id", cardId)
-      .limit(1);
+      .maybeSingle<{ card_id: string; game_slug: string; accepted_at: string }>();
+    logTiming("lock-player-card-rpc", rpcStartedAt, {
+      hasCardId: Boolean(lockedCard?.card_id),
+      hasError: Boolean(lockCardError),
+      cellCount: cellsPayload.length,
+      errorCode: lockCardError?.code ?? null,
+      errorMessage: lockCardError?.message ?? null,
+    });
 
-    if (updateCardError) {
-      throw updateCardError;
+    if (lockCardError) {
+      console.error("[generateCardAction] lock_player_card RPC error", {
+        playerId: cookiePlayerId,
+        gameSlug,
+        code: lockCardError.code,
+        message: lockCardError.message,
+        details: lockCardError.details,
+        hint: lockCardError.hint,
+      });
+      throw lockCardError;
     }
 
-    const slug = playerRecord?.games?.slug;
-    if (slug) {
-      revalidatePath(`/g/${slug}/play`);
+    if (!lockedCard?.card_id) {
+      throw new Error("Failed to lock card.");
     }
 
+    logTiming("action-complete", startedAt, {
+      success: true,
+      cardId: lockedCard.card_id,
+      acceptedAt: lockedCard.accepted_at,
+      gameSlug: lockedCard.game_slug,
+    });
     return {
       success: true,
-      cardId,
+      cardId: lockedCard.card_id,
+      acceptedAt: lockedCard.accepted_at,
+      gameSlug: lockedCard.game_slug,
     };
   } catch (error) {
+    console.error("[generateCardAction] failed", {
+      playerId: cookiePlayerId,
+      error: formatError(error),
+      inputSummary: {
+        gameSlug: parsed.data.gameSlug ?? null,
+        acceptedEventsCount: parsed.data.acceptedEvents?.length ?? 0,
+        selectionMode: parsed.data.selectionMode ?? null,
+      },
+    });
     return { error: formatError(error) };
   }
 }

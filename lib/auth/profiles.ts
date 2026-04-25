@@ -187,8 +187,17 @@ export async function resolveProfileDefaultDisplayName(authUserId: string): Prom
  * Ensures a profile exists, then resolves canonical account id from account_auth_links with fallback.
  */
 export async function resolveCanonicalAccountIdForAuthUserId(authUserId: string): Promise<string> {
+  const startedAt = Date.now();
   const profile = await getOrCreateProfileByAuthUserId(authUserId);
   const resolvedAccount = await resolveAccountIdForAuthUserId(authUserId);
+
+  console.info("[auth][profiles][timing]", {
+    segment: "resolveCanonicalAccountIdForAuthUserId",
+    authUserId,
+    durationMs: Date.now() - startedAt,
+    profileId: profile.id,
+    accountSource: resolvedAccount.source,
+  });
 
   return resolvedAccount.accountId || profile.id;
 }

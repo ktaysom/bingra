@@ -62,6 +62,21 @@ export async function createGameAction(
   _prevState: CreateGameFormState,
   formData: FormData
 ): Promise<CreateGameFormState> {
+  const startedAt = Date.now();
+  const traceId =
+    typeof formData.get("auth_create_trace_id") === "string"
+      ? String(formData.get("auth_create_trace_id")).trim()
+      : "";
+  const logTiming = (segment: string, segmentStartedAt: number, extra?: Record<string, unknown>) => {
+    console.info("[createGameAction][timing]", {
+      traceId: traceId || null,
+      segment,
+      durationMs: Date.now() - segmentStartedAt,
+      totalDurationMs: Date.now() - startedAt,
+      ...(extra ?? {}),
+    });
+  };
+
   const rawTitle = formData.get("title");
   const rawHostDisplayName = formData.get("hostDisplayName");
   const rawMode = formData.get("mode") ?? "quick_play";
@@ -96,132 +111,172 @@ export async function createGameAction(
       typeof rawSportProfile === "string" ? rawSportProfile : DEFAULT_SPORT_PROFILE,
   });
 
-    if (!parsed.success) {
-      return { error: parsed.error.issues[0]?.message ?? "Invalid form submission" };
+  if (!parsed.success) {
+    logTiming("validation-failed", startedAt, {
+      error: parsed.error.issues[0]?.message ?? "Invalid form submission",
+    });
+    return { error: parsed.error.issues[0]?.message ?? "Invalid form submission" };
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const serverClientStartedAt = Date.now();
+  const supabaseServer = await createSupabaseServerClient();
+  logTiming("server-client-create", serverClientStartedAt);
+
+  const authFetchStartedAt = Date.now();
+  const {
+    data: { user },
+  } = await supabaseServer.auth.getUser();
+  logTiming("auth-check", authFetchStartedAt, {
+    hasUser: Boolean(user?.id),
+  });
+
+  if (!user?.id) {
+    return { error: AUTH_REQUIRED_CREATE_ERROR };
+  }
+
+  const profileResolveStartedAt = Date.now();
+  const profileId = await resolveCanonicalAccountIdForAuthUserId(user.id);
+  logTiming("canonical-account-resolve", profileResolveStartedAt, {
+    hasProfileId: Boolean(profileId),
+  });
+
+  let resolvedHostDisplayName = parsed.data.hostDisplayName;
+
+  if (!resolvedHostDisplayName.trim() || resolvedHostDisplayName.trim().toLowerCase() === "host") {
+    const displayNameResolveStartedAt = Date.now();
+    resolvedHostDisplayName = await resolveProfileDefaultDisplayName(user.id);
+    logTiming("host-display-name-resolve", displayNameResolveStartedAt, {
+      resolvedHostDisplayName,
+    });
+  }
+
+  const selectedSport = resolveCreateGameSport(parsed.data.sport_profile);
+
+  const rpcPayload = {
+    p_title: parsed.data.title,
+    p_sport: selectedSport,
+    p_mode: parsed.data.mode,
+    p_host_display_name: resolvedHostDisplayName,
+    p_allow_custom_cards: parsed.data.allowCustomCards,
+    p_visibility: parsed.data.visibility,
+    p_completion_mode: parsed.data.completion_mode,
+    p_end_condition: parsed.data.end_condition,
+    p_team_a_name: parsed.data.teamAName,
+    p_team_b_name: parsed.data.teamBName,
+    p_team_scope: parsed.data.teamScope,
+    p_events_per_card: parsed.data.eventsPerCard,
+    p_sport_profile: parsed.data.sport_profile,
+    p_catalog_version: "v1",
+    p_auth_user_id: user.id,
+    p_account_id: profileId,
+  };
+
+  let hostSlug: string | null = null;
+  let hostPlayerId: string | null = null;
+
+  try {
+    const rpcStartedAt = Date.now();
+    const { data, error } = await supabase.rpc("rpc_create_game_full", rpcPayload);
+    logTiming("rpc-create-game-full", rpcStartedAt, {
+      hasError: Boolean(error),
+    });
+
+    if (error) {
+      console.error("[createGameAction] insert error", error);
+      throw error;
     }
 
-    const supabase = createSupabaseAdminClient();
-    const supabaseServer = await createSupabaseServerClient();
-
-    const {
-      data: { user },
-    } = await supabaseServer.auth.getUser();
-
-    if (!user?.id) {
-      return { error: AUTH_REQUIRED_CREATE_ERROR };
+    const rows = Array.isArray(data) ? data : data ? [data] : [];
+    if (!rows.length) {
+      throw new Error("rpc_create_game returned no rows");
     }
 
-    // Canonical write identity for host ownership.
-    const profileId = await resolveCanonicalAccountIdForAuthUserId(user.id);
-    let resolvedHostDisplayName = parsed.data.hostDisplayName;
-
-    if (!resolvedHostDisplayName.trim() || resolvedHostDisplayName.trim().toLowerCase() === "host") {
-      resolvedHostDisplayName = await resolveProfileDefaultDisplayName(user.id);
-    }
-
-    const selectedSport = resolveCreateGameSport(parsed.data.sport_profile);
-
-    const rpcPayload = {
-      p_title: parsed.data.title,
-      p_sport: selectedSport,
-      p_mode: parsed.data.mode,
-      p_host_display_name: resolvedHostDisplayName,
-      p_allow_custom_cards: parsed.data.allowCustomCards,
-      p_visibility: parsed.data.visibility,
-      p_completion_mode: parsed.data.completion_mode,
-      p_end_condition: parsed.data.end_condition,
-      p_team_a_name: parsed.data.teamAName,
-      p_team_b_name: parsed.data.teamBName,
-      p_team_scope: parsed.data.teamScope,
-      p_events_per_card: parsed.data.eventsPerCard,
-      p_sport_profile: parsed.data.sport_profile,
-      p_catalog_version: "v1",
-      p_auth_user_id: user.id,
-      p_account_id: profileId,
+    const resultRow = rows[0] as {
+      game_slug: string;
+      host_player_id: string | null;
     };
 
-    let hostSlug: string | null = null;
-    let hostPlayerId: string | null = null;
-
-    try {
-      const { data, error } = await supabase.rpc("rpc_create_game_full", rpcPayload);
-
-      if (error) {
-        console.error("[createGameAction] insert error", error);
-        throw error;
-      }
-
-      const rows = Array.isArray(data) ? data : data ? [data] : [];
-      if (!rows.length) {
-        throw new Error("rpc_create_game returned no rows");
-      }
-
-      const resultRow = rows[0] as {
-        game_slug: string;
-        host_player_id: string | null;
-      };
-
-      hostSlug = resultRow.game_slug;
-      hostPlayerId = resultRow.host_player_id;
-    } catch (error) {
-      if (isRedirectError(error)) {
-        throw error;
-      }
-      console.error("[createGameAction] error", error);
-      return { error: formatError(error) };
+    hostSlug = resultRow.game_slug;
+    hostPlayerId = resultRow.host_player_id;
+    logTiming("rpc-result-parse", startedAt, {
+      hostSlug,
+      hasHostPlayerId: Boolean(hostPlayerId),
+    });
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
     }
+    console.error("[createGameAction] error", error);
+    return { error: formatError(error) };
+  }
 
-    if (!hostSlug) {
-      return { error: "Failed to resolve game host URL" };
-    }
+  if (!hostSlug) {
+    return { error: "Failed to resolve game host URL" };
+  }
 
-    if (!hostPlayerId) {
-      return { error: "Failed to initialize host player session" };
-    }
+  if (!hostPlayerId) {
+    return { error: "Failed to initialize host player session" };
+  }
 
-    const recoveryToken = generatePlayerRecoveryToken();
-    const recoveryTokenHash = hashPlayerRecoveryToken(recoveryToken);
+  const recoveryTokenStartedAt = Date.now();
+  const recoveryToken = generatePlayerRecoveryToken();
+  const recoveryTokenHash = hashPlayerRecoveryToken(recoveryToken);
+  logTiming("recovery-token-generate", recoveryTokenStartedAt);
 
-    const { error: recoveryTokenUpdateError } = await supabase
-      .from("players")
-      .update({ recovery_token_hash: recoveryTokenHash })
-      .eq("id", hostPlayerId)
-      .limit(1);
+  const recoveryTokenPersistStartedAt = Date.now();
+  const { error: recoveryTokenUpdateError } = await supabase
+    .from("players")
+    .update({ recovery_token_hash: recoveryTokenHash })
+    .eq("id", hostPlayerId)
+    .limit(1);
+  logTiming("recovery-token-persist", recoveryTokenPersistStartedAt, {
+    hasError: Boolean(recoveryTokenUpdateError),
+  });
 
-    if (recoveryTokenUpdateError) {
-      console.error("[auth] failed to issue player recovery token hash", {
-        playerId: hostPlayerId,
-        slug: hostSlug,
-        error: recoveryTokenUpdateError,
-      });
-      return { error: "Failed to initialize player recovery token" };
-    }
-
-    console.log("[auth] player recovery token issued", {
+  if (recoveryTokenUpdateError) {
+    console.error("[auth] failed to issue player recovery token hash", {
       playerId: hostPlayerId,
       slug: hostSlug,
+      error: recoveryTokenUpdateError,
     });
+    return { error: "Failed to initialize player recovery token" };
+  }
 
-    const cookieStore = await cookies();
-    console.log("[auth] setting bingra-player-id cookie", {
-      maxAge: 60 * 60 * 24 * 365 * 2,
-    });
-    cookieStore.set({
-      name: "bingra-player-id",
-      value: hostPlayerId,
-      path: "/",
-      maxAge: 60 * 60 * 24 * 365 * 2,
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
-    cookieStore.set({
-      name: getPlayerRecoveryTokenCookieName(hostSlug),
-      value: recoveryToken,
-      path: `/g/${hostSlug}`,
-      maxAge: 60 * 15,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
-    redirect(`/g/${hostSlug}/play`);
+  console.log("[auth] player recovery token issued", {
+    playerId: hostPlayerId,
+    slug: hostSlug,
+  });
+
+  const cookiesStartedAt = Date.now();
+  const cookieStore = await cookies();
+  logTiming("cookies-store-resolve", cookiesStartedAt);
+  console.log("[auth] setting bingra-player-id cookie", {
+    maxAge: 60 * 60 * 24 * 365 * 2,
+  });
+  const playerCookieSetStartedAt = Date.now();
+  cookieStore.set({
+    name: "bingra-player-id",
+    value: hostPlayerId,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365 * 2,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+  logTiming("player-cookie-set", playerCookieSetStartedAt);
+  const recoveryCookieSetStartedAt = Date.now();
+  cookieStore.set({
+    name: getPlayerRecoveryTokenCookieName(hostSlug),
+    value: recoveryToken,
+    path: `/g/${hostSlug}`,
+    maxAge: 60 * 15,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+  logTiming("recovery-cookie-set", recoveryCookieSetStartedAt);
+  logTiming("redirect-throw", startedAt, {
+    redirectTo: `/g/${hostSlug}/play`,
+  });
+  redirect(`/g/${hostSlug}/play`);
 }

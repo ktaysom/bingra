@@ -33,12 +33,25 @@ export async function setGameStatusAction(
   _prevState: SetGameStatusFormState,
   formData: FormData,
 ): Promise<SetGameStatusFormState> {
+  const startedAt = Date.now();
+  const logTiming = (segment: string, segmentStartedAt: number, extra?: Record<string, unknown>) => {
+    console.info("[setGameStatusAction][timing]", {
+      segment,
+      durationMs: Date.now() - segmentStartedAt,
+      totalDurationMs: Date.now() - startedAt,
+      ...(extra ?? {}),
+    });
+  };
+
   const parsed = setGameStatusSchema.safeParse({
     slug: typeof formData.get("slug") === "string" ? formData.get("slug") : "",
     intent: formData.get("intent"),
   });
 
   if (!parsed.success) {
+    logTiming("validation-failed", startedAt, {
+      error: parsed.error.issues[0]?.message ?? "Invalid request",
+    });
     return {
       error: parsed.error.issues[0]?.message ?? "Invalid request",
       completedAt: new Date().toISOString(),
@@ -46,103 +59,110 @@ export async function setGameStatusAction(
   }
 
   try {
-    await assertHostAuthorized(parsed.data.slug);
+    const hostAuthStartedAt = Date.now();
+    const authorization = await assertHostAuthorized(parsed.data.slug);
+    logTiming("host-authorization", hostAuthStartedAt, {
+      slug: parsed.data.slug,
+      intent: parsed.data.intent,
+      status: authorization.status,
+    });
+    const game = {
+      id: authorization.gameId,
+      status: authorization.status,
+      completionMode: authorization.completionMode,
+    };
+
+    const nextStatus = parsed.data.intent === "start" ? "live" : "finished";
+
+    if (parsed.data.intent === "start" && game.status !== "lobby") {
+      return {
+        error: "Only lobby games can be started.",
+        completedAt: new Date().toISOString(),
+        status: game.status,
+      };
+    }
+
+    if (parsed.data.intent === "end" && game.status !== "live") {
+      return {
+        error: "Only live games can be ended.",
+        completedAt: new Date().toISOString(),
+        status: game.status,
+      };
+    }
+
+    const supabase = createSupabaseAdminClient();
+    const now = new Date().toISOString();
+
+    if (parsed.data.intent === "end") {
+      try {
+        const finalizeStartedAt = Date.now();
+        const finalized = await finalizeGameAndSetWinner({
+          supabase,
+          gameId: game.id,
+          completionMode: game.completionMode,
+          completedAt: now,
+        });
+        logTiming("finalize-game", finalizeStartedAt, {
+          status: "finished",
+        });
+
+        return {
+          success: true,
+          completedAt: finalized.completedAt,
+          status: "finished",
+        };
+      } catch (error) {
+        return {
+          error: formatError(error),
+          completedAt: now,
+          status: game.status,
+        };
+      }
+    }
+
+    const updatePayload: {
+      status: "live" | "finished";
+      completed_at?: string | null;
+      winner_player_id?: string | null;
+    } = {
+      status: nextStatus,
+      completed_at: null,
+      winner_player_id: null,
+    };
+
+    const updateStartedAt = Date.now();
+    const { error: updateError } = await supabase
+      .from("games")
+      .update(updatePayload)
+      .eq("id", game.id)
+      .eq("status", game.status)
+      .limit(1);
+    logTiming("game-status-update", updateStartedAt, {
+      nextStatus,
+      hasError: Boolean(updateError),
+    });
+
+    if (updateError) {
+      return {
+        error: formatError(updateError),
+        completedAt: now,
+        status: game.status,
+      };
+    }
+
+    logTiming("action-complete", startedAt, {
+      success: true,
+      status: nextStatus,
+    });
+    return {
+      success: true,
+      completedAt: now,
+      status: nextStatus,
+    };
   } catch (error) {
     return {
       error: formatError(error),
       completedAt: new Date().toISOString(),
     };
   }
-
-  const supabase = createSupabaseAdminClient();
-
-  const { data: game, error: gameError } = await supabase
-    .from("games")
-    .select("id, status, completion_mode")
-    .eq("slug", parsed.data.slug)
-    .maybeSingle<{ id: string; status: "lobby" | "live" | "finished"; completion_mode: "BLACKOUT" | "STREAK" }>();
-
-  if (gameError) {
-    return { error: formatError(gameError), completedAt: new Date().toISOString() };
-  }
-
-  if (!game) {
-    return { error: "Game not found", completedAt: new Date().toISOString() };
-  }
-
-  const nextStatus = parsed.data.intent === "start" ? "live" : "finished";
-
-  if (parsed.data.intent === "start" && game.status !== "lobby") {
-    return {
-      error: "Only lobby games can be started.",
-      completedAt: new Date().toISOString(),
-      status: game.status,
-    };
-  }
-
-  if (parsed.data.intent === "end" && game.status !== "live") {
-    return {
-      error: "Only live games can be ended.",
-      completedAt: new Date().toISOString(),
-      status: game.status,
-    };
-  }
-
-  const now = new Date().toISOString();
-
-  if (parsed.data.intent === "end") {
-    // Manual end is always allowed for live games, regardless of end_condition.
-    // "End on first Bingra" is handled as an automatic trigger in record-event.
-    try {
-      const finalized = await finalizeGameAndSetWinner({
-        supabase,
-        gameId: game.id,
-        completionMode: game.completion_mode,
-        completedAt: now,
-      });
-
-      return {
-        success: true,
-        completedAt: finalized.completedAt,
-        status: "finished",
-      };
-    } catch (error) {
-      return {
-        error: formatError(error),
-        completedAt: now,
-        status: game.status,
-      };
-    }
-  }
-
-  const updatePayload: {
-    status: "live" | "finished";
-    completed_at?: string | null;
-    winner_player_id?: string | null;
-  } = {
-    status: nextStatus,
-    completed_at: null,
-    winner_player_id: null,
-  };
-
-  const { error: updateError } = await supabase
-    .from("games")
-    .update(updatePayload)
-    .eq("id", game.id)
-    .eq("status", game.status)
-    .limit(1);
-
-  if (updateError) {
-    return {
-      error: formatError(updateError),
-      completedAt: now,
-      status: game.status,
-    };
-  }
-
-  return {
-    success: true,
-    completedAt: now,
-    status: nextStatus,
-  };
 }

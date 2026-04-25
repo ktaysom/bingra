@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useEffect, useState, useTransition, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import {
   setGameStatusAction,
   type SetGameStatusFormState,
@@ -146,13 +145,7 @@ export function GameStatusActionButton({
 }: GameStatusActionButtonProps) {
   const [state, action] = useActionState(setGameStatusAction, initialState);
   const [isPending, startTransition] = useTransition();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (state.success && state.completedAt) {
-      router.refresh();
-    }
-  }, [router, state.completedAt, state.success]);
+  const [optimisticStatus, setOptimisticStatus] = useState<"lobby" | "live" | "finished" | null>(null);
 
   const handleClick = () => {
     const formData = new FormData();
@@ -164,8 +157,22 @@ export function GameStatusActionButton({
     });
   };
 
+  useEffect(() => {
+    if (state.success && state.status) {
+      setOptimisticStatus(state.status);
+    }
+  }, [state.status, state.success]);
+
+  const didStartOptimistically = intent === "start" && optimisticStatus === "live";
+  const didEndOptimistically = intent === "end" && optimisticStatus === "finished";
+
   return (
     <div>
+      {(didStartOptimistically || didEndOptimistically) && !state.error ? (
+        <p className="inline-flex rounded-full bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-800">
+          {didStartOptimistically ? "Game started" : "Game ended"}
+        </p>
+      ) : (
       <button
         type="button"
         onClick={handleClick}
@@ -174,9 +181,19 @@ export function GameStatusActionButton({
       >
         {isPending ? "Saving..." : children}
       </button>
+      )}
       {state.error && <p className="mt-2 text-xs text-red-600">{state.error}</p>}
       {!state.error && disabled && disabledReason && (
         <p className="mt-2 text-xs text-amber-700">{disabledReason}</p>
+      )}
+      {!state.error && state.success && state.status && (
+        <p className="mt-2 text-xs text-slate-600">
+          {state.status === "live"
+            ? "Scoring is now enabled. A full page refresh is no longer required to confirm success."
+            : state.status === "finished"
+              ? "Final status saved."
+              : null}
+        </p>
       )}
     </div>
   );

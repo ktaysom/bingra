@@ -114,6 +114,8 @@ type PlayPageContentProps = {
   hasAuthenticatedUser: boolean;
   consumeJoinQueryOnMount?: boolean;
   canManageRestrictedScoring: boolean;
+  currentPlayerSummary?: PlayerRecord | null;
+  preferFreshLobbyFastPath?: boolean;
 };
 
 type PlayDataClient = ReturnType<typeof createSupabaseAdminClient>;
@@ -168,9 +170,21 @@ async function fetchCards(
 async function fetchScoredEvents(
   supabase: PlayDataClient,
   gameId: string,
+  gameStatus: GameRecord["status"],
   logTiming: (segment: string, startedAt: number, extra?: Record<string, unknown>) => void,
 ) {
   const startedAt = Date.now();
+  if (gameStatus === "lobby") {
+    logTiming("scored-events-fetch", startedAt, {
+      count: 0,
+      hasError: false,
+      skipped: true,
+    });
+    return {
+      allScoredEvents: [] as RecentScoredEvent[],
+    };
+  }
+
   try {
     const { data, error } = await supabase
       .from("scored_events")
@@ -202,9 +216,22 @@ async function fetchScoredEvents(
 async function fetchCompletions(
   supabase: PlayDataClient,
   gameId: string,
+  gameStatus: GameRecord["status"],
   logTiming: (segment: string, startedAt: number, extra?: Record<string, unknown>) => void,
 ) {
   const startedAt = Date.now();
+  if (gameStatus === "lobby") {
+    logTiming("completions-fetch", startedAt, {
+      count: 0,
+      hasError: false,
+      skipped: true,
+    });
+    return {
+      liveCompletions: [] as LiveCompletionRow[],
+      liveCompletionsError: null,
+    };
+  }
+
   try {
     const { data, error } = await supabase
       .from("game_completions")
@@ -241,6 +268,8 @@ export async function PlayPageContent({
   hasAuthenticatedUser,
   consumeJoinQueryOnMount = false,
   canManageRestrictedScoring,
+  currentPlayerSummary = null,
+  preferFreshLobbyFastPath = false,
 }: PlayPageContentProps) {
   const renderStartedAt = Date.now();
   const logTiming = (segment: string, startedAt: number, extra?: Record<string, unknown>) => {
@@ -256,8 +285,17 @@ export async function PlayPageContent({
   const sportProfile = resolveSportProfileKey(game.sport_profile);
   const sportProfileLabel = getSportProfileLabel(sportProfile);
 
-  const playersFetchPromise = fetchPlayers(supabase, game.id, logTiming);
-  const cardsFetchPromise = fetchCards(supabase, game.id, logTiming);
+  const playersFetchPromise = preferFreshLobbyFastPath
+    ? Promise.resolve({
+        players: currentPlayerSummary ? [currentPlayerSummary] : [],
+        playersError: null,
+      })
+    : fetchPlayers(supabase, game.id, logTiming);
+  const cardsFetchPromise = preferFreshLobbyFastPath
+    ? Promise.resolve({
+        cardsForGame: [] as CardRow[],
+      })
+    : fetchCards(supabase, game.id, logTiming);
 
   const playMode = game.completion_mode === "STREAK" ? "streak" : "quick_play";
   const initialRiskLevel: RiskLevel = 3;
@@ -320,8 +358,8 @@ export async function PlayPageContent({
   const isLobby = game.status === "lobby";
   const isLive = game.status === "live";
   const isGameFinished = game.status === "finished";
-  const scoredEventsFetchPromise = fetchScoredEvents(supabase, game.id, logTiming);
-  const completionsFetchPromise = fetchCompletions(supabase, game.id, logTiming);
+  const scoredEventsFetchPromise = fetchScoredEvents(supabase, game.id, game.status, logTiming);
+  const completionsFetchPromise = fetchCompletions(supabase, game.id, game.status, logTiming);
 
   const [playersResult, cardsResult, scoredEventsResult, completionsResult] = await Promise.all([
     playersFetchPromise,
@@ -334,6 +372,7 @@ export async function PlayPageContent({
     cardCount: cardsResult.cardsForGame.length,
     scoredEventCount: scoredEventsResult.allScoredEvents.length,
     completionCount: completionsResult.liveCompletions.length,
+    preferFreshLobbyFastPath,
   });
 
   const players = playersResult.players;
