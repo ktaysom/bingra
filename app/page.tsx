@@ -121,9 +121,12 @@ function dedupeGames(games: HomeGameRow[]): HomeGameRow[] {
 
 export default async function HomePage() {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const authResponse = await supabase.auth.getClaims();
+  const claims = authResponse.data?.claims;
+  const user =
+    typeof claims?.sub === "string" && claims.sub.trim().length > 0
+      ? { id: claims.sub }
+      : null;
 
   let activeGames: HomeGameRow[] = [];
   let recentCompletedGames: HomeGameRow[] = [];

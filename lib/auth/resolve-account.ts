@@ -6,7 +6,6 @@ export type ResolvedAccount = {
 };
 
 export async function resolveAccountIdForAuthUserId(authUserId: string): Promise<ResolvedAccount> {
-  const startedAt = Date.now();
   const supabase = createSupabaseAdminClient();
 
   try {
@@ -36,11 +35,6 @@ export async function resolveAccountIdForAuthUserId(authUserId: string): Promise
     }
 
     if (data?.account_id) {
-      console.info("[auth][resolve-account][timing]", {
-        authUserId,
-        durationMs: Date.now() - startedAt,
-        source: "account_auth_links",
-      });
       return {
         accountId: data.account_id,
         source: "account_auth_links",
@@ -53,11 +47,6 @@ export async function resolveAccountIdForAuthUserId(authUserId: string): Promise
     });
   }
 
-  console.info("[auth][resolve-account][timing]", {
-    authUserId,
-    durationMs: Date.now() - startedAt,
-    source: "legacy_fallback",
-  });
   return {
     accountId: authUserId,
     source: "legacy_fallback",
